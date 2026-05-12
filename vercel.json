@@ -1,11 +1,10 @@
 {
   "version": 2,
-  "builds": [{"src": "*.html", "use": "@vercel/static"}],
-  "routes": [
-    {"src": "/privacy", "dest": "/privacy.html"},
-    {"src": "/terms", "dest": "/terms.html"},
-    {"src": "/thank-you", "dest": "/thank-you.html"},
-    {"src": "/(.*)", "dest": "/index.html"}
+  "cleanUrls": true,
+  "rewrites": [
+    {"source": "/privacy", "destination": "/privacy.html"},
+    {"source": "/terms", "destination": "/terms.html"},
+    {"source": "/thank-you", "destination": "/thank-you.html"}
   ],
   "headers": [
     {
