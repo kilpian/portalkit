@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- GTM: Paste Google Tag Manager <script> snippet here (head) -->
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — PortalKit</title>
+  <meta name="description" content="PortalKit Privacy Policy — how we collect, use, and protect your data.">
+
+  <!-- Security -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://ui-avatars.com; connect-src 'self' https://api.stripe.com; frame-src https://js.stripe.com;">
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Privacy Policy — PortalKit">
+  <meta property="og:description" content="How PortalKit collects, uses, and protects your data.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://getportalkit.com/privacy.html">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:       #1B4332;
+      --green-mid:   #2D6A4F;
+      --green-pale:  #EAF2ED;
+      --cream:       #FDFAF5;
+      --cream-2:     #F5EFE4;
+      --cream-3:     #EDE6D8;
+      --gold:        #C9A84C;
+      --gold-light:  rgba(201,168,76,.12);
+      --text:        #1A1F1C;
+      --text-muted:  #5C6660;
+      --border:      rgba(27,67,50,.12);
+      --shadow:      0 24px 72px rgba(27,67,50,.16);
+      --fh:          'Bricolage Grotesque', sans-serif;
+      --fb:          'Inter', sans-serif;
+      --r-sm:        8px;
+      --r-md:        16px;
+      --r-lg:        24px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--fb);
+      background: var(--cream);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    img { max-width: 100%; display: block; }
+    a   { text-decoration: none; color: inherit; }
+    ul  { list-style: none; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: var(--r-sm);
+      font-family: var(--fb);
+      font-size: .9375rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+      white-space: nowrap;
+    }
+    .btn--gold { background: var(--gold); color: var(--green); }
+    .btn--gold:hover {
+      background: #D4B35A;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(201,168,76,.35);
+    }
+    .btn--full { width: 100%; }
+
+    /* ── Container ── */
+    .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── Nav ── */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      padding: 18px 0;
+      background: rgba(253,250,245,.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: box-shadow .3s;
+    }
+    .nav.scrolled { box-shadow: 0 2px 24px rgba(27,67,50,.10); }
+    .nav__inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav__logo {
+      font-family: var(--fh);
+      font-size: 1.375rem;
+      font-weight: 800;
+      color: var(--green);
+      letter-spacing: -.03em;
+    }
+    .nav__logo em { font-style: normal; color: var(--gold); }
+    .nav__right { display: flex; align-items: center; gap: 12px; }
+    .nav__hamburger {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      width: 36px;
+      height: 36px;
+    }
+    .nav__bar {
+      width: 22px; height: 2px;
+      background: var(--green);
+      border-radius: 2px;
+      transition: transform .25s ease, opacity .25s ease;
+      display: block;
+    }
+    .nav__hamburger.open .nav__bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav__hamburger.open .nav__bar:nth-child(2) { opacity: 0; }
+    .nav__hamburger.open .nav__bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .nav__mobile {
+      display: none;
+      position: absolute;
+      top: 100%; left: 0; right: 0;
+      background: rgba(253,250,245,.97);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 8px 24px 24px;
+      border-top: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(27,67,50,.12);
+      flex-direction: column;
+    }
+    .nav__mobile.open { display: flex; }
+    .nav__mobile-link {
+      padding: 15px 0;
+      font-family: var(--fh);
+      font-size: 1.0625rem;
+      font-weight: 600;
+      color: var(--green);
+      border-bottom: 1px solid var(--border);
+      display: block;
+      transition: color .2s;
+    }
+    .nav__mobile-link:hover { color: var(--green-mid); }
+    .nav__mobile-cta { margin-top: 20px; }
+    @media (max-width: 767px) {
+      .nav__cta       { display: none; }
+      .nav__hamburger { display: flex; }
+    }
+    @media (min-width: 768px) {
+      .nav__mobile { display: none !important; }
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      padding: 140px 0 60px;
+      background: linear-gradient(155deg, var(--cream) 0%, var(--cream) 30%, #E8F2EC 62%, #D0E8D8 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .page-header__eyebrow {
+      font-size: .8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--gold);
+      margin-bottom: 12px;
+      display: block;
+    }
+    .page-header__h {
+      font-family: var(--fh);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -.03em;
+      color: var(--green);
+      margin-bottom: 12px;
+    }
+    .page-header__meta {
+      font-size: .9rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Legal content ── */
+    .legal { padding: 72px 0 100px; }
+    .legal__inner { max-width: 740px; }
+    .legal__section { margin-bottom: 48px; }
+    .legal__section:last-child { margin-bottom: 0; }
+    .legal__h {
+      font-family: var(--fh);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .legal__p {
+      font-size: .9375rem;
+      color: var(--text-muted);
+      line-height: 1.78;
+      margin-bottom: 12px;
+    }
+    .legal__p:last-child { margin-bottom: 0; }
+    .legal__p a {
+      color: var(--green);
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .legal__p a:hover { color: var(--green-mid); }
+    .legal__ul {
+      list-style: disc;
+      padding-left: 20px;
+      margin-top: 8px;
+    }
+    .legal__ul li {
+      font-size: .9375rem;
+      color: var(--text-muted);
+      line-height: 1.78;
+      margin-bottom: 6px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      background: #0C2016;
+      color: rgba(253,250,245,.6);
+      padding: 64px 0 36px;
+    }
+    .footer__inner { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+    .footer__top {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 40px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      margin-bottom: 32px;
+    }
+    .footer__logo {
+      font-family: var(--fh);
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--cream);
+      letter-spacing: -.025em;
+      margin-bottom: 10px;
+    }
+    .footer__tagline { font-size: .875rem; max-width: 280px; }
+    .footer__col-title {
+      font-family: var(--fh);
+      font-size: .875rem;
+      font-weight: 600;
+      color: var(--cream);
+      margin-bottom: 14px;
+    }
+    .footer__links { display: flex; flex-direction: column; gap: 10px; }
+    .footer__links a { font-size: .875rem; transition: color .2s; }
+    .footer__links a:hover { color: var(--cream); }
+    .footer__bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      text-align: center;
+      font-size: .8125rem;
+    }
+    @media (min-width: 768px) {
+      .footer__top    { grid-template-columns: 2fr 1fr 1fr; }
+      .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- GTM: Paste Google Tag Manager <noscript> snippet here (body open) -->
+
+<!-- ── Nav ── -->
+<nav class="nav" id="nav">
+  <div class="nav__inner">
+    <a href="/" class="nav__logo">Portal<em>Kit</em></a>
+    <div class="nav__right">
+      <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold nav__cta">Start Free Trial</a>
+      <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+        <span class="nav__bar"></span>
+        <span class="nav__bar"></span>
+        <span class="nav__bar"></span>
+      </button>
+    </div>
+  </div>
+  <div class="nav__mobile" id="mobileMenu">
+    <a href="/#features" class="nav__mobile-link">Features</a>
+    <a href="/#how-it-works" class="nav__mobile-link">How It Works</a>
+    <a href="/#pricing" class="nav__mobile-link">Pricing</a>
+    <a href="/#faq" class="nav__mobile-link">FAQ</a>
+    <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
+  </div>
+</nav>
+
+<!-- ── Page Header ── -->
+<div class="page-header">
+  <div class="container">
+    <span class="page-header__eyebrow">Legal</span>
+    <h1 class="page-header__h">Privacy Policy</h1>
+    <p class="page-header__meta">Effective date: May 11, 2026 &middot; Kilpian LLC, doing business as PortalKit</p>
+  </div>
+</div>
+
+<!-- ── Content ── -->
+<div class="legal">
+  <div class="container">
+    <div class="legal__inner">
+
+      <div class="legal__section">
+        <h2 class="legal__h">1. Information We Collect</h2>
+        <p class="legal__p">When you create an account or use PortalKit, we collect the following types of information:</p>
+        <ul class="legal__ul">
+          <li><strong>Name and email address</strong> — collected at account registration and used to identify your account and communicate with you.</li>
+          <li><strong>Payment information</strong> — billing is handled entirely by Stripe. We never store, see, or have access to your credit card details. Stripe's privacy policy governs payment data.</li>
+          <li><strong>Usage data</strong> — we collect information about how you interact with the PortalKit platform, including pages visited, features used, and actions taken, to improve the product.</li>
+        </ul>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">2. How We Use Your Information</h2>
+        <p class="legal__p">We use the information we collect for the following purposes:</p>
+        <ul class="legal__ul">
+          <li>To provide and operate the PortalKit service.</li>
+          <li>To send transactional emails such as account confirmations, invoices, and important service updates.</li>
+          <li>To improve and develop the product based on how users interact with it.</li>
+          <li>To respond to support requests and communicate with you about your account.</li>
+        </ul>
+        <p class="legal__p">We do not use your data for advertising or sell it to third parties.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">3. Data Sharing</h2>
+        <p class="legal__p">We do not sell, rent, or trade your personal data. We share your data only with the following trusted service providers, and only to the extent necessary to provide the service:</p>
+        <ul class="legal__ul">
+          <li><strong>Stripe</strong> — payment processing. Stripe is PCI-DSS compliant and handles all billing data directly.</li>
+          <li><strong>Brevo</strong> — transactional email delivery (account notifications, receipts).</li>
+        </ul>
+        <p class="legal__p">We may also disclose your information if required by law or to protect our legal rights.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">4. Cookies</h2>
+        <p class="legal__p">We use essential cookies only. These cookies are strictly necessary for the operation of PortalKit — specifically for session management so you remain logged in while using the platform.</p>
+        <p class="legal__p">We do not use tracking cookies, advertising cookies, or third-party analytics cookies without your explicit consent.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">5. Data Retention</h2>
+        <p class="legal__p">We retain your personal data for as long as your account is active. If you cancel your subscription, we will retain your data for 30 days after the cancellation date, after which it will be deleted from our systems.</p>
+        <p class="legal__p">You may request earlier deletion at any time — see Section 6 for details.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">6. Your Rights</h2>
+        <p class="legal__p">You have the right to access, correct, or request deletion of your personal data at any time. To exercise these rights, email us at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> and we will respond within 5 business days.</p>
+        <p class="legal__p">If you are located in the European Economic Area (EEA), you may have additional rights under the GDPR, including the right to data portability and the right to lodge a complaint with your local supervisory authority.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">7. Children</h2>
+        <p class="legal__p">PortalKit is not intended for use by individuals under the age of 18. We do not knowingly collect personal data from anyone under 18. If you believe a minor has provided us with their information, please contact us at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> and we will delete it promptly.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">8. Changes to This Policy</h2>
+        <p class="legal__p">We may update this Privacy Policy from time to time. For any material changes — meaning changes that significantly affect your rights or how we use your data — we will notify you by email prior to the change taking effect.</p>
+        <p class="legal__p">Minor updates may be posted to this page with an updated effective date. We encourage you to review this policy periodically.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">9. Contact</h2>
+        <p class="legal__p">If you have any questions about this Privacy Policy or how we handle your data, please contact us:</p>
+        <p class="legal__p"><strong>Kilpian LLC, doing business as PortalKit</strong><br>
+        Email: <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a></p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Footer ── -->
+<footer class="footer">
+  <div class="footer__inner">
+    <div class="footer__top">
+      <div>
+        <div class="footer__logo">PortalKit</div>
+        <p class="footer__tagline">The client portal built for wedding photographers. One link. Zero chaos.</p>
+      </div>
+      <div>
+        <div class="footer__col-title">Product</div>
+        <ul class="footer__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer__col-title">Legal</div>
+        <ul class="footer__links">
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>&copy; 2026 PortalKit. All rights reserved.</span>
+      <span>Made for wedding photographers, with love.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 20);
+  }, { passive: true });
+
+  const hamburger = document.getElementById('hamburger');
+  const mobileMenu = document.getElementById('mobileMenu');
+  hamburger.addEventListener('click', () => {
+    const isOpen = mobileMenu.classList.toggle('open');
+    hamburger.classList.toggle('open', isOpen);
+    hamburger.setAttribute('aria-expanded', isOpen);
+  });
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      mobileMenu.classList.remove('open');
+      hamburger.classList.remove('open');
+      hamburger.setAttribute('aria-expanded', 'false');
+    });
+  });
+</script>
+
+</body>
+</html>
