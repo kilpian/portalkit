@@ -1,9 +1,160 @@
-export default function Dashboard() {
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { usePortalAuth } from '../../context/AuthContext'
+import { useApi, type DashboardStats, type Client } from '../../lib/api'
+import { trialDaysLeft } from '../../lib/plan'
+
+function formatDate(d: string | null) {
+  if (!d) return '—'
+  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+  catch { return d }
+}
+
+function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold" style={{ color: '#1B4332' }}>Dashboard</h1>
-      <p className="text-gray-600 mt-1">Welcome to PortalKit.</p>
-      {/* TODO: stats cards, recent activity */}
+    <div className="card" style={{ padding: '20px 24px' }}>
+      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        {label}
+      </p>
+      <p style={{ fontSize: 28, fontWeight: 800, color: accent ? 'var(--gold)' : 'var(--green)', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+        {value}
+      </p>
+      {sub && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>{sub}</p>}
+    </div>
+  )
+}
+
+function CopyToken({ token }: { token: string }) {
+  const [copied, setCopied] = useState(false)
+  const url = `${window.location.origin}/portal/${token}`
+  const handleCopy = () => {
+    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+  return (
+    <button onClick={handleCopy} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500,
+      color: copied ? 'var(--color-green)' : 'var(--green)',
+      background: copied ? 'var(--color-green-bg)' : 'var(--bg-secondary)',
+      border: `1px solid ${copied ? 'var(--color-green-border)' : 'var(--border)'}`,
+      borderRadius: 6, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
+    }}>
+      {copied
+        ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Copied</>
+        : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy Link</>
+      }
+    </button>
+  )
+}
+
+export default function Dashboard() {
+  const { user } = usePortalAuth()
+  const api = useApi()
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [clients, setClients] = useState<Client[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const days = trialDaysLeft(user)
+
+  useEffect(() => {
+    Promise.all([api.getDashboardStats(), api.getClients()])
+      .then(([s, c]) => { setStats(s); setClients(c.slice(0, 5)) })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  return (
+    <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ marginBottom: 32 }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 4 }}>
+          {greeting()}{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}.
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+          Here's what's happening with your portals today.
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} className="card" style={{ padding: '20px 24px' }}>
+              <div className="skeleton" style={{ height: 12, width: '60%', marginBottom: 12 }} />
+              <div className="skeleton" style={{ height: 28, width: '40%' }} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
+          <StatCard label="Total Clients" value={stats?.total_clients ?? 0} />
+          <StatCard label="Active Portals" value={stats?.active_portals ?? 0} />
+          <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} />
+          {user?.plan !== 'active' && (
+            <StatCard label="Trial Days Left" value={days} sub={days === 0 ? 'Trial expired' : `day${days === 1 ? '' : 's'} remaining`} accent />
+          )}
+          {user?.plan === 'active' && (
+            <StatCard label="Plan" value="Active" sub="Subscription active" />
+          )}
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>Recent Clients</h2>
+          <Link to="/dashboard/clients" style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, textDecoration: 'none' }}>View all →</Link>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '16px 20px' }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ display: 'flex', gap: 16, padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div className="skeleton" style={{ height: 14, flex: 2 }} />
+                <div className="skeleton" style={{ height: 14, flex: 1 }} />
+                <div className="skeleton" style={{ height: 14, flex: 1 }} />
+              </div>
+            ))}
+          </div>
+        ) : clients.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>📸</div>
+            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No clients yet</p>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>Add your first client to create a portal for them.</p>
+            <Link to="/dashboard/clients" className="btn btn-primary btn-sm">Add Your First Client</Link>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                {['Client', 'Event', 'Portal Link', 'Added'].map(h => (
+                  <th key={h} style={{ padding: '10px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map(c => (
+                <tr key={c.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={{ padding: '12px 20px' }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</p>
+                    {c.email && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{c.email}</p>}
+                  </td>
+                  <td style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-muted)' }}>
+                    {c.event_type || '—'}
+                    {c.event_date && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{formatDate(c.event_date)}</span>}
+                  </td>
+                  <td style={{ padding: '12px 20px' }}><CopyToken token={c.portal_token} /></td>
+                  <td style={{ padding: '12px 20px', fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(c.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }

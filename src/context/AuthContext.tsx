@@ -1,69 +1,62 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { getStoredUser, saveSession, clearSession, isAuthenticated, getToken } from '../lib/auth'
-import { apiSignIn, apiSignUp } from '../lib/api'
-import type { AuthUser } from '../lib/auth'
-import type { SignInPayload, SignUpPayload } from '../lib/api'
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
+import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react'
+import type { PortalUser } from '../lib/api'
 
-interface AuthContextType {
-  user: AuthUser | null
-  loading: boolean
-  signIn: (payload: SignInPayload) => Promise<void>
-  signUp: (payload: SignUpPayload) => Promise<void>
-  signOut: () => void
+interface PortalAuthContextType {
+  user: PortalUser | null
   isLoggedIn: boolean
+  isLoaded: boolean
+  signOut: () => void
+  setUser: (user: PortalUser) => void
 }
 
-const AuthContext = createContext<AuthContextType | null>(null)
+const PortalAuthContext = createContext<PortalAuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser()
+  const { signOut: clerkSignOut } = useClerk()
+  const { getToken } = useClerkAuth()
+  const [portalUser, setPortalUser] = useState<PortalUser | null>(null)
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      setUser(getStoredUser())
-      const token = getToken()
-      if (token) {
+    if (!clerkLoaded) return
+    if (!clerkUser) { setPortalUser(null); return }
+
+    getToken()
+      .then(token =>
         fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-          .then(r => r.json())
-          .then(userData => {
-            if (userData.plan) {
-              localStorage.setItem('pk_user_plan', userData.plan)
-            }
-            if (userData.id) setUser(userData as AuthUser)
-          })
-          .catch(() => {})
-      }
-    }
-    setLoading(false)
+      )
+      .then(r => r.json())
+      .then((data: PortalUser) => {
+        if (data.id) setPortalUser(data)
+      })
+      .catch(console.error)
+  }, [clerkUser, clerkLoaded, getToken])
+
+  const signOut = useCallback(() => {
+    setPortalUser(null)
+    clerkSignOut()
+  }, [clerkSignOut])
+
+  const updateUser = useCallback((updated: PortalUser) => {
+    setPortalUser(updated)
   }, [])
 
-  const signIn = async (payload: SignInPayload) => {
-    const { token, user } = await apiSignIn(payload)
-    saveSession(token, user as AuthUser)
-    setUser(user as AuthUser)
-  }
-
-  const signUp = async (payload: SignUpPayload) => {
-    const { token, user } = await apiSignUp(payload)
-    saveSession(token, user as AuthUser)
-    setUser(user as AuthUser)
-  }
-
-  const signOut = () => {
-    clearSession()
-    setUser(null)
-  }
-
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, isLoggedIn: !!user }}>
+    <PortalAuthContext.Provider value={{
+      user: portalUser,
+      isLoggedIn: !!clerkUser,
+      isLoaded: clerkLoaded,
+      signOut,
+      setUser: updateUser,
+    }}>
       {children}
-    </AuthContext.Provider>
+    </PortalAuthContext.Provider>
   )
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+export function usePortalAuth() {
+  const ctx = useContext(PortalAuthContext)
+  if (!ctx) throw new Error('usePortalAuth must be used within AuthProvider')
   return ctx
 }

@@ -6,7 +6,6 @@ import DashboardLayout from './components/DashboardLayout'
 import Landing from './pages/Landing'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
-import ForgotPassword from './pages/ForgotPassword'
 import ClientPortal from './pages/ClientPortal'
 
 import Dashboard from './pages/dashboard/Dashboard'
@@ -24,9 +23,8 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/" element={<Landing />} />
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/signin/*" element={<SignIn />} />
+          <Route path="/signup/*" element={<SignUp />} />
           <Route path="/portal/:token" element={<ClientPortal />} />
 
           {/* Protected dashboard */}

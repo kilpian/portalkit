@@ -12,6 +12,8 @@
     "start": "node --env-file=.env server/index.js"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.7",
+    "@clerk/clerk-react": "^5.61.6",
     "axios": "^1.16.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

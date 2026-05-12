@@ -1,14 +1,22 @@
 import express from 'express'
 import pkg from 'pg'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
+import { Resend } from 'resend'
+import { createClerkClient } from '@clerk/backend'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null
+
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null
+
+const clerk = process.env.CLERK_SECRET_KEY
+  ? createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
   : null
 
 const { Pool } = pkg
@@ -16,10 +24,9 @@ const app = express()
 const PORT = process.env.PORT || 3001
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL environment variable is required')
-if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required')
+if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY environment variable is required')
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
-const JWT_SECRET = process.env.JWT_SECRET
 
 app.use(cors({
   origin: [
@@ -60,6 +67,49 @@ app.post('/api/stripe/webhook',
             )
             console.log(`User ${userId} subscribed`)
           }
+          break
+        }
+        case 'customer.subscription.created': {
+          const sub = event.data.object
+          await pool.query(
+            'UPDATE users SET plan=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3',
+            ['active', sub.id, sub.customer]
+          )
+          break
+        }
+        case 'invoice.payment_succeeded': {
+          const inv = event.data.object
+          if (inv.billing_reason === 'subscription_create') {
+            const userResult = await pool.query(
+              'SELECT email, full_name FROM users WHERE stripe_customer_id=$1',
+              [inv.customer]
+            )
+            const u = userResult.rows[0]
+            if (u && resend) {
+              try {
+                await resend.emails.send({
+                  from: 'PortalKit <hello@getportalkit.com>',
+                  to: u.email,
+                  subject: 'Welcome to PortalKit!',
+                  html: `
+                    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+                      <h1 style="color:#1B4332;font-size:24px;margin-bottom:8px">Welcome to PortalKit, ${u.full_name.split(' ')[0]}!</h1>
+                      <p style="color:#4B5563;font-size:15px;line-height:1.6">Your subscription is now active. You have unlimited access to create client portals, share contracts, and manage invoices.</p>
+                      <a href="${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1B4332;color:#FDFAF5;text-decoration:none;border-radius:8px;font-weight:600">Go to Dashboard →</a>
+                      <p style="color:#9CA3AF;font-size:12px;margin-top:32px">PortalKit by Kilpian LLC</p>
+                    </div>
+                  `,
+                })
+              } catch (emailErr) {
+                console.error('Welcome email failed:', emailErr)
+              }
+            }
+          }
+          break
+        }
+        case 'invoice.payment_failed': {
+          const inv = event.data.object
+          console.warn(`Payment failed for customer ${inv.customer}: ${inv.id}`)
           break
         }
         case 'customer.subscription.deleted': {
@@ -111,8 +161,6 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-app.use('/api/auth/signin', authLimiter)
-app.use('/api/auth/signup', authLimiter)
 app.use('/api/', apiLimiter)
 
 function sanitize(str) {
@@ -127,16 +175,15 @@ async function initDb() {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
+          clerk_id VARCHAR(255),
           full_name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL,
+          password TEXT,
           business_name TEXT,
           plan TEXT DEFAULT 'trial',
           trial_ends_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '14 days'),
           stripe_customer_id TEXT,
           stripe_subscription_id TEXT,
-          reset_password_token TEXT,
-          reset_password_expires TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
@@ -192,6 +239,19 @@ async function initDb() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `)
+
+      // Migrate existing tables to add clerk_id if missing
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);
+        ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+      `).catch(() => {})
+
+      // Add unique index on clerk_id (partial, excludes NULLs)
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_id_unique
+        ON users (clerk_id) WHERE clerk_id IS NOT NULL;
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -203,119 +263,76 @@ async function initDb() {
   }
 }
 
-function requireAuth(req, res, next) {
-  const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+async function requireAuth(req, res, next) {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Unauthorized' })
   try {
-    const payload = jwt.verify(header.slice(7), JWT_SECRET)
-    req.userId = String(payload.userId)
+    if (!clerk) return res.status(503).json({ error: 'Auth not configured' })
+    const payload = await clerk.verifyToken(token)
+    const clerkUserId = payload.sub
+
+    const existing = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [clerkUserId])
+
+    if (existing.rows.length === 0) {
+      // First login — provision user in our DB
+      const clerkUser = await clerk.users.getUser(clerkUserId)
+      const email = clerkUser.emailAddresses[0]?.emailAddress || ''
+      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email
+
+      const newUser = await pool.query(
+        `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
+         VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days')
+         ON CONFLICT (email) DO UPDATE SET clerk_id = EXCLUDED.clerk_id
+         RETURNING *`,
+        [clerkUserId, email, fullName]
+      )
+      req.user = newUser.rows[0]
+    } else {
+      req.user = existing.rows[0]
+    }
+
+    req.userId = String(req.user.id)
     next()
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token' })
+  } catch (err) {
+    console.error('Auth error:', err.message)
+    res.status(401).json({ error: 'Unauthorized' })
   }
 }
 
+// ── USERS ─────────────────────────────────────────────────────
+
+app.put('/api/users/me', requireAuth, async (req, res) => {
+  const { full_name, business_name } = req.body
+  if (!full_name) return res.status(400).json({ error: 'Name is required.' })
+  try {
+    const result = await pool.query(
+      `UPDATE users SET full_name=$1, business_name=$2
+       WHERE id=$3
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, created_at`,
+      [sanitize(full_name), sanitize(business_name) || null, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' })
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Update profile error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/users/me', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM users WHERE id=$1', [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete account error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── AUTH ──────────────────────────────────────────────────────
 
-app.post('/api/auth/signup', async (req, res) => {
-  const { full_name, email, password, business_name } = req.body
-  if (!full_name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required.' })
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' })
-  try {
-    const exists = await pool.query('SELECT id FROM users WHERE email=$1', [email.toLowerCase()])
-    if (exists.rows.length > 0) return res.status(409).json({ error: 'An account with this email already exists.' })
-    const hashed = await bcrypt.hash(password, 12)
-    const result = await pool.query(
-      `INSERT INTO users (full_name, email, password, business_name)
-       VALUES ($1,$2,$3,$4)
-       RETURNING id, full_name, email, business_name, plan, trial_ends_at, created_at`,
-      [sanitize(full_name), email.toLowerCase().trim(), hashed, sanitize(business_name) || null]
-    )
-    const user = result.rows[0]
-    const token = jwt.sign({ userId: String(user.id) }, JWT_SECRET, { expiresIn: '7d' })
-    res.status(201).json({ token, user })
-  } catch (err) {
-    console.error('Signup error:', err)
-    res.status(500).json({ error: 'Server error. Please try again.' })
-  }
-})
-
-app.post('/api/auth/signin', async (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' })
-  try {
-    const result = await pool.query(
-      'SELECT id, full_name, email, password, business_name, plan, trial_ends_at, stripe_customer_id, created_at FROM users WHERE email=$1',
-      [email.toLowerCase().trim()]
-    )
-    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid email or password.' })
-    const user = result.rows[0]
-    const valid = await bcrypt.compare(password, user.password)
-    if (!valid) return res.status(401).json({ error: 'Invalid email or password.' })
-    const { password: _, ...safeUser } = user
-    const token = jwt.sign({ userId: String(safeUser.id) }, JWT_SECRET, { expiresIn: '7d' })
-    res.json({ token, user: safeUser })
-  } catch (err) {
-    console.error('Signin error:', err)
-    res.status(500).json({ error: 'Server error. Please try again.' })
-  }
-})
-
 app.get('/api/auth/me', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, created_at FROM users WHERE id=$1',
-      [req.userId]
-    )
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' })
-    res.json(result.rows[0])
-  } catch {
-    res.status(500).json({ error: 'Server error' })
-  }
-})
-
-app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
-  const { email } = req.body
-  if (!email) return res.status(400).json({ error: 'Email required' })
-  try {
-    const result = await pool.query('SELECT id FROM users WHERE email=$1', [email.toLowerCase()])
-    if (result.rows.length === 0) return res.json({ message: 'If that email exists, a reset link has been sent.' })
-    const token = Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)
-    const expires = new Date(Date.now() + 60 * 60 * 1000)
-    await pool.query(
-      'UPDATE users SET reset_password_token=$1, reset_password_expires=$2 WHERE email=$3',
-      [token, expires, email.toLowerCase()]
-    )
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`
-    console.log(`Reset link for ${email}: ${resetLink}`)
-    // TODO: send email via Resend
-    res.json({ message: 'If that email exists, a reset link has been sent.' })
-  } catch (err) {
-    console.error('Forgot password error:', err)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
-
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { token, password } = req.body
-  if (!token || !password) return res.status(400).json({ error: 'Token and password required' })
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' })
-  try {
-    const result = await pool.query(
-      'SELECT id FROM users WHERE reset_password_token=$1 AND reset_password_expires > NOW()',
-      [token]
-    )
-    if (!result.rows.length) return res.status(400).json({ error: 'Invalid or expired reset token' })
-    const hashed = await bcrypt.hash(password, 12)
-    await pool.query(
-      'UPDATE users SET password=$1, reset_password_token=NULL, reset_password_expires=NULL WHERE id=$2',
-      [hashed, result.rows[0].id]
-    )
-    res.json({ message: 'Password updated successfully' })
-  } catch (err) {
-    console.error('Reset password error:', err)
-    res.status(500).json({ error: 'Server error' })
-  }
+  res.json(req.user)
 })
 
 // ── STRIPE ────────────────────────────────────────────────────
@@ -376,10 +393,37 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   }
 })
 
+// ── DASHBOARD ─────────────────────────────────────────────────
+
+app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
+  try {
+    const [clients, invoices, user] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
+      pool.query("SELECT COUNT(*) FROM invoices WHERE user_id=$1 AND status != 'paid'", [req.userId]),
+      pool.query('SELECT plan, trial_ends_at FROM users WHERE id=$1', [req.userId]),
+    ])
+    const u = user.rows[0]
+    let trial_days_remaining = null
+    if (u && u.plan !== 'active' && u.trial_ends_at) {
+      const diff = new Date(u.trial_ends_at).getTime() - Date.now()
+      trial_days_remaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+    }
+    const clientCount = parseInt(clients.rows[0].count, 10)
+    res.json({
+      total_clients: clientCount,
+      active_portals: clientCount,
+      pending_invoices: parseInt(invoices.rows[0].count, 10),
+      trial_days_remaining,
+    })
+  } catch (err) {
+    console.error('Dashboard stats error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── CLIENTS ───────────────────────────────────────────────────
 
 app.get('/api/clients', requireAuth, async (req, res) => {
-  // TODO: implement client list
   try {
     const result = await pool.query(
       'SELECT id, name, email, phone, event_date, event_type, portal_token, created_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
@@ -393,7 +437,6 @@ app.get('/api/clients', requireAuth, async (req, res) => {
 })
 
 app.post('/api/clients', requireAuth, async (req, res) => {
-  // TODO: implement client creation
   const { name, email, phone, event_date, event_type, notes } = req.body
   if (!name) return res.status(400).json({ error: 'Client name is required' })
   try {
@@ -411,7 +454,6 @@ app.post('/api/clients', requireAuth, async (req, res) => {
 })
 
 app.get('/api/clients/:id', requireAuth, async (req, res) => {
-  // TODO: implement single client fetch
   try {
     const result = await pool.query('SELECT * FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
@@ -423,7 +465,6 @@ app.get('/api/clients/:id', requireAuth, async (req, res) => {
 })
 
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
-  // TODO: implement client update
   const { name, email, phone, event_date, event_type, notes } = req.body
   try {
     const result = await pool.query(
@@ -440,7 +481,6 @@ app.put('/api/clients/:id', requireAuth, async (req, res) => {
 })
 
 app.delete('/api/clients/:id', requireAuth, async (req, res) => {
-  // TODO: implement client deletion
   try {
     await pool.query('DELETE FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     res.json({ success: true })
@@ -453,7 +493,6 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
 // ── CONTRACTS ─────────────────────────────────────────────────
 
 app.get('/api/contracts', requireAuth, async (req, res) => {
-  // TODO: implement contract list
   try {
     const result = await pool.query(
       `SELECT c.*, cl.name as client_name FROM contracts c
@@ -469,7 +508,6 @@ app.get('/api/contracts', requireAuth, async (req, res) => {
 })
 
 app.post('/api/contracts', requireAuth, async (req, res) => {
-  // TODO: implement contract creation
   const { client_id, title, content } = req.body
   if (!title) return res.status(400).json({ error: 'Contract title is required' })
   try {
@@ -485,7 +523,6 @@ app.post('/api/contracts', requireAuth, async (req, res) => {
 })
 
 app.put('/api/contracts/:id', requireAuth, async (req, res) => {
-  // TODO: implement contract update
   const { title, content, status } = req.body
   try {
     const result = await pool.query(
@@ -502,7 +539,6 @@ app.put('/api/contracts/:id', requireAuth, async (req, res) => {
 })
 
 app.delete('/api/contracts/:id', requireAuth, async (req, res) => {
-  // TODO: implement contract deletion
   try {
     await pool.query('DELETE FROM contracts WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     res.json({ success: true })
@@ -515,7 +551,6 @@ app.delete('/api/contracts/:id', requireAuth, async (req, res) => {
 // ── INVOICES ──────────────────────────────────────────────────
 
 app.get('/api/invoices', requireAuth, async (req, res) => {
-  // TODO: implement invoice list
   try {
     const result = await pool.query(
       `SELECT i.*, cl.name as client_name FROM invoices i
@@ -531,7 +566,6 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
 })
 
 app.post('/api/invoices', requireAuth, async (req, res) => {
-  // TODO: implement invoice creation
   const { client_id, invoice_number, amount_cents, due_date, notes } = req.body
   if (!amount_cents) return res.status(400).json({ error: 'Invoice amount is required' })
   try {
@@ -548,7 +582,6 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
 })
 
 app.put('/api/invoices/:id', requireAuth, async (req, res) => {
-  // TODO: implement invoice update
   const { status, paid_at } = req.body
   try {
     const result = await pool.query(
@@ -566,7 +599,6 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
 // ── FILES ─────────────────────────────────────────────────────
 
 app.get('/api/files', requireAuth, async (req, res) => {
-  // TODO: implement file list
   try {
     const result = await pool.query(
       `SELECT f.*, cl.name as client_name FROM files f
@@ -582,7 +614,6 @@ app.get('/api/files', requireAuth, async (req, res) => {
 })
 
 app.delete('/api/files/:id', requireAuth, async (req, res) => {
-  // TODO: implement file deletion (also delete from storage)
   try {
     await pool.query('DELETE FROM files WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     res.json({ success: true })
@@ -595,17 +626,38 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
 // ── CLIENT PORTAL (public) ────────────────────────────────────
 
 app.get('/api/portals/:token', async (req, res) => {
-  // TODO: implement public client portal view
   try {
-    const client = await pool.query(
+    const clientResult = await pool.query(
       `SELECT c.id, c.name, c.event_date, c.event_type,
               u.full_name as photographer_name, u.business_name as photographer_business
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
     )
-    if (!client.rows.length) return res.status(404).json({ error: 'Portal not found' })
-    res.json(client.rows[0])
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client = clientResult.rows[0]
+
+    const [contracts, invoices, files] = await Promise.all([
+      pool.query(
+        `SELECT id, title, status, signed_at FROM contracts WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
+        [client.id]
+      ),
+      pool.query(
+        `SELECT id, invoice_number, amount_cents, status, due_date FROM invoices WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
+        [client.id]
+      ),
+      pool.query(
+        `SELECT id, original_name, size_bytes, storage_url, created_at FROM files WHERE client_id=$1 ORDER BY created_at DESC`,
+        [client.id]
+      ),
+    ])
+
+    res.json({
+      ...client,
+      contracts: contracts.rows,
+      invoices: invoices.rows,
+      files: files.rows,
+    })
   } catch (err) {
     console.error('Portal error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -615,7 +667,6 @@ app.get('/api/portals/:token', async (req, res) => {
 // ── AI CHAT ───────────────────────────────────────────────────
 
 app.post('/api/chat', requireAuth, async (req, res) => {
-  // TODO: implement AI assistant using Anthropic API
   res.status(501).json({ error: 'AI chat not yet implemented' })
 })
 
