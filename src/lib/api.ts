@@ -54,6 +54,45 @@ export interface MessageSummary {
   unread_count: number
 }
 
+export interface Contract {
+  id: number
+  user_id: number
+  client_id: number | null
+  client_name: string | null
+  title: string
+  content: string | null
+  status: 'draft' | 'sent' | 'signed'
+  signed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Invoice {
+  id: number
+  user_id: number
+  client_id: number | null
+  client_name: string | null
+  invoice_number: string | null
+  amount_cents: number
+  status: 'draft' | 'sent' | 'paid' | 'overdue'
+  due_date: string | null
+  paid_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UploadedFile {
+  id: number
+  user_id: number
+  client_id: number | null
+  client_name: string | null
+  original_name: string
+  storage_url: string
+  size_bytes: number
+  created_at: string
+}
+
 export interface PortalUser {
   id: number
   clerk_id: string

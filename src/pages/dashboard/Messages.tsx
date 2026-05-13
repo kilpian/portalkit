@@ -22,6 +22,15 @@ function formatFull(d: string) {
   catch { return '' }
 }
 
+function dateDividerLabel(d: string): string {
+  const date = new Date(d)
+  const now = new Date()
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+  if (date.toDateString() === now.toDateString()) return 'Today'
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })
+}
+
 export default function Messages() {
   const { authFetch } = useApi()
   const [clients, setClients] = useState<Client[]>([])
@@ -204,12 +213,20 @@ export default function Messages() {
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--green)', color: '#FDFAF5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
                 {getInitials(selectedClient.name)}
               </div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{selectedClient.name}</p>
                 <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                   {[selectedClient.event_type, selectedClient.event_date ? new Date(selectedClient.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null].filter(Boolean).join(' · ') || 'No event details'}
                 </p>
               </div>
+              <a
+                href={`/portal/${selectedClient.portal_token}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none', padding: '4px 10px', border: '1px solid var(--green-border)', borderRadius: 6, background: 'var(--green-bg)', whiteSpace: 'nowrap' }}
+              >
+                View Portal →
+              </a>
             </div>
 
             {/* Message thread */}
@@ -221,25 +238,43 @@ export default function Messages() {
                   <p style={{ fontSize: 14 }}>No messages yet. Send the first one!</p>
                 </div>
               ) : (
-                messages.map(m => (
-                  <div key={m.id} style={{ display: 'flex', justifyContent: m.sender === 'photographer' ? 'flex-end' : 'flex-start' }}>
-                    <div style={{
-                      maxWidth: '72%',
-                      padding: '10px 14px',
-                      borderRadius: m.sender === 'photographer' ? '14px 4px 14px 14px' : '4px 14px 14px 14px',
-                      background: m.sender === 'photographer' ? 'var(--green)' : 'var(--bg-elevated)',
-                      color: m.sender === 'photographer' ? '#FDFAF5' : 'var(--text-primary)',
-                      border: m.sender === 'photographer' ? 'none' : '1px solid var(--border-subtle)',
-                      boxShadow: 'var(--shadow-sm)',
-                    }}>
-                      <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
-                      <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
-                        {formatFull(m.created_at)}
-                        {m.sender === 'photographer' && m.read_at && <span> · Read</span>}
-                      </p>
-                    </div>
-                  </div>
-                ))
+                (() => {
+                  const items: React.ReactNode[] = []
+                  let lastDay = ''
+                  messages.forEach(m => {
+                    const day = new Date(m.created_at).toDateString()
+                    if (day !== lastDay) {
+                      lastDay = day
+                      items.push(
+                        <div key={`div-${m.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0' }}>
+                          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{dateDividerLabel(m.created_at)}</span>
+                          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+                        </div>
+                      )
+                    }
+                    items.push(
+                      <div key={m.id} style={{ display: 'flex', justifyContent: m.sender === 'photographer' ? 'flex-end' : 'flex-start' }}>
+                        <div style={{
+                          maxWidth: '72%',
+                          padding: '10px 14px',
+                          borderRadius: m.sender === 'photographer' ? '14px 4px 14px 14px' : '4px 14px 14px 14px',
+                          background: m.sender === 'photographer' ? 'var(--green)' : 'var(--bg-elevated)',
+                          color: m.sender === 'photographer' ? '#FDFAF5' : 'var(--text-primary)',
+                          border: m.sender === 'photographer' ? 'none' : '1px solid var(--border-subtle)',
+                          boxShadow: 'var(--shadow-sm)',
+                        }}>
+                          <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
+                          <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
+                            {formatFull(m.created_at)}
+                            {m.sender === 'photographer' && m.read_at && <span> · Read</span>}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })
+                  return items
+                })()
               )}
               <div ref={bottomRef} />
             </div>

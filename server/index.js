@@ -8,6 +8,8 @@ import { Resend } from 'resend'
 import { createClerkClient, verifyToken } from '@clerk/backend'
 import Anthropic from '@anthropic-ai/sdk'
 import { Webhook } from 'svix'
+import multer from 'multer'
+import fs from 'fs'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -689,7 +691,119 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
   }
 })
 
+// ── CONTRACT SEND ─────────────────────────────────────────────
+
+app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
+  try {
+    const contractResult = await pool.query(
+      `SELECT c.*, cl.email as client_email, cl.name as client_name, cl.portal_token,
+              u.business_name, u.full_name as photographer_name
+       FROM contracts c
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       JOIN users u ON u.id = c.user_id
+       WHERE c.id=$1 AND c.user_id=$2`,
+      [req.params.id, req.userId]
+    )
+    if (!contractResult.rows.length) return res.status(404).json({ error: 'Contract not found' })
+    const contract = contractResult.rows[0]
+
+    const updated = await pool.query(
+      `UPDATE contracts SET status='sent', updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    )
+
+    if (contract.client_email && resend) {
+      const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
+      const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${contract.portal_token}`
+      resend.emails.send({
+        from: 'hello@getportalkit.com',
+        to: contract.client_email,
+        subject: `Contract ready to review: ${contract.title}`,
+        html: `<p>Hi ${contract.name},</p><p>${senderName} has sent you a contract to review: <strong>${contract.title}</strong></p><p><a href="${portalUrl}">View your portal →</a></p>`,
+      }).catch(err => console.error('Email error:', err))
+    }
+
+    res.json(updated.rows[0])
+  } catch (err) {
+    console.error('Send contract error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── INVOICE SEND + DELETE ─────────────────────────────────────
+
+app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
+  try {
+    const invoiceResult = await pool.query(
+      `SELECT i.*, cl.email as client_email, cl.name as client_name, cl.portal_token,
+              u.business_name, u.full_name as photographer_name
+       FROM invoices i
+       LEFT JOIN clients cl ON cl.id = i.client_id
+       JOIN users u ON u.id = i.user_id
+       WHERE i.id=$1 AND i.user_id=$2`,
+      [req.params.id, req.userId]
+    )
+    if (!invoiceResult.rows.length) return res.status(404).json({ error: 'Invoice not found' })
+    const invoice = invoiceResult.rows[0]
+
+    const updated = await pool.query(
+      `UPDATE invoices SET status='sent', updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    )
+
+    if (invoice.client_email && resend) {
+      const senderName = invoice.business_name || invoice.photographer_name || 'Your photographer'
+      const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${invoice.portal_token}`
+      const amount = `$${((invoice.amount_cents || 0) / 100).toFixed(2)}`
+      resend.emails.send({
+        from: 'hello@getportalkit.com',
+        to: invoice.client_email,
+        subject: `Invoice ${invoice.invoice_number || ''} from ${senderName} — ${amount}`,
+        html: `<p>Hi ${invoice.client_name},</p><p>${senderName} has sent you an invoice for <strong>${amount}</strong>.</p><p><a href="${portalUrl}">View your portal to pay →</a></p>`,
+      }).catch(err => console.error('Email error:', err))
+    }
+
+    res.json(updated.rows[0])
+  } catch (err) {
+    console.error('Send invoice error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM invoices WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete invoice error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── FILES ─────────────────────────────────────────────────────
+
+const upload = multer({ dest: 'uploads/' })
+app.use('/uploads', express.static('uploads'))
+
+app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' })
+    const { client_id } = req.body
+    if (!client_id) return res.status(400).json({ error: 'client_id required' })
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const storageUrl = `/uploads/${req.file.filename}`
+    const result = await pool.query(
+      `INSERT INTO files (user_id, client_id, original_name, storage_url, size_bytes)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [req.userId, client_id, req.file.originalname, storageUrl, req.file.size]
+    )
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('File upload error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
