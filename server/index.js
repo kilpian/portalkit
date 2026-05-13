@@ -43,8 +43,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
-app.options('*', cors())
-
 // Webhook must be before express.json() to get raw body
 app.post('/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
@@ -272,17 +270,24 @@ async function initDb() {
 }
 
 async function requireAuth(req, res, next) {
+  console.log('🔐 requireAuth called for:', req.method, req.path)
+  console.log('🔑 Authorization header:', req.headers.authorization ? 'present' : 'MISSING')
   const token = req.headers.authorization?.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Unauthorized' })
+  if (!token) {
+    console.log('❌ No token provided')
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  console.log('✅ Token found, verifying with Clerk...')
   try {
     if (!clerk) return res.status(503).json({ error: 'Auth not configured' })
     const payload = await clerk.verifyToken(token)
     const clerkUserId = payload.sub
+    console.log('✅ Token verified, clerkUserId:', clerkUserId)
 
     const existing = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [clerkUserId])
 
     if (existing.rows.length === 0) {
-      // First login — provision user in our DB
+      console.log('👤 New user — provisioning in DB...')
       const clerkUser = await clerk.users.getUser(clerkUserId)
       const email = clerkUser.emailAddresses[0]?.emailAddress || ''
       const emailName = email.split('@')[0] || 'there'
@@ -296,17 +301,25 @@ async function requireAuth(req, res, next) {
         [clerkUserId, email, fullName]
       )
       req.user = newUser.rows[0]
+      console.log('✅ User provisioned, id:', req.user.id)
     } else {
       req.user = existing.rows[0]
+      console.log('✅ User found, id:', req.user.id)
     }
 
     req.userId = String(req.user.id)
     next()
   } catch (err) {
-    console.error('Auth error:', err.message)
+    console.error('❌ Auth error:', err.message)
     res.status(401).json({ error: 'Unauthorized' })
   }
 }
+
+// ── TEST (public) ─────────────────────────────────────────────
+
+app.get('/api/test', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend is reachable', time: new Date() })
+})
 
 // ── USERS ─────────────────────────────────────────────────────
 
