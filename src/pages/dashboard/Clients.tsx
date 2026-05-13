@@ -36,6 +36,7 @@ export default function Clients() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState<CreateClientPayload>(BLANK)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -57,8 +58,21 @@ export default function Clients() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  const openDrawer = () => { setForm(BLANK); setFormError(''); setDrawerOpen(true) }
-  const closeDrawer = () => setDrawerOpen(false)
+  const openDrawer = () => { setEditingClient(null); setForm(BLANK); setFormError(''); setDrawerOpen(true) }
+  const openEditDrawer = (client: Client) => {
+    setEditingClient(client)
+    setForm({
+      name: client.name,
+      email: client.email ?? '',
+      phone: client.phone ?? '',
+      event_type: client.event_type ?? '',
+      event_date: client.event_date ?? '',
+      notes: client.notes ?? '',
+    })
+    setFormError('')
+    setDrawerOpen(true)
+  }
+  const closeDrawer = () => { setDrawerOpen(false); setEditingClient(null) }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,14 +88,22 @@ export default function Clients() {
         event_date: form.event_date || undefined,
         notes: form.notes?.trim() || undefined,
       }
-      const res = await authFetch('/api/clients', { method: 'post', data: payload })
-      const created: Client = res.data
-      setClients(prev => [created, ...prev])
-      closeDrawer()
-      showToast(`${created.name}'s portal created!`)
+      if (editingClient) {
+        const res = await authFetch(`/api/clients/${editingClient.id}`, { method: 'put', data: payload })
+        const updated: Client = res.data
+        setClients(prev => prev.map(c => c.id === updated.id ? updated : c))
+        closeDrawer()
+        showToast(`${updated.name}'s info saved.`)
+      } else {
+        const res = await authFetch('/api/clients', { method: 'post', data: payload })
+        const created: Client = res.data
+        setClients(prev => [created, ...prev])
+        closeDrawer()
+        showToast(`${created.name}'s portal created!`)
+      }
     } catch (err: unknown) {
       const ae = err as { response?: { data?: { error?: string } } }
-      setFormError(ae?.response?.data?.error || 'Failed to create client.')
+      setFormError(ae?.response?.data?.error || (editingClient ? 'Failed to save changes.' : 'Failed to create client.'))
     } finally {
       setSaving(false)
     }
@@ -182,12 +204,20 @@ export default function Clients() {
                           <button onClick={() => setDeleteConfirm(null)} className="btn btn-ghost btn-sm">Cancel</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeleteConfirm(c.id)} style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
-                          onMouseEnter={e => { e.currentTarget.style.color = '#DC2626'; e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
-                          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'transparent' }}
-                        >
-                          Delete
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button onClick={() => openEditDrawer(c)} style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--green)'; e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'transparent' }}
+                          >
+                            Edit
+                          </button>
+                          <button onClick={() => setDeleteConfirm(c.id)} style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#DC2626'; e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'transparent' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -218,7 +248,9 @@ export default function Clients() {
       }}>
         {/* Drawer header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>New Client</h2>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {editingClient ? 'Edit Client' : 'New Client'}
+          </h2>
           <button onClick={closeDrawer} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -267,8 +299,8 @@ export default function Clients() {
             style={{ flex: 2 }}
           >
             {saving
-              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />Creating…</>
-              : 'Create Portal'
+              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />{editingClient ? 'Saving…' : 'Creating…'}</>
+              : editingClient ? 'Save Changes' : 'Create Portal'
             }
           </button>
         </div>

@@ -100,7 +100,7 @@ export default function ClientPortal() {
 
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
-    axios.get<PortalData>(`/api/portals/${token}`)
+    axios.get<PortalData>(`http://localhost:3001/api/portals/${token}`)
       .then(r => { setData(r.data); setLoading(false) })
       .catch(err => {
         setError(err?.response?.data?.error || 'This portal link is invalid or has expired.')
