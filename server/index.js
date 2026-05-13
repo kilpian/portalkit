@@ -43,6 +43,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
+app.options('/(.*)', cors())
+
 // Webhook must be before express.json() to get raw body
 app.post('/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
