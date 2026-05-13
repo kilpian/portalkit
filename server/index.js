@@ -102,7 +102,7 @@ app.post('/api/stripe/webhook',
             if (u && resend) {
               try {
                 await resend.emails.send({
-                  from: 'PortalKit <hello@getportalkit.com>',
+                  from: 'PortalKit <hello@mail.getportalkit.com>',
                   to: u.email,
                   subject: 'Welcome to PortalKit!',
                   html: `
@@ -180,7 +180,7 @@ app.post('/api/webhooks/clerk',
         const firstName = clerkUser.first_name || ''
         if (email && resend) {
           await resend.emails.send({
-            from: 'hello@getportalkit.com',
+            from: 'hello@mail.getportalkit.com',
             to: email,
             subject: 'Welcome to PortalKit — you\'re all set 🎉',
             html: `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;"><h1 style="font-family:Georgia,serif;color:#1B4332;font-size:28px;margin-bottom:4px;">Portal<span style="color:#C9A84C">Kit</span></h1><h2 style="font-size:22px;color:#1A1208;margin-bottom:12px;">Welcome${firstName ? `, ${firstName}` : ''}!</h2><p style="color:#6B5E4A;margin-bottom:24px;">Your 14-day free trial has started. Here's how to get going:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin-bottom:28px;"><li>Create your first client</li><li>Share their private portal link</li><li>Get paid faster</li></ol><a href="${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">Go to Dashboard →</a><p style="margin-top:32px;color:#9C8E7A;font-size:13px;">Questions? Reply to this email — we read every one.</p></div>`,
@@ -738,7 +738,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
       console.log('📧 Sending contract email to:', contract.client_email)
       try {
         const emailResult = await resend.emails.send({
-          from: 'PortalKit <hello@getportalkit.com>',
+          from: 'PortalKit <hello@mail.getportalkit.com>',
           to: contract.client_email,
           subject: `Contract ready to review: ${contract.title}`,
           html: `<p>Hi ${contract.client_name},</p><p>${senderName} has sent you a contract to review: <strong>${contract.title}</strong></p><p><a href="${portalUrl}">View your portal →</a></p>`,
@@ -785,7 +785,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       console.log('📧 Sending invoice email to:', invoice.client_email)
       try {
         const emailResult = await resend.emails.send({
-          from: 'PortalKit <hello@getportalkit.com>',
+          from: 'PortalKit <hello@mail.getportalkit.com>',
           to: invoice.client_email,
           subject: `Invoice from ${senderName} — ${amount}`,
           html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px"><h2 style="color:#1B4332;margin-bottom:4px">Invoice from ${senderName}</h2><p style="font-size:32px;font-weight:700;color:#1A1208;margin:16px 0">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A">Invoice #${invoice.invoice_number}</p>` : ''}${dueStr}<a href="${portalUrl}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1B4332;color:#FDFAF5;border-radius:8px;text-decoration:none;font-weight:600">View portal to pay →</a></div>`,
@@ -985,7 +985,7 @@ app.post('/api/messages', requireAuth, async (req, res) => {
       console.log('📧 Sending message notification to:', client.email)
       try {
         const emailResult = await resend.emails.send({
-          from: 'PortalKit <hello@getportalkit.com>',
+          from: 'PortalKit <hello@mail.getportalkit.com>',
           to: client.email,
           subject: `New message from ${senderName}`,
           html: `<p>Hi ${client.name},</p><p>You have a new message from ${senderName}.</p><p><a href="${portalUrl}">View your portal to reply →</a></p>`,
@@ -1038,7 +1038,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
       console.log('📧 Sending client message notification to photographer:', client.photographer_email)
       try {
         const emailResult = await resend.emails.send({
-          from: 'PortalKit <hello@getportalkit.com>',
+          from: 'PortalKit <hello@mail.getportalkit.com>',
           to: client.photographer_email,
           subject: `${displaySender} sent you a message`,
           html: `<p><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding-left:12px;color:#555">${sanitize(content)}</blockquote><p><a href="${dashUrl}">Reply in dashboard →</a></p>`,
@@ -1151,8 +1151,8 @@ app.get('/api/test-email', async (req, res) => {
   if (!resend) return res.status(503).json({ error: 'Resend not configured — set RESEND_API_KEY', configured: false })
   try {
     const result = await resend.emails.send({
-      from: 'PortalKit <hello@getportalkit.com>',
-      to: 'hello@getportalkit.com',
+      from: 'PortalKit <hello@mail.getportalkit.com>',
+      to: 'hello@mail.getportalkit.com',
       subject: 'PortalKit test email',
       html: '<p>Test email from PortalKit — email is working!</p>',
     })
