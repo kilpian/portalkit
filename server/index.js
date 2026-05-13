@@ -322,6 +322,18 @@ async function initDb() {
         ON users (clerk_id) WHERE clerk_id IS NOT NULL;
       `).catch(() => {})
 
+      await pool.query(`
+        ALTER TABLE clients ADD COLUMN IF NOT EXISTS notes TEXT;
+      `).catch(() => {})
+
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS logo_url TEXT;
+      `).catch(() => {})
+
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_color TEXT DEFAULT '#1B4332';
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -397,14 +409,14 @@ app.get('/api/test', (req, res) => {
 // ── USERS ─────────────────────────────────────────────────────
 
 app.put('/api/users/me', requireAuth, async (req, res) => {
-  const { full_name, business_name } = req.body
+  const { full_name, business_name, logo_url, brand_color } = req.body
   if (!full_name) return res.status(400).json({ error: 'Name is required.' })
   try {
     const result = await pool.query(
-      `UPDATE users SET full_name=$1, business_name=$2
-       WHERE id=$3
-       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, created_at`,
-      [sanitize(full_name), sanitize(business_name) || null, req.userId]
+      `UPDATE users SET full_name=$1, business_name=$2, logo_url=$3, brand_color=$4
+       WHERE id=$5
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, created_at`,
+      [sanitize(full_name), sanitize(business_name) || null, logo_url || null, brand_color || null, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' })
     res.json(result.rows[0])
@@ -677,11 +689,19 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
 })
 
 app.put('/api/invoices/:id', requireAuth, async (req, res) => {
-  const { status, paid_at } = req.body
+  const { status, paid_at, amount_cents, due_date, invoice_number, notes } = req.body
   try {
     const result = await pool.query(
-      `UPDATE invoices SET status=$1, paid_at=$2, updated_at=NOW() WHERE id=$3 AND user_id=$4 RETURNING *`,
-      [status || 'draft', paid_at || null, req.params.id, req.userId]
+      `UPDATE invoices SET
+         status=COALESCE($1, status),
+         paid_at=CASE WHEN $2::text IS NOT NULL THEN $2::timestamptz ELSE paid_at END,
+         amount_cents=COALESCE($3::integer, amount_cents),
+         due_date=COALESCE($4::date, due_date),
+         invoice_number=COALESCE($5, invoice_number),
+         notes=COALESCE($6, notes),
+         updated_at=NOW()
+       WHERE id=$7 AND user_id=$8 RETURNING *`,
+      [status || null, paid_at || null, amount_cents || null, due_date || null, invoice_number || null, sanitize(notes) || null, req.params.id, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' })
     res.json(result.rows[0])
@@ -715,12 +735,18 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
     if (contract.client_email && resend) {
       const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${contract.portal_token}`
-      resend.emails.send({
-        from: 'hello@getportalkit.com',
-        to: contract.client_email,
-        subject: `Contract ready to review: ${contract.title}`,
-        html: `<p>Hi ${contract.name},</p><p>${senderName} has sent you a contract to review: <strong>${contract.title}</strong></p><p><a href="${portalUrl}">View your portal →</a></p>`,
-      }).catch(err => console.error('Email error:', err))
+      console.log('📧 Sending contract email to:', contract.client_email)
+      try {
+        const emailResult = await resend.emails.send({
+          from: 'PortalKit <hello@getportalkit.com>',
+          to: contract.client_email,
+          subject: `Contract ready to review: ${contract.title}`,
+          html: `<p>Hi ${contract.client_name},</p><p>${senderName} has sent you a contract to review: <strong>${contract.title}</strong></p><p><a href="${portalUrl}">View your portal →</a></p>`,
+        })
+        console.log('📧 Contract email sent:', emailResult)
+      } catch (emailErr) {
+        console.error('📧 Contract email failed:', emailErr)
+      }
     }
 
     res.json(updated.rows[0])
@@ -755,12 +781,19 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       const senderName = invoice.business_name || invoice.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${invoice.portal_token}`
       const amount = `$${((invoice.amount_cents || 0) / 100).toFixed(2)}`
-      resend.emails.send({
-        from: 'hello@getportalkit.com',
-        to: invoice.client_email,
-        subject: `Invoice ${invoice.invoice_number || ''} from ${senderName} — ${amount}`,
-        html: `<p>Hi ${invoice.client_name},</p><p>${senderName} has sent you an invoice for <strong>${amount}</strong>.</p><p><a href="${portalUrl}">View your portal to pay →</a></p>`,
-      }).catch(err => console.error('Email error:', err))
+      const dueStr = invoice.due_date ? `<p style="color:#6B5E4A">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''
+      console.log('📧 Sending invoice email to:', invoice.client_email)
+      try {
+        const emailResult = await resend.emails.send({
+          from: 'PortalKit <hello@getportalkit.com>',
+          to: invoice.client_email,
+          subject: `Invoice from ${senderName} — ${amount}`,
+          html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px"><h2 style="color:#1B4332;margin-bottom:4px">Invoice from ${senderName}</h2><p style="font-size:32px;font-weight:700;color:#1A1208;margin:16px 0">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A">Invoice #${invoice.invoice_number}</p>` : ''}${dueStr}<a href="${portalUrl}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1B4332;color:#FDFAF5;border-radius:8px;text-decoration:none;font-weight:600">View portal to pay →</a></div>`,
+        })
+        console.log('📧 Invoice email sent:', emailResult)
+      } catch (emailErr) {
+        console.error('📧 Invoice email failed:', emailErr)
+      }
     }
 
     res.json(updated.rows[0])
@@ -836,7 +869,8 @@ app.get('/api/portals/:token', async (req, res) => {
   try {
     const clientResult = await pool.query(
       `SELECT c.id, c.name, c.event_date, c.event_type,
-              u.full_name as photographer_name, u.business_name as photographer_business
+              u.full_name as photographer_name, u.business_name as photographer_business,
+              u.logo_url as photographer_logo, u.brand_color as photographer_brand_color
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
@@ -948,12 +982,18 @@ app.post('/api/messages', requireAuth, async (req, res) => {
     if (client.email && resend) {
       const senderName = client.business_name || client.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
-      resend.emails.send({
-        from: 'hello@getportalkit.com',
-        to: client.email,
-        subject: `New message from ${senderName}`,
-        html: `<p>Hi ${client.name},</p><p>You have a new message from ${senderName}.</p><p><a href="${portalUrl}">View your portal to reply →</a></p>`,
-      }).catch(err => console.error('Email error:', err))
+      console.log('📧 Sending message notification to:', client.email)
+      try {
+        const emailResult = await resend.emails.send({
+          from: 'PortalKit <hello@getportalkit.com>',
+          to: client.email,
+          subject: `New message from ${senderName}`,
+          html: `<p>Hi ${client.name},</p><p>You have a new message from ${senderName}.</p><p><a href="${portalUrl}">View your portal to reply →</a></p>`,
+        })
+        console.log('📧 Message notification sent:', emailResult)
+      } catch (emailErr) {
+        console.error('📧 Message notification failed:', emailErr)
+      }
     }
     res.status(201).json(msgResult.rows[0])
   } catch (err) {
@@ -995,16 +1035,36 @@ app.post('/api/portals/:token/messages', async (req, res) => {
     if (client.photographer_email && resend) {
       const displaySender = sender_name ? sanitize(sender_name) : client.name
       const dashUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/messages`
-      resend.emails.send({
-        from: 'hello@getportalkit.com',
-        to: client.photographer_email,
-        subject: `${displaySender} sent you a message`,
-        html: `<p><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding-left:12px;color:#555">${sanitize(content)}</blockquote><p><a href="${dashUrl}">Reply in dashboard →</a></p>`,
-      }).catch(err => console.error('Email error:', err))
+      console.log('📧 Sending client message notification to photographer:', client.photographer_email)
+      try {
+        const emailResult = await resend.emails.send({
+          from: 'PortalKit <hello@getportalkit.com>',
+          to: client.photographer_email,
+          subject: `${displaySender} sent you a message`,
+          html: `<p><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding-left:12px;color:#555">${sanitize(content)}</blockquote><p><a href="${dashUrl}">Reply in dashboard →</a></p>`,
+        })
+        console.log('📧 Client message notification sent:', emailResult)
+      } catch (emailErr) {
+        console.error('📧 Client message notification failed:', emailErr)
+      }
     }
     res.status(201).json(msgResult.rows[0])
   } catch (err) {
     console.error('Client message error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/messages/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM messages WHERE id=$1 AND user_id=$2 AND sender='photographer' RETURNING id`,
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Message not found' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete message error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
@@ -1043,6 +1103,39 @@ app.post('/api/ai/suggest-message', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/api/ai/generate-contract', requireAuth, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' })
+  const now = Date.now()
+  const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
+  if (timestamps.length >= 10) return res.status(429).json({ error: 'Rate limit: 10 AI requests per hour' })
+  aiRateLimit.set(req.userId, [...timestamps, now])
+  const { client_id, template_type } = req.body
+  try {
+    const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
+    const photographer = userResult.rows[0]
+    const businessName = photographer?.business_name || photographer?.full_name || 'the photographer'
+    let clientContext = 'a photography client'
+    if (client_id) {
+      const r = await pool.query('SELECT name, event_type, event_date, notes FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+      if (r.rows.length) {
+        const c = r.rows[0]
+        clientContext = `Client: ${c.name}. Event: ${c.event_type || 'photography session'}. Date: ${c.event_date ? new Date(c.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD'}. Notes: ${c.notes || 'none'}`
+      }
+    }
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      system: [{ type: 'text', text: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract. Protect the photographer legally, keep it clear for clients. Write only the contract text — no preamble, no "here is your contract", just the contract itself.', cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: `Generate a ${template_type || 'photography services'} contract. Photographer/business: ${businessName}. ${clientContext}.` }],
+    })
+    const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    res.json({ content })
+  } catch (err) {
+    console.error('AI contract error:', err)
+    res.status(500).json({ error: 'AI generation failed' })
+  }
+})
+
 // ── AI CHAT (legacy stub) ─────────────────────────────────────
 
 app.post('/api/chat', requireAuth, async (req, res) => {
@@ -1053,8 +1146,28 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOString() }))
 
+app.get('/api/test-email', async (req, res) => {
+  console.log('📧 Resend configured:', !!process.env.RESEND_API_KEY)
+  if (!resend) return res.status(503).json({ error: 'Resend not configured — set RESEND_API_KEY', configured: false })
+  try {
+    const result = await resend.emails.send({
+      from: 'PortalKit <hello@getportalkit.com>',
+      to: 'hello@getportalkit.com',
+      subject: 'PortalKit test email',
+      html: '<p>Test email from PortalKit — email is working!</p>',
+    })
+    console.log('📧 Test email result:', result)
+    res.json({ success: true, result })
+  } catch (err) {
+    console.error('📧 Test email failed:', err)
+    res.status(500).json({ error: String(err), configured: true })
+  }
+})
+
 async function startServer() {
   console.log('Starting server...')
+  console.log('📧 Resend configured:', !!process.env.RESEND_API_KEY)
+  console.log('🤖 Anthropic configured:', !!process.env.ANTHROPIC_API_KEY)
   await initDb()
   console.log('DB init complete, starting HTTP listener...')
   const server = app.listen(PORT, () => {

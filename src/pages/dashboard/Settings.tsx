@@ -29,6 +29,13 @@ export default function Settings() {
   const [profileMsg, setProfileMsg] = useState('')
   const [profileErr, setProfileErr] = useState('')
 
+  // Branding
+  const [brandColor, setBrandColor] = useState(user?.brand_color ?? '#1B4332')
+  const [logoUrl, setLogoUrl] = useState(user?.logo_url ?? '')
+  const [brandingSaving, setBrandingSaving] = useState(false)
+  const [brandingMsg, setBrandingMsg] = useState('')
+  const [brandingErr, setBrandingErr] = useState('')
+
   // Billing
   const [billingLoading, setBillingLoading] = useState(false)
 
@@ -52,6 +59,8 @@ export default function Settings() {
     if (user) {
       setFullName(user.full_name)
       setBusinessName(user.business_name ?? '')
+      setBrandColor(user.brand_color ?? '#1B4332')
+      setLogoUrl(user.logo_url ?? '')
     }
   }, [user])
 
@@ -69,6 +78,31 @@ export default function Settings() {
       setProfileErr(ae?.response?.data?.error || 'Failed to save profile.')
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 500_000) { setBrandingErr('Logo must be under 500 KB.'); return }
+    setBrandingErr('')
+    const reader = new FileReader()
+    reader.onload = () => setLogoUrl(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const handleBrandingSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBrandingErr(''); setBrandingMsg('')
+    setBrandingSaving(true)
+    try {
+      const res = await authFetch('/api/users/me', { method: 'put', data: { brand_color: brandColor, logo_url: logoUrl || null } })
+      setUser(res.data)
+      setBrandingMsg('Branding saved.')
+    } catch {
+      setBrandingErr('Failed to save branding.')
+    } finally {
+      setBrandingSaving(false)
     }
   }
 
@@ -125,6 +159,48 @@ export default function Settings() {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" disabled={profileSaving} className="btn btn-primary btn-sm">
                 {profileSaving ? 'Saving…' : 'Save Profile'}
+              </button>
+            </div>
+          </form>
+        </SectionCard>
+
+        {/* ── Branding ─────────────────────────────────────────── */}
+        <SectionCard title="Branding">
+          <form onSubmit={handleBrandingSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {brandingErr && <div className="alert alert-error">{brandingErr}</div>}
+            {brandingMsg && <div className="alert alert-success">{brandingMsg}</div>}
+            <div>
+              <label className="field-label">Brand color</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  type="color"
+                  value={brandColor}
+                  onChange={e => setBrandColor(e.target.value)}
+                  style={{ width: 44, height: 36, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', padding: 2 }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{brandColor}</span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 5 }}>Used as the header color on your client portal.</p>
+            </div>
+            <div>
+              <label className="field-label">Logo <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>(optional)</span></label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {logoUrl && (
+                  <img src={logoUrl} alt="Logo preview" style={{ height: 40, maxWidth: 120, objectFit: 'contain', borderRadius: 6, border: '1px solid var(--border)' }} />
+                )}
+                <label style={{ fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  {logoUrl ? 'Change logo' : 'Upload logo'}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={handleLogoUpload} />
+                </label>
+                {logoUrl && (
+                  <button type="button" onClick={() => setLogoUrl('')} style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer' }}>Remove</button>
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 5 }}>PNG, JPG, SVG or WebP · Max 500 KB · Shown in portal header.</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" disabled={brandingSaving} className="btn btn-primary btn-sm">
+                {brandingSaving ? 'Saving…' : 'Save Branding'}
               </button>
             </div>
           </form>

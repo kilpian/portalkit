@@ -35,6 +35,7 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState<number | null>(null)
@@ -57,7 +58,7 @@ export default function Invoices() {
   }, [])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDrawer() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -68,34 +69,55 @@ export default function Invoices() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  const openDrawer = () => {
+  const closeDrawer = () => { setDrawerOpen(false); setEditingInvoice(null) }
+
+  const openNew = () => {
+    setEditingInvoice(null)
     setForm({ client_id: '', invoice_number: genInvoiceNumber(invoices), amount: '', due_date: '', notes: '' })
     setFormError('')
     setDrawerOpen(true)
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openEdit = (inv: Invoice) => {
+    setEditingInvoice(inv)
+    setForm({
+      client_id: inv.client_id?.toString() ?? '',
+      invoice_number: inv.invoice_number ?? '',
+      amount: (inv.amount_cents / 100).toFixed(2),
+      due_date: inv.due_date ?? '',
+      notes: inv.notes ?? '',
+    })
+    setFormError('')
+    setDrawerOpen(true)
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     const amountCents = Math.round(parseFloat(form.amount) * 100)
     if (!form.amount || isNaN(amountCents) || amountCents <= 0) { setFormError('A valid amount is required.'); return }
     setFormError('')
     setSaving(true)
     try {
-      const res = await authFetch('/api/invoices', {
-        method: 'post',
-        data: {
-          client_id: form.client_id || null,
-          invoice_number: form.invoice_number || null,
-          amount_cents: amountCents,
-          due_date: form.due_date || null,
-          notes: form.notes || null,
-        },
-      })
-      setInvoices(prev => [res.data as Invoice, ...prev])
-      setDrawerOpen(false)
-      showToast('Invoice created.')
+      const payload = {
+        client_id: form.client_id || null,
+        invoice_number: form.invoice_number || null,
+        amount_cents: amountCents,
+        due_date: form.due_date || null,
+        notes: form.notes || null,
+      }
+      if (editingInvoice) {
+        const res = await authFetch(`/api/invoices/${editingInvoice.id}`, { method: 'put', data: payload })
+        setInvoices(prev => prev.map(i => i.id === editingInvoice.id ? (res.data as Invoice) : i))
+        closeDrawer()
+        showToast('Invoice updated.')
+      } else {
+        const res = await authFetch('/api/invoices', { method: 'post', data: payload })
+        setInvoices(prev => [res.data as Invoice, ...prev])
+        closeDrawer()
+        showToast('Invoice created.')
+      }
     } catch {
-      setFormError('Failed to create invoice.')
+      setFormError(editingInvoice ? 'Failed to update invoice.' : 'Failed to create invoice.')
     } finally {
       setSaving(false)
     }
@@ -154,7 +176,7 @@ export default function Invoices() {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Invoices</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{invoices.length} invoice{invoices.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={openDrawer} className="btn btn-primary">
+        <button onClick={openNew} className="btn btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Invoice
         </button>
@@ -187,7 +209,7 @@ export default function Invoices() {
           <div style={{ fontSize: 40, marginBottom: 16 }}>💳</div>
           <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>No invoices yet</p>
           <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 24 }}>Create an invoice to send to your clients.</p>
-          <button onClick={openDrawer} className="btn btn-primary">Create First Invoice</button>
+          <button onClick={openNew} className="btn btn-primary">Create First Invoice</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -209,6 +231,15 @@ export default function Invoices() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => openEdit(inv)}
+                    title="Edit invoice"
+                    style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
                   {inv.status !== 'paid' && (
                     <>
                       {inv.status === 'draft' && (
@@ -246,18 +277,18 @@ export default function Invoices() {
       )}
 
       {/* Drawer backdrop */}
-      {drawerOpen && <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 199, backdropFilter: 'blur(2px)' }} />}
+      {drawerOpen && <div onClick={closeDrawer} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 199, backdropFilter: 'blur(2px)' }} />}
 
       {/* Drawer */}
       <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 200, width: 'min(440px, 100vw)', background: 'var(--bg-elevated)', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>New Invoice</h2>
-          <button onClick={() => setDrawerOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{editingInvoice ? 'Edit Invoice' : 'New Invoice'}</h2>
+          <button onClick={closeDrawer} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
-        <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={handleSave} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {formError && <div className="alert alert-error">{formError}</div>}
 
           <div>
@@ -293,9 +324,11 @@ export default function Invoices() {
         </form>
 
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexShrink: 0 }}>
-          <button type="button" onClick={() => setDrawerOpen(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-          <button onClick={handleCreate} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
-            {saving ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />Creating…</> : 'Create Invoice'}
+          <button type="button" onClick={closeDrawer} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
+            {saving
+              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />{editingInvoice ? 'Saving…' : 'Creating…'}</>
+              : editingInvoice ? 'Save Changes' : 'Create Invoice'}
           </button>
         </div>
       </aside>

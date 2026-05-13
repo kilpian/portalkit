@@ -42,6 +42,9 @@ export default function Messages() {
   const [sending, setSending] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [deletingMsg, setDeletingMsg] = useState<number | null>(null)
+  const [openMsgMenu, setOpenMsgMenu] = useState<number | null>(null)
+  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -92,6 +95,18 @@ export default function Messages() {
 
   const getSummary = (clientId: number) => summaries.find(s => s.client_id === clientId)
 
+  const sortedClients = [...filteredClients].sort((a, b) => {
+    const sa = getSummary(a.id)
+    const sb = getSummary(b.id)
+    const ua = sa?.unread_count ?? 0
+    const ub = sb?.unread_count ?? 0
+    if (ua !== ub) return ub - ua
+    const ta = sa?.last_message_at ? new Date(sa.last_message_at).getTime() : 0
+    const tb = sb?.last_message_at ? new Date(sb.last_message_at).getTime() : 0
+    if (ta !== tb) return tb - ta
+    return a.name.localeCompare(b.name)
+  })
+
   const handleSend = async () => {
     if (!selectedId || !content.trim()) return
     setSending(true)
@@ -104,6 +119,19 @@ export default function Messages() {
       // silent — user sees nothing sent
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleDeleteMsg = async (id: number) => {
+    setDeletingMsg(id)
+    setOpenMsgMenu(null)
+    try {
+      await authFetch(`/api/messages/${id}`, { method: 'delete' })
+      setMessages(prev => prev.filter(m => m.id !== id))
+    } catch {
+      // silent
+    } finally {
+      setDeletingMsg(null)
     }
   }
 
@@ -146,12 +174,12 @@ export default function Messages() {
 
         {/* Client list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {filteredClients.length === 0 ? (
+          {sortedClients.length === 0 ? (
             <div style={{ padding: '32px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>{search ? 'No clients match your search.' : 'No clients yet.'}</p>
             </div>
           ) : (
-            filteredClients.map(c => {
+            sortedClients.map(c => {
               const summary = getSummary(c.id)
               const isSelected = c.id === selectedId
               const unread = summary?.unread_count ?? 0
@@ -229,6 +257,11 @@ export default function Messages() {
               </a>
             </div>
 
+            {/* Backdrop to close message menu */}
+            {openMsgMenu !== null && (
+              <div onClick={() => { setOpenMsgMenu(null); setHoveredMsgId(null) }} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+            )}
+
             {/* Message thread */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {loadingMsgs ? (
@@ -254,22 +287,50 @@ export default function Messages() {
                       )
                     }
                     items.push(
-                      <div key={m.id} style={{ display: 'flex', justifyContent: m.sender === 'photographer' ? 'flex-end' : 'flex-start' }}>
-                        <div style={{
-                          maxWidth: '72%',
-                          padding: '10px 14px',
-                          borderRadius: m.sender === 'photographer' ? '14px 4px 14px 14px' : '4px 14px 14px 14px',
-                          background: m.sender === 'photographer' ? 'var(--green)' : 'var(--bg-elevated)',
-                          color: m.sender === 'photographer' ? '#FDFAF5' : 'var(--text-primary)',
-                          border: m.sender === 'photographer' ? 'none' : '1px solid var(--border-subtle)',
-                          boxShadow: 'var(--shadow-sm)',
-                        }}>
-                          <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
-                          <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
-                            {formatFull(m.created_at)}
-                            {m.sender === 'photographer' && m.read_at && <span> · Read</span>}
-                          </p>
-                        </div>
+                      <div
+                        key={m.id}
+                        onMouseEnter={() => { if (m.sender === 'photographer') setHoveredMsgId(m.id) }}
+                        onMouseLeave={() => { if (openMsgMenu !== m.id) setHoveredMsgId(null) }}
+                        style={{ display: 'flex', justifyContent: m.sender === 'photographer' ? 'flex-end' : 'flex-start' }}
+                      >
+                        {m.sender === 'photographer' ? (
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <button
+                                onClick={() => setOpenMsgMenu(openMsgMenu === m.id ? null : m.id)}
+                                style={{
+                                  visibility: (hoveredMsgId === m.id || openMsgMenu === m.id) && deletingMsg !== m.id ? 'visible' : 'hidden',
+                                  background: 'transparent', border: '1px solid var(--border)', borderRadius: 6,
+                                  padding: '2px 7px', cursor: 'pointer', fontSize: 16, color: 'var(--text-dim)', lineHeight: 1,
+                                }}
+                              >⋯</button>
+                              {openMsgMenu === m.id && (
+                                <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: 140, overflow: 'hidden' }}>
+                                  <button
+                                    onClick={() => handleDeleteMsg(m.id)}
+                                    style={{ width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#DC2626', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                    Delete message
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ maxWidth: '72%', padding: '10px 14px', borderRadius: '14px 4px 14px 14px', background: 'var(--green)', color: '#FDFAF5', boxShadow: 'var(--shadow-sm)', opacity: deletingMsg === m.id ? 0.5 : 1 }}>
+                              <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
+                              <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
+                                {formatFull(m.created_at)}{m.read_at && <span> · Read</span>}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ maxWidth: '72%', padding: '10px 14px', borderRadius: '4px 14px 14px 14px', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
+                            <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
+                            <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>{formatFull(m.created_at)}</p>
+                          </div>
+                        )}
                       </div>
                     )
                   })

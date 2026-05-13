@@ -32,6 +32,8 @@ interface PortalData {
   event_type: string | null
   photographer_name: string
   photographer_business: string | null
+  photographer_logo: string | null
+  photographer_brand_color: string | null
   contracts: Contract[]
   invoices: Invoice[]
   files: PortalFile[]
@@ -247,8 +249,13 @@ export function ClientPortalContent({ token }: { token: string }) {
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <header style={{ background: '#1B4332', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: '#FDFAF5' }}>{businessName}</span>
+      <header style={{ background: data.photographer_brand_color || '#1B4332', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {data.photographer_logo && (
+            <img src={data.photographer_logo} alt={businessName} style={{ height: 32, maxWidth: 120, objectFit: 'contain' }} />
+          )}
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: '#FDFAF5' }}>{businessName}</span>
+        </div>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
           Powered by Portal<em style={{ fontStyle: 'normal', color: '#C9A84C' }}>Kit</em>
         </span>

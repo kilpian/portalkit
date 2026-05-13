@@ -102,6 +102,8 @@ export interface PortalUser {
   plan?: string
   trial_ends_at?: string
   stripe_customer_id?: string
+  logo_url?: string | null
+  brand_color?: string | null
   created_at: string
 }
 

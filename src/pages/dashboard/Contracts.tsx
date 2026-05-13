@@ -3,8 +3,9 @@ import { useApi, type Client, type Contract } from '../../lib/api'
 
 const TEMPLATES = [
   {
-    label: 'Wedding Contract',
-    content: `PHOTOGRAPHY SERVICES AGREEMENT
+    label: 'Wedding',
+    type: 'wedding photography services',
+    content: `WEDDING PHOTOGRAPHY SERVICES AGREEMENT
 
 This agreement is entered into between the Photographer and the Client.
 
@@ -21,7 +22,8 @@ CANCELLATION: Cancellations within 30 days of the event forfeit the full retaine
 By signing below, both parties agree to the terms of this agreement.`,
   },
   {
-    label: 'Portrait Session',
+    label: 'Portrait',
+    type: 'portrait photography',
     content: `PORTRAIT PHOTOGRAPHY AGREEMENT
 
 This agreement is between the Photographer and the Client for portrait photography services.
@@ -39,7 +41,8 @@ RESCHEDULING: One reschedule is permitted with 48 hours notice. Cancellations wi
 By signing below, both parties agree to the terms of this agreement.`,
   },
   {
-    label: 'Commercial / Event',
+    label: 'Commercial',
+    type: 'commercial photography',
     content: `COMMERCIAL PHOTOGRAPHY AGREEMENT
 
 This agreement is between the Photographer and the Client for commercial photography services.
@@ -70,9 +73,11 @@ export default function Contracts() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingContract, setEditingContract] = useState<Contract | null>(null)
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [toast, setToast] = useState('')
   const [form, setForm] = useState({ client_id: '', title: '', content: '' })
   const [formError, setFormError] = useState('')
@@ -101,27 +106,45 @@ export default function Contracts() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  const openDrawer = () => {
+  const openNew = () => {
+    setEditingContract(null)
     setForm({ client_id: '', title: '', content: '' })
     setFormError('')
     setDrawerOpen(true)
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openEdit = (c: Contract) => {
+    setEditingContract(c)
+    setForm({ client_id: c.client_id?.toString() ?? '', title: c.title, content: c.content ?? '' })
+    setFormError('')
+    setDrawerOpen(true)
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim()) { setFormError('Contract title is required.'); return }
     setFormError('')
     setSaving(true)
     try {
-      const res = await authFetch('/api/contracts', {
-        method: 'post',
-        data: { client_id: form.client_id || null, title: form.title.trim(), content: form.content },
-      })
-      setContracts(prev => [res.data as Contract, ...prev])
-      setDrawerOpen(false)
-      showToast('Contract created.')
+      if (editingContract) {
+        const res = await authFetch(`/api/contracts/${editingContract.id}`, {
+          method: 'put',
+          data: { title: form.title.trim(), content: form.content, status: editingContract.status },
+        })
+        setContracts(prev => prev.map(c => c.id === editingContract.id ? res.data as Contract : c))
+        setDrawerOpen(false)
+        showToast('Contract saved.')
+      } else {
+        const res = await authFetch('/api/contracts', {
+          method: 'post',
+          data: { client_id: form.client_id || null, title: form.title.trim(), content: form.content },
+        })
+        setContracts(prev => [res.data as Contract, ...prev])
+        setDrawerOpen(false)
+        showToast('Contract created.')
+      }
     } catch {
-      setFormError('Failed to create contract.')
+      setFormError(editingContract ? 'Failed to save contract.' : 'Failed to create contract.')
     } finally {
       setSaving(false)
     }
@@ -131,7 +154,7 @@ export default function Contracts() {
     setSending(id)
     try {
       await authFetch(`/api/contracts/${id}/send`, { method: 'post' })
-      setContracts(prev => prev.map(c => c.id === id ? { ...c, status: 'sent' } : c))
+      setContracts(prev => prev.map(c => c.id === id ? { ...c, status: 'sent' as const } : c))
       showToast('Contract sent to client.')
     } catch {
       showToast('Failed to send contract.')
@@ -157,6 +180,26 @@ export default function Contracts() {
     setForm(f => ({ ...f, title: f.title || t.label, content: t.content }))
   }
 
+  const handleAiGenerate = async () => {
+    setAiLoading(true)
+    try {
+      const selectedTemplate = TEMPLATES.find(t => form.title.toLowerCase().includes(t.label.toLowerCase()))
+      const res = await authFetch('/api/ai/generate-contract', {
+        method: 'post',
+        data: {
+          client_id: form.client_id || null,
+          template_type: selectedTemplate?.type || 'photography services',
+        },
+      })
+      const { content } = res.data as { content: string }
+      if (content) setForm(f => ({ ...f, content }))
+    } catch {
+      showToast('AI generation failed.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
@@ -165,7 +208,7 @@ export default function Contracts() {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Contracts</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{contracts.length} contract{contracts.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={openDrawer} className="btn btn-primary">
+        <button onClick={openNew} className="btn btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Contract
         </button>
@@ -181,7 +224,7 @@ export default function Contracts() {
           <div style={{ fontSize: 40, marginBottom: 16 }}>📝</div>
           <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>No contracts yet</p>
           <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 24 }}>Create a contract and send it to a client for review.</p>
-          <button onClick={openDrawer} className="btn btn-primary">Create First Contract</button>
+          <button onClick={openNew} className="btn btn-primary">Create First Contract</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -208,6 +251,15 @@ export default function Contracts() {
                   </button>
                 )}
                 <button
+                  onClick={() => openEdit(c)}
+                  title="Edit"
+                  style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--green)'; e.currentTarget.style.background = 'var(--green-bg)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'transparent' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button
                   onClick={() => handleDelete(c.id)}
                   disabled={deleting === c.id}
                   style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}
@@ -228,22 +280,26 @@ export default function Contracts() {
       {/* Drawer */}
       <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 200, width: 'min(520px, 100vw)', background: 'var(--bg-elevated)', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>New Contract</h2>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {editingContract ? 'Edit Contract' : 'New Contract'}
+          </h2>
           <button onClick={() => setDrawerOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
-        <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={handleSave} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {formError && <div className="alert alert-error">{formError}</div>}
 
-          <div>
-            <label className="field-label">Client</label>
-            <select className="input" value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
-              <option value="">No client selected</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+          {!editingContract && (
+            <div>
+              <label className="field-label">Client</label>
+              <select className="input" value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
+                <option value="">No client selected</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="field-label">Contract title <span style={{ color: 'var(--color-red)' }}>*</span></label>
@@ -251,20 +307,31 @@ export default function Contracts() {
           </div>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
               <label className="field-label" style={{ margin: 0 }}>Contract content</label>
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {TEMPLATES.map(t => (
                   <button key={t.label} type="button" onClick={() => applyTemplate(t)}
                     style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-dim)', cursor: 'pointer' }}>
-                    {t.label.split(' ')[0]}
+                    {t.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={handleAiGenerate}
+                  disabled={aiLoading}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--gold-border)', background: 'var(--gold-bg)', color: 'var(--gold-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  {aiLoading
+                    ? <><span className="spinner-sm" style={{ borderColor: 'rgba(201,168,76,0.3)', borderTopColor: 'var(--gold)', width: 10, height: 10 }} />Generating…</>
+                    : <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>✨ AI Generate</>
+                  }
+                </button>
               </div>
             </div>
             <textarea
               className="input"
-              placeholder="Write your contract terms here, or use a template above…"
+              placeholder="Write your contract terms here, use a template, or click ✨ AI Generate…"
               rows={14}
               value={form.content}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
@@ -275,8 +342,11 @@ export default function Contracts() {
 
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexShrink: 0 }}>
           <button type="button" onClick={() => setDrawerOpen(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-          <button onClick={handleCreate} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
-            {saving ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />Creating…</> : 'Create Contract'}
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
+            {saving
+              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />{editingContract ? 'Saving…' : 'Creating…'}</>
+              : editingContract ? 'Save Contract' : 'Create Contract'
+            }
           </button>
         </div>
       </aside>
