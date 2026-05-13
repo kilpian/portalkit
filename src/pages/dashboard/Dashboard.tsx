@@ -57,7 +57,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([api.getDashboardStats(), api.getClients()])
-      .then(([s, c]) => { setStats(s); setClients(c.slice(0, 5)) })
+      .then(([s, c]) => { setStats(s); setClients(Array.isArray(c) ? c.slice(0, 5) : []) })
       .catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
