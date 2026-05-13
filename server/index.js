@@ -6,6 +6,8 @@ import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
 import { Resend } from 'resend'
 import { createClerkClient, verifyToken } from '@clerk/backend'
+import Anthropic from '@anthropic-ai/sdk'
+import { Webhook } from 'svix'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -17,6 +19,10 @@ const resend = process.env.RESEND_API_KEY
 
 const clerk = process.env.CLERK_SECRET_KEY
   ? createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+  : null
+
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null
 
 const { Pool } = pkg
@@ -144,6 +150,50 @@ app.post('/api/stripe/webhook',
   }
 )
 
+// Clerk webhook — raw body needed for svix signature verification
+app.post('/api/webhooks/clerk',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const webhookSecret = process.env.CLERK_WEBHOOK_SECRET
+    if (!webhookSecret) {
+      console.warn('CLERK_WEBHOOK_SECRET not set, skipping verification')
+      return res.json({ received: true })
+    }
+    let event
+    try {
+      const wh = new Webhook(webhookSecret)
+      event = wh.verify(req.body, {
+        'svix-id': req.headers['svix-id'],
+        'svix-timestamp': req.headers['svix-timestamp'],
+        'svix-signature': req.headers['svix-signature'],
+      })
+    } catch (err) {
+      console.error('Clerk webhook verify error:', err.message)
+      return res.status(400).json({ error: 'Webhook verification failed' })
+    }
+    try {
+      if (event.type === 'user.created') {
+        const clerkUser = event.data
+        const email = clerkUser.email_addresses?.[0]?.email_address
+        const firstName = clerkUser.first_name || ''
+        if (email && resend) {
+          await resend.emails.send({
+            from: 'hello@getportalkit.com',
+            to: email,
+            subject: 'Welcome to PortalKit — you\'re all set 🎉',
+            html: `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;"><h1 style="font-family:Georgia,serif;color:#1B4332;font-size:28px;margin-bottom:4px;">Portal<span style="color:#C9A84C">Kit</span></h1><h2 style="font-size:22px;color:#1A1208;margin-bottom:12px;">Welcome${firstName ? `, ${firstName}` : ''}!</h2><p style="color:#6B5E4A;margin-bottom:24px;">Your 14-day free trial has started. Here's how to get going:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin-bottom:28px;"><li>Create your first client</li><li>Share their private portal link</li><li>Get paid faster</li></ol><a href="${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">Go to Dashboard →</a><p style="margin-top:32px;color:#9C8E7A;font-size:13px;">Questions? Reply to this email — we read every one.</p></div>`,
+          })
+          console.log('Welcome email sent to:', email)
+        }
+      }
+      res.json({ received: true })
+    } catch (err) {
+      console.error('Clerk webhook handler error:', err)
+      res.status(500).json({ error: 'Webhook handler failed' })
+    }
+  }
+)
+
 app.use(express.json())
 
 app.use(helmet({
@@ -242,6 +292,16 @@ async function initDb() {
           mime_type TEXT,
           size_bytes INTEGER,
           storage_url TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS messages (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          sender TEXT NOT NULL CHECK (sender IN ('photographer', 'client')),
+          content TEXT NOT NULL,
+          read_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `)
@@ -697,7 +757,179 @@ app.get('/api/portals/:token', async (req, res) => {
   }
 })
 
-// ── AI CHAT ───────────────────────────────────────────────────
+// ── MESSAGES ─────────────────────────────────────────────────
+
+// Must be before /api/messages?client_id=X to avoid route conflicts
+app.get('/api/messages/unread-count', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM messages m
+       JOIN clients c ON c.id = m.client_id
+       WHERE c.user_id=$1 AND m.sender='client' AND m.read_at IS NULL`,
+      [req.userId]
+    )
+    res.json({ count: parseInt(result.rows[0].count, 10) })
+  } catch (err) {
+    console.error('Unread count error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/messages/summaries', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         c.id as client_id,
+         (SELECT content FROM messages WHERE client_id=c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+         (SELECT sender FROM messages WHERE client_id=c.id ORDER BY created_at DESC LIMIT 1) as last_sender,
+         (SELECT created_at FROM messages WHERE client_id=c.id ORDER BY created_at DESC LIMIT 1) as last_message_at,
+         (SELECT COUNT(*) FROM messages WHERE client_id=c.id AND sender='client' AND read_at IS NULL)::int as unread_count
+       FROM clients c WHERE c.user_id=$1`,
+      [req.userId]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Summaries error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/messages', requireAuth, async (req, res) => {
+  const { client_id } = req.query
+  if (!client_id) return res.status(400).json({ error: 'client_id required' })
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    await pool.query(
+      `UPDATE messages SET read_at=NOW() WHERE client_id=$1 AND sender='client' AND read_at IS NULL`,
+      [client_id]
+    )
+    const result = await pool.query(
+      'SELECT * FROM messages WHERE client_id=$1 ORDER BY created_at ASC',
+      [client_id]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get messages error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/messages', requireAuth, async (req, res) => {
+  const { client_id, content } = req.body
+  if (!client_id || !content?.trim()) return res.status(400).json({ error: 'client_id and content required' })
+  try {
+    const clientResult = await pool.query(
+      `SELECT c.*, u.business_name, u.full_name as photographer_name
+       FROM clients c JOIN users u ON u.id=c.user_id
+       WHERE c.id=$1 AND c.user_id=$2`,
+      [client_id, req.userId]
+    )
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const client = clientResult.rows[0]
+    const msgResult = await pool.query(
+      `INSERT INTO messages (client_id, user_id, sender, content) VALUES ($1,$2,'photographer',$3) RETURNING *`,
+      [client_id, req.userId, sanitize(content)]
+    )
+    if (client.email && resend) {
+      const senderName = client.business_name || client.photographer_name || 'Your photographer'
+      const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+      resend.emails.send({
+        from: 'hello@getportalkit.com',
+        to: client.email,
+        subject: `New message from ${senderName}`,
+        html: `<p>Hi ${client.name},</p><p>You have a new message from ${senderName}.</p><p><a href="${portalUrl}">View your portal to reply →</a></p>`,
+      }).catch(err => console.error('Email error:', err))
+    }
+    res.status(201).json(msgResult.rows[0])
+  } catch (err) {
+    console.error('Send message error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/portals/:token/messages', async (req, res) => {
+  try {
+    const clientResult = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const result = await pool.query(
+      'SELECT id, sender, content, read_at, created_at FROM messages WHERE client_id=$1 ORDER BY created_at ASC',
+      [clientResult.rows[0].id]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get portal messages error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/portals/:token/messages', async (req, res) => {
+  const { content, sender_name } = req.body
+  if (!content?.trim()) return res.status(400).json({ error: 'content required' })
+  try {
+    const clientResult = await pool.query(
+      `SELECT c.*, u.email as photographer_email, u.business_name, u.full_name as photographer_name
+       FROM clients c JOIN users u ON u.id=c.user_id WHERE c.portal_token=$1`,
+      [req.params.token]
+    )
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client = clientResult.rows[0]
+    const msgResult = await pool.query(
+      `INSERT INTO messages (client_id, user_id, sender, content) VALUES ($1,$2,'client',$3) RETURNING *`,
+      [client.id, client.user_id, sanitize(content)]
+    )
+    if (client.photographer_email && resend) {
+      const displaySender = sender_name ? sanitize(sender_name) : client.name
+      const dashUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/messages`
+      resend.emails.send({
+        from: 'hello@getportalkit.com',
+        to: client.photographer_email,
+        subject: `${displaySender} sent you a message`,
+        html: `<p><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding-left:12px;color:#555">${sanitize(content)}</blockquote><p><a href="${dashUrl}">Reply in dashboard →</a></p>`,
+      }).catch(err => console.error('Email error:', err))
+    }
+    res.status(201).json(msgResult.rows[0])
+  } catch (err) {
+    console.error('Client message error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── AI ────────────────────────────────────────────────────────
+
+const aiRateLimit = new Map()
+
+app.post('/api/ai/suggest-message', requireAuth, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' })
+  const now = Date.now()
+  const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
+  if (timestamps.length >= 10) return res.status(429).json({ error: 'Rate limit: 10 AI suggestions per hour' })
+  aiRateLimit.set(req.userId, [...timestamps, now])
+  const { client_id, context } = req.body
+  try {
+    let clientContext = context || ''
+    if (client_id) {
+      const r = await pool.query('SELECT name, event_type, event_date, notes FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+      if (r.rows.length) {
+        const c = r.rows[0]
+        clientContext = `Client: ${c.name}. Event: ${c.event_type || 'unspecified'}. Date: ${c.event_date || 'TBD'}. Notes: ${c.notes || 'none'}. Extra context: ${context || 'none'}`
+      }
+    }
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: 'You are a helpful assistant for a professional photographer. Write a professional, warm, concise message to send to a client. Keep it under 100 words. No subject line.',
+      messages: [{ role: 'user', content: `Write a message for this client: ${clientContext}` }],
+    })
+    const suggestion = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    res.json({ suggestion })
+  } catch (err) {
+    console.error('AI suggest error:', err)
+    res.status(500).json({ error: 'AI suggestion failed' })
+  }
+})
+
+// ── AI CHAT (legacy stub) ─────────────────────────────────────
 
 app.post('/api/chat', requireAuth, async (req, res) => {
   res.status(501).json({ error: 'AI chat not yet implemented' })

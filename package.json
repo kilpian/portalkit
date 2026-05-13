@@ -12,6 +12,7 @@
     "start": "node --env-file=.env server/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@clerk/backend": "^3.4.7",
     "@clerk/clerk-react": "^5.61.6",
     "axios": "^1.16.0",
@@ -28,7 +29,8 @@
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.0",
     "resend": "^6.12.3",
-    "stripe": "^22.1.1"
+    "stripe": "^22.1.1",
+    "svix": "^1.93.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

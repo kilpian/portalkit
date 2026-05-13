@@ -36,6 +36,24 @@ export interface CreateClientPayload {
   notes?: string
 }
 
+export interface Message {
+  id: number
+  client_id: number
+  user_id: number
+  sender: 'photographer' | 'client'
+  content: string
+  read_at: string | null
+  created_at: string
+}
+
+export interface MessageSummary {
+  client_id: number
+  last_message: string | null
+  last_sender: 'photographer' | 'client' | null
+  last_message_at: string | null
+  unread_count: number
+}
+
 export interface PortalUser {
   id: number
   clerk_id: string

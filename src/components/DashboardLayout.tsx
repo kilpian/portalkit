@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../context/AuthContext'
+import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'
 
 // FIX 2: reordered — Dashboard, Messages, Clients, Contracts, Invoices, Files
@@ -76,8 +77,8 @@ const SETTINGS_ICON = (
 )
 
 // Defined OUTSIDE DashboardLayout so its reference is stable across renders
-function NavItem({ to, end, label, icon, collapsed, onClick }: {
-  to: string; end?: boolean; label: string; icon: React.ReactNode; collapsed?: boolean; onClick?: () => void
+function NavItem({ to, end, label, icon, collapsed, onClick, badge }: {
+  to: string; end?: boolean; label: string; icon: React.ReactNode; collapsed?: boolean; onClick?: () => void; badge?: number
 }) {
   return (
     <NavLink
@@ -116,7 +117,14 @@ function NavItem({ to, end, label, icon, collapsed, onClick }: {
         }
       }}
     >
-      <span style={{ flexShrink: 0, display: 'flex' }}>{icon}</span>
+      <span style={{ flexShrink: 0, display: 'flex', position: 'relative' }}>
+        {icon}
+        {badge && badge > 0 ? (
+          <span style={{ position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, borderRadius: 8, background: '#DC2626', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
+      </span>
       {!collapsed && label}
     </NavLink>
   )
@@ -143,15 +151,30 @@ export default function DashboardLayout() {
   // FIX 3: use Clerk's useUser() directly for reliable, immediate user data
   const { user: clerkUser } = useUser()
   const { user: portalUser, signOut } = usePortalAuth()
+  const { authFetch } = useApi()
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   // FIX 1: collapsed state with localStorage persistence
   const [collapsed, setCollapsed] = useState(() =>
     localStorage.getItem('pk_sidebar_collapsed') === 'true'
   )
 
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
+  // Fetch unread count on mount and every 60s
+  useEffect(() => {
+    const fetchUnread = () => {
+      authFetch('/api/messages/unread-count', { method: 'get' })
+        .then(res => setUnreadCount((res.data as { count: number }).count ?? 0))
+        .catch(() => {})
+    }
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 60_000)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // FIX 1: stable toggle callback
   const toggleCollapsed = useCallback(() => {
@@ -208,7 +231,13 @@ export default function DashboardLayout() {
       {/* Main nav */}
       <nav style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
         {NAV.map(item => (
-          <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={() => setMobileOpen(false)} />
+          <NavItem
+            key={item.to}
+            {...item}
+            collapsed={isCollapsed}
+            onClick={() => setMobileOpen(false)}
+            badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
+          />
         ))}
       </nav>
 
