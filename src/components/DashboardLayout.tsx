@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../context/AuthContext'
 import { trialDaysLeft } from '../lib/plan'
 
+// FIX 2: reordered — Dashboard, Messages, Clients, Contracts, Invoices, Files
 const NAV = [
   {
     to: '/dashboard', end: true,
@@ -11,6 +13,15 @@ const NAV = [
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
         <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/dashboard/messages',
+    label: 'Messages',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
     ),
   },
@@ -55,15 +66,6 @@ const NAV = [
       </svg>
     ),
   },
-  {
-    to: '/dashboard/messages',
-    label: 'Messages',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
 ]
 
 const SETTINGS_ICON = (
@@ -73,6 +75,7 @@ const SETTINGS_ICON = (
   </svg>
 )
 
+// Defined OUTSIDE DashboardLayout so its reference is stable across renders
 function NavItem({ to, end, label, icon, collapsed, onClick }: {
   to: string; end?: boolean; label: string; icon: React.ReactNode; collapsed?: boolean; onClick?: () => void
 }) {
@@ -119,17 +122,38 @@ function NavItem({ to, end, label, icon, collapsed, onClick }: {
   )
 }
 
+// Defined OUTSIDE DashboardLayout — stable reference, no remount issues
+function UserAvatar({ imageUrl, initials, size = 32 }: { imageUrl?: string; initials: string; size?: number }) {
+  if (imageUrl) {
+    return <img src={imageUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: '#C9A84C', color: '#1B4332',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.38), fontWeight: 700,
+    }}>
+      {initials}
+    </div>
+  )
+}
+
 export default function DashboardLayout() {
-  const { user, signOut } = usePortalAuth()
+  // FIX 3: use Clerk's useUser() directly for reliable, immediate user data
+  const { user: clerkUser } = useUser()
+  const { user: portalUser, signOut } = usePortalAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // FIX 1: collapsed state with localStorage persistence
   const [collapsed, setCollapsed] = useState(() =>
     localStorage.getItem('pk_sidebar_collapsed') === 'true'
   )
 
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
+  // FIX 1: stable toggle callback
   const toggleCollapsed = useCallback(() => {
     setCollapsed(v => {
       const next = !v
@@ -138,188 +162,187 @@ export default function DashboardLayout() {
     })
   }, [])
 
-  const days = trialDaysLeft(user)
-  const isPaid = user?.plan === 'active'
-  const initials = user?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+  const days = trialDaysLeft(portalUser)
+  const isPaid = portalUser?.plan === 'active'
+
+  // FIX 3: derive display info directly from Clerk
+  const displayName = clerkUser?.fullName || clerkUser?.firstName || clerkUser?.emailAddresses?.[0]?.emailAddress || 'User'
+  const displayEmail = clerkUser?.emailAddresses?.[0]?.emailAddress || portalUser?.email || ''
+  const avatarUrl = clerkUser?.imageUrl
+  const rawInitials = ((clerkUser?.firstName?.[0] ?? '') + (clerkUser?.lastName?.[0] ?? '')).toUpperCase()
+  const initials = rawInitials || displayEmail[0]?.toUpperCase() || '?'
 
   const handleSignOut = () => {
     signOut()
     navigate('/signin')
   }
 
-  const SidebarInner = ({ isMobile = false }: { isMobile?: boolean }) => {
-    const isCollapsed = collapsed && !isMobile
-    return (
-      <>
-        {/* Logo */}
-        <div style={{
-          padding: isCollapsed ? '18px 0' : '18px 20px',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: isCollapsed ? 'center' : 'flex-start',
-        }}>
-          {isCollapsed ? (
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', fontWeight: 800, color: '#C9A84C', letterSpacing: '-0.02em' }}>PK</span>
-          ) : (
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', fontWeight: 800, color: '#FDFAF5', letterSpacing: '-0.03em' }}>
-              Portal<em style={{ fontStyle: 'normal', color: '#C9A84C' }}>Kit</em>
-            </span>
-          )}
-        </div>
-
-        {/* Gold accent line */}
-        {!isCollapsed && (
-          <div style={{ height: 1, background: 'linear-gradient(90deg, rgba(201,168,76,0.45) 0%, transparent 80%)', flexShrink: 0 }} />
+  // FIX 1: renderSidebar is a plain function returning JSX, NOT a React component.
+  // This avoids the "component defined inside render" bug where React sees a new
+  // component type on every re-render and unmounts/remounts the entire subtree.
+  const renderSidebar = (isCollapsed: boolean, isMobile: boolean) => (
+    <>
+      {/* Logo */}
+      <div style={{
+        padding: isCollapsed ? '18px 0' : '18px 20px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: isCollapsed ? 'center' : 'flex-start',
+      }}>
+        {isCollapsed ? (
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', fontWeight: 800, color: '#C9A84C', letterSpacing: '-0.02em' }}>PK</span>
+        ) : (
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', fontWeight: 800, color: '#FDFAF5', letterSpacing: '-0.03em' }}>
+            Portal<em style={{ fontStyle: 'normal', color: '#C9A84C' }}>Kit</em>
+          </span>
         )}
+      </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
-          {NAV.map(item => (
-            <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={() => setMobileOpen(false)} />
-          ))}
-        </nav>
+      {/* Gold accent line */}
+      {!isCollapsed && (
+        <div style={{ height: 1, background: 'linear-gradient(90deg, rgba(201,168,76,0.45) 0%, transparent 80%)', flexShrink: 0 }} />
+      )}
 
-        {/* Settings */}
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: isCollapsed ? '8px 8px 0' : '10px 10px 0', flexShrink: 0 }}>
-          <NavItem
-            to="/dashboard/settings"
-            label="Settings"
-            collapsed={isCollapsed}
-            onClick={() => setMobileOpen(false)}
-            icon={SETTINGS_ICON}
-          />
+      {/* Main nav */}
+      <nav style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
+        {NAV.map(item => (
+          <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={() => setMobileOpen(false)} />
+        ))}
+      </nav>
+
+      {/* Settings — pinned before collapse button */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: isCollapsed ? '8px 8px 0' : '10px 10px 0', flexShrink: 0 }}>
+        <NavItem
+          to="/dashboard/settings"
+          label="Settings"
+          collapsed={isCollapsed}
+          onClick={() => setMobileOpen(false)}
+          icon={SETTINGS_ICON}
+        />
+      </div>
+
+      {/* FIX 1: collapse toggle — desktop only, clearly visible */}
+      {!isMobile && (
+        <div style={{ padding: '6px 10px', flexShrink: 0 }}>
+          <button
+            onClick={toggleCollapsed}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start',
+              gap: 8,
+              width: '100%', padding: '8px 10px', borderRadius: 7,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              cursor: 'pointer',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 12, fontWeight: 500,
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              {isCollapsed
+                ? <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>
+                : <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>
+              }
+            </svg>
+            {!isCollapsed && 'Collapse'}
+          </button>
         </div>
+      )}
 
-        {/* Collapse toggle — desktop only */}
-        {!isMobile && (
-          <div style={{ padding: '4px 8px', flexShrink: 0 }}>
+      {/* User info */}
+      <div style={{
+        padding: isCollapsed ? '10px 8px 14px' : '12px 14px 16px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        flexShrink: 0,
+      }}>
+        {isCollapsed ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <div title={displayName}>
+              <UserAvatar imageUrl={avatarUrl} initials={initials} size={32} />
+            </div>
             <button
-              onClick={toggleCollapsed}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={handleSignOut}
+              title="Sign out"
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '100%', padding: '6px', borderRadius: 6,
                 background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'rgba(255,255,255,0.25)',
-                transition: 'color 0.12s, background 0.12s',
+                color: 'rgba(255,255,255,0.3)', display: 'flex', padding: 5, borderRadius: 6,
+                transition: 'color 0.12s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; e.currentTarget.style.background = 'transparent' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FCA5A5' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)' }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                {collapsed
-                  ? <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>
-                  : <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>
-                }
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
             </button>
           </div>
-        )}
-
-        {/* User info */}
-        <div style={{
-          padding: isCollapsed ? '10px 8px 14px' : '12px 14px 16px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          flexShrink: 0,
-        }}>
-          {isCollapsed ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <div title={user?.full_name || 'User'} style={{
-                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                background: '#C9A84C', color: '#1B4332',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 700, cursor: 'default',
-              }}>
-                {initials}
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <UserAvatar imageUrl={avatarUrl} initials={initials} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FDFAF5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 1 }}>
+                  {displayName}
+                </p>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayEmail}
+                </p>
               </div>
-              <button
-                onClick={handleSignOut}
-                title="Sign out"
-                style={{
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: 'rgba(255,255,255,0.3)', display: 'flex', padding: 5, borderRadius: 6,
-                  transition: 'color 0.12s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = '#FCA5A5'}
-                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16 17 21 12 16 7"/>
-                  <line x1="21" y1="12" x2="9" y2="12"/>
-                </svg>
-              </button>
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                  background: '#C9A84C', color: '#1B4332',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700,
-                }}>
-                  {initials}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#FDFAF5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 1 }}>
-                    {user?.full_name || 'User'}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.email}
-                  </p>
-                </div>
-              </div>
 
-              {/* Plan badge */}
-              <div style={{ marginBottom: 10 }}>
-                {isPaid ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: 'rgba(52,211,153,0.14)', color: '#34D399', border: '1px solid rgba(52,211,153,0.28)' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', flexShrink: 0 }} />
-                    Active
-                  </span>
-                ) : (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: 'rgba(201,168,76,0.14)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.28)' }}>
-                    <span className="pk-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#C9A84C', flexShrink: 0 }} />
-                    {days > 0 ? `${days}d trial` : 'Expired'}
-                  </span>
-                )}
-              </div>
+            {/* Plan badge */}
+            <div style={{ marginBottom: 10 }}>
+              {isPaid ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: 'rgba(52,211,153,0.14)', color: '#34D399', border: '1px solid rgba(52,211,153,0.28)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', flexShrink: 0 }} />
+                  Active
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: 'rgba(201,168,76,0.14)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.28)' }}>
+                  <span className="pk-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#C9A84C', flexShrink: 0 }} />
+                  {days > 0 ? `${days}d trial` : 'Expired'}
+                </span>
+              )}
+            </div>
 
-              {/* Sign out */}
-              <button
-                onClick={handleSignOut}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  width: '100%', padding: '7px 10px', borderRadius: 7,
-                  fontSize: 13, fontWeight: 500,
-                  color: 'rgba(255,255,255,0.45)',
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  transition: 'background 0.12s, color 0.12s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.color = '#FCA5A5' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16 17 21 12 16 7"/>
-                  <line x1="21" y1="12" x2="9" y2="12"/>
-                </svg>
-                Sign Out
-              </button>
-            </>
-          )}
-        </div>
-      </>
-    )
-  }
+            {/* Sign out */}
+            <button
+              onClick={handleSignOut}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '7px 10px', borderRadius: 7,
+                fontSize: 13, fontWeight: 500,
+                color: 'rgba(255,255,255,0.45)',
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                transition: 'background 0.12s, color 0.12s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.color = '#FCA5A5' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Sign Out
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  )
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}>
 
-      {/* ── Mobile overlay ───────────────────────────────────── */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
@@ -328,24 +351,24 @@ export default function DashboardLayout() {
         />
       )}
 
-      {/* ── Desktop sidebar ──────────────────────────────────── */}
+      {/* Desktop sidebar — FIX 1: 64px collapsed, 240px expanded, smooth transition */}
       <aside
         style={{
           display: 'flex',
           flexDirection: 'column',
-          width: collapsed ? 56 : 240,
+          width: collapsed ? 64 : 240,
           flexShrink: 0,
           background: '#1B4332',
           height: '100vh',
           overflow: 'hidden',
-          transition: 'width 0.2s ease',
+          transition: 'width 0.25s ease',
         }}
         className="sidebar-desktop"
       >
-        <SidebarInner />
+        {renderSidebar(collapsed, false)}
       </aside>
 
-      {/* ── Mobile sidebar (fixed drawer) ────────────────────── */}
+      {/* Mobile sidebar (fixed drawer, always expanded) */}
       <aside
         style={{
           display: 'none',
@@ -363,10 +386,10 @@ export default function DashboardLayout() {
         }}
         className="sidebar-mobile"
       >
-        <SidebarInner isMobile />
+        {renderSidebar(false, true)}
       </aside>
 
-      {/* ── Main area ────────────────────────────────────────── */}
+      {/* Main area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {/* Mobile top bar */}
         <div

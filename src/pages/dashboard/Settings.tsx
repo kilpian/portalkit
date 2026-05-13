@@ -72,16 +72,6 @@ export default function Settings() {
     }
   }
 
-  const handleUpgrade = async () => {
-    setBillingLoading(true)
-    try {
-      const { url } = await api.createCheckout()
-      window.location.href = url
-    } catch {
-      setBillingLoading(false)
-    }
-  }
-
   const handleManageBilling = async () => {
     setBillingLoading(true)
     try {
@@ -150,29 +140,49 @@ export default function Settings() {
                     Active
                   </span>
                 ) : (
-                  <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: 'var(--gold-bg)', color: 'var(--gold-dim)', border: '1px solid var(--gold-border)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: 'rgba(201,168,76,0.12)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.3)' }}>
                     Trial
                   </span>
                 )}
               </div>
               {isActive ? (
-                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>You're on the PortalKit plan — unlimited clients and portals.</p>
+                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>You're on the PortalKit All-In plan — unlimited clients and portals.</p>
               ) : (
                 <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-                  {days > 0 ? `${days} day${days === 1 ? '' : 's'} left on your trial.` : 'Your trial has expired.'}
+                  {days > 0
+                    ? <><strong style={{ color: 'var(--text-primary)' }}>{days} day{days === 1 ? '' : 's'}</strong> left on your trial.</>
+                    : 'Your trial has expired.'
+                  }
                   {' '}Upgrade to keep full access.
                 </p>
               )}
             </div>
-            <div>
+            <div style={{ flexShrink: 0 }}>
               {isActive ? (
                 <button onClick={handleManageBilling} disabled={billingLoading} className="btn btn-ghost btn-sm">
-                  {billingLoading ? 'Loading…' : 'Manage Billing'}
+                  {billingLoading ? 'Loading…' : 'Manage Subscription'}
                 </button>
               ) : (
-                <button onClick={handleUpgrade} disabled={billingLoading} className="btn btn-primary btn-sm">
-                  {billingLoading ? 'Loading…' : 'Upgrade Now →'}
-                </button>
+                <a
+                  href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                    color: '#1B4332', background: '#C9A84C',
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                    boxShadow: '0 1px 4px rgba(201,168,76,0.35)',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.88' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
+                >
+                  Upgrade to All-In — $39/mo
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
+                  </svg>
+                </a>
               )}
             </div>
           </div>

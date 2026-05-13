@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
@@ -47,6 +48,7 @@ function CopyToken({ token }: { token: string }) {
 }
 
 export default function Dashboard() {
+  const { user: clerkUser } = useUser()
   const { user } = usePortalAuth()
   const api = useApi()
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -54,6 +56,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   const days = trialDaysLeft(user)
+
+  // FIX 5: use Clerk data directly so name appears immediately
+  const firstName = clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0] || ''
 
   useEffect(() => {
     Promise.all([api.getDashboardStats(), api.getClients()])
@@ -74,7 +79,7 @@ export default function Dashboard() {
     <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 4 }}>
-          {greeting()}{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}.
+          {greeting()}{firstName ? `, ${firstName}` : ''}.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
           Here's what's happening with your portals today.
