@@ -5,7 +5,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
 import { Resend } from 'resend'
-import { createClerkClient } from '@clerk/backend'
+import { createClerkClient, verifyToken } from '@clerk/backend'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -273,40 +273,49 @@ async function initDb() {
 
 async function requireAuth(req, res, next) {
   console.log('🔐 requireAuth called for:', req.method, req.path)
-  console.log('🔑 Authorization header:', req.headers.authorization ? 'present' : 'MISSING')
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  if (!token) {
-    console.log('❌ No token provided')
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-  console.log('✅ Token found, verifying with Clerk...')
+  const authHeader = req.headers.authorization
+  console.log('🔑 Authorization header:', authHeader ? 'present' : 'MISSING')
+
   try {
-    if (!clerk) return res.status(503).json({ error: 'Auth not configured' })
-    const payload = await clerk.verifyToken(token)
-    const clerkUserId = payload.sub
-    console.log('✅ Token verified, clerkUserId:', clerkUserId)
+    const token = authHeader?.replace('Bearer ', '')
+    if (!token) {
+      console.log('❌ No token provided')
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
 
-    const existing = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [clerkUserId])
+    console.log('✅ Token found, verifying with Clerk...')
 
-    if (existing.rows.length === 0) {
-      console.log('👤 New user — provisioning in DB...')
-      const clerkUser = await clerk.users.getUser(clerkUserId)
-      const email = clerkUser.emailAddresses[0]?.emailAddress || ''
-      const emailName = email.split('@')[0] || 'there'
-      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || emailName
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+    })
+
+    console.log('✅ Token verified, clerk user ID:', payload.sub)
+
+    const result = await pool.query(
+      'SELECT * FROM users WHERE clerk_id = $1',
+      [payload.sub]
+    )
+
+    if (result.rows.length === 0) {
+      console.log('🆕 New user, creating in DB...')
+      const clerkUser = await clerk.users.getUser(payload.sub)
+      const email = clerkUser.emailAddresses[0]?.emailAddress
+      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim()
+        || email?.split('@')[0]
+        || 'User'
 
       const newUser = await pool.query(
         `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
          VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days')
-         ON CONFLICT (email) DO UPDATE SET clerk_id = EXCLUDED.clerk_id
+         ON CONFLICT (email) DO UPDATE SET clerk_id = $1
          RETURNING *`,
-        [clerkUserId, email, fullName]
+        [payload.sub, email, fullName]
       )
       req.user = newUser.rows[0]
-      console.log('✅ User provisioned, id:', req.user.id)
+      console.log('✅ New user created:', req.user.id)
     } else {
-      req.user = existing.rows[0]
-      console.log('✅ User found, id:', req.user.id)
+      req.user = result.rows[0]
+      console.log('✅ Existing user found:', req.user.id)
     }
 
     req.userId = String(req.user.id)
