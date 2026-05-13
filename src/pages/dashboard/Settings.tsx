@@ -19,7 +19,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 export default function Settings() {
   const { user, setUser, signOut } = usePortalAuth()
   const { openUserProfile } = useClerk()
-  const api = useApi()
+  const { authFetch } = useApi()
   const [searchParams] = useSearchParams()
 
   // Profile
@@ -61,8 +61,8 @@ export default function Settings() {
     if (!fullName.trim()) { setProfileErr('Name is required.'); return }
     setProfileSaving(true)
     try {
-      const updated = await api.updateProfile({ full_name: fullName.trim(), business_name: businessName.trim() || undefined })
-      setUser(updated)
+      const res = await authFetch('/api/users/me', { method: 'put', data: { full_name: fullName.trim(), business_name: businessName.trim() || undefined } })
+      setUser(res.data)
       setProfileMsg('Profile saved.')
     } catch (err: unknown) {
       const ae = err as { response?: { data?: { error?: string } } }
@@ -75,8 +75,8 @@ export default function Settings() {
   const handleManageBilling = async () => {
     setBillingLoading(true)
     try {
-      const { url } = await api.createBillingPortal()
-      window.location.href = url
+      const res = await authFetch('/api/stripe/create-portal', { method: 'post' })
+      window.location.href = res.data.url
     } catch {
       setBillingLoading(false)
     }
@@ -86,7 +86,7 @@ export default function Settings() {
     if (deleteConfirmText !== 'DELETE') { setDeleteErr('Type DELETE to confirm.'); return }
     setDeleteLoading(true)
     try {
-      await api.deleteAccount()
+      await authFetch('/api/users/me', { method: 'delete' })
       signOut()
     } catch {
       setDeleteErr('Failed to delete account. Please try again.')

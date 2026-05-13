@@ -33,9 +33,17 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',
-    process.env.FRONTEND_URL || 'https://getportalkit.com',
-  ],
+    'http://localhost:5176',
+    'https://getportalkit.com',
+    'https://www.getportalkit.com',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }))
+
+app.options('*', cors())
 
 // Webhook must be before express.json() to get raw body
 app.post('/api/stripe/webhook',

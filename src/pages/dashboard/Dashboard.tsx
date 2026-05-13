@@ -50,19 +50,24 @@ function CopyToken({ token }: { token: string }) {
 export default function Dashboard() {
   const { user: clerkUser } = useUser()
   const { user } = usePortalAuth()
-  const api = useApi()
+  const { authFetch } = useApi()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
 
   const days = trialDaysLeft(user)
 
-  // FIX 5: use Clerk data directly so name appears immediately
   const firstName = clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0] || ''
 
   useEffect(() => {
-    Promise.all([api.getDashboardStats(), api.getClients()])
-      .then(([s, c]) => { setStats(s); setClients(Array.isArray(c) ? c.slice(0, 5) : []) })
+    Promise.all([
+      authFetch('/api/dashboard/stats', { method: 'get' }),
+      authFetch('/api/clients', { method: 'get' }),
+    ])
+      .then(([sRes, cRes]) => {
+        setStats(sRes.data)
+        setClients(Array.isArray(cRes.data) ? cRes.data.slice(0, 5) : [])
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps

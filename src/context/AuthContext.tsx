@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react'
-import type { PortalUser } from '../lib/api'
+import API_BASE, { type PortalUser } from '../lib/api'
 
 interface PortalAuthContextType {
   user: PortalUser | null
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     getToken()
       .then(token =>
-        fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       )
       .then(r => r.json())
       .then((data: PortalUser) => {

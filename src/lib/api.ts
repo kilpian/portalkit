@@ -1,6 +1,10 @@
 import axios from 'axios'
 import { useAuth } from '@clerk/clerk-react'
-import { useCallback, useMemo } from 'react'
+
+export const API_BASE = 'http://localhost:3001'
+
+// ── Types ─────────────────────────────────────────────────────
+// These are re-exported here so dashboard pages only need one import.
 
 export interface DashboardStats {
   total_clients: number
@@ -44,47 +48,26 @@ export interface PortalUser {
   created_at: string
 }
 
+// ── Hook ──────────────────────────────────────────────────────
+
 export function useApi() {
   const { getToken } = useAuth()
 
-  const req = useCallback(async <T>(method: string, url: string, data?: unknown): Promise<T> => {
+  const authFetch = async (url: string, options: Record<string, unknown> = {}) => {
     const token = await getToken()
-    const res = await axios<T>({
-      method,
-      url: `/api${url}`,
-      data,
-      headers: { Authorization: `Bearer ${token}` },
+    return axios({
+      ...options,
+      url: `${API_BASE}${url}`,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> | undefined),
+      },
+      withCredentials: false,
     })
-    return res.data
-  }, [getToken])
+  }
 
-  return useMemo(() => ({
-    // Dashboard
-    getDashboardStats: (): Promise<DashboardStats> =>
-      req('get', '/dashboard/stats'),
-
-    // Clients
-    getClients: (): Promise<Client[]> =>
-      req('get', '/clients'),
-    createClient: (p: CreateClientPayload): Promise<Client> =>
-      req('post', '/clients', p),
-    getClient: (id: number): Promise<Client> =>
-      req('get', `/clients/${id}`),
-    updateClient: (id: number, p: Partial<CreateClientPayload>): Promise<Client> =>
-      req('put', `/clients/${id}`, p),
-    deleteClient: (id: number): Promise<{ success: boolean }> =>
-      req('delete', `/clients/${id}`),
-
-    // Profile
-    updateProfile: (p: { full_name: string; business_name?: string }): Promise<PortalUser> =>
-      req('put', '/users/me', p),
-    deleteAccount: (): Promise<{ success: boolean }> =>
-      req('delete', '/users/me'),
-
-    // Stripe
-    createCheckout: (): Promise<{ url: string }> =>
-      req('post', '/stripe/create-checkout'),
-    createBillingPortal: (): Promise<{ url: string }> =>
-      req('post', '/stripe/create-portal'),
-  }), [req])
+  return { authFetch }
 }
+
+export default API_BASE

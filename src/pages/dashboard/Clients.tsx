@@ -32,7 +32,7 @@ function CopyLink({ token }: { token: string }) {
 const BLANK: CreateClientPayload = { name: '', email: '', phone: '', event_type: '', event_date: '', notes: '' }
 
 export default function Clients() {
-  const api = useApi()
+  const { authFetch } = useApi()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -44,8 +44,8 @@ export default function Clients() {
   const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    api.getClients()
-      .then(data => setClients(Array.isArray(data) ? data : []))
+    authFetch('/api/clients', { method: 'get' })
+      .then(res => setClients(Array.isArray(res.data) ? res.data : []))
       .catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,7 +74,8 @@ export default function Clients() {
         event_date: form.event_date || undefined,
         notes: form.notes?.trim() || undefined,
       }
-      const created = await api.createClient(payload)
+      const res = await authFetch('/api/clients', { method: 'post', data: payload })
+      const created: Client = res.data
       setClients(prev => [created, ...prev])
       closeDrawer()
       showToast(`${created.name}'s portal created!`)
@@ -88,7 +89,7 @@ export default function Clients() {
 
   const handleDelete = async (id: number) => {
     try {
-      await api.deleteClient(id)
+      await authFetch(`/api/clients/${id}`, { method: 'delete' })
       setClients(prev => prev.filter(c => c.id !== id))
       setDeleteConfirm(null)
       showToast('Client deleted.')
