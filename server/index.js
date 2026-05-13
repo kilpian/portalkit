@@ -696,9 +696,14 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOString() }))
 
-initDb().then(() => {
-  app.listen(PORT, () => console.log(`🚀 PortalKit server running on http://localhost:${PORT}`))
-}).catch(err => {
-  console.error('Failed to initialize database:', err)
+async function startServer() {
+  await initDb()
+  app.listen(PORT, () => {
+    console.log(`🚀 PortalKit server running on http://localhost:${PORT}`)
+  })
+}
+
+startServer().catch(err => {
+  console.error('Failed to start server:', err)
   process.exit(1)
 })
