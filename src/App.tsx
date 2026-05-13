@@ -14,6 +14,7 @@ import NewPortal from './pages/dashboard/NewPortal'
 import Contracts from './pages/dashboard/Contracts'
 import Invoices from './pages/dashboard/Invoices'
 import Files from './pages/dashboard/Files'
+import Messages from './pages/dashboard/Messages'
 import Settings from './pages/dashboard/Settings'
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="contracts" element={<Contracts />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="files" element={<Files />} />
+            <Route path="messages" element={<Messages />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

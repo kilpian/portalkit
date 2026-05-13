@@ -211,6 +211,17 @@ export default function Settings() {
             </button>
           </div>
         </SectionCard>
+
+        {/* ── Footer ───────────────────────────────────────────── */}
+        <div style={{ marginTop: 16, paddingTop: 24, borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+          <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+            © {new Date().getFullYear()} Kilpian LLC dba PortalKit
+            {' · '}
+            <a href="/privacy" style={{ color: 'var(--text-dim)', textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>Privacy Policy</a>
+            {' · '}
+            <a href="/terms" style={{ color: 'var(--text-dim)', textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>Terms of Service</a>
+          </p>
+        </div>
       </div>
 
       {/* Delete Modal */}

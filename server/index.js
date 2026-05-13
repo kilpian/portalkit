@@ -277,7 +277,8 @@ async function requireAuth(req, res, next) {
       // First login — provision user in our DB
       const clerkUser = await clerk.users.getUser(clerkUserId)
       const email = clerkUser.emailAddresses[0]?.emailAddress || ''
-      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email
+      const emailName = email.split('@')[0] || 'there'
+      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || emailName
 
       const newUser = await pool.query(
         `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)

@@ -121,10 +121,20 @@ export default function Dashboard() {
             ))}
           </div>
         ) : clients.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📸</div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No clients yet</p>
-            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>Add your first client to create a portal for them.</p>
+          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" style={{ margin: '0 auto 16px', display: 'block' }}>
+              <rect x="4" y="14" width="48" height="34" rx="5" fill="var(--bg-secondary)" stroke="var(--border)" strokeWidth="1.5"/>
+              <path d="M20 14l3-6h10l3 6" stroke="var(--border)" strokeWidth="1.5" strokeLinejoin="round"/>
+              <circle cx="28" cy="31" r="9" fill="none" stroke="var(--green)" strokeWidth="1.5" opacity="0.4"/>
+              <circle cx="28" cy="31" r="5" fill="var(--green)" opacity="0.2"/>
+              <circle cx="40" cy="20" r="2" fill="var(--green)" opacity="0.5"/>
+            </svg>
+            <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>
+              Welcome to PortalKit
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>
+              Create your first client portal in 60 seconds.
+            </p>
             <Link to="/dashboard/clients" className="btn btn-primary btn-sm">Add Your First Client</Link>
           </div>
         ) : (
