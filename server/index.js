@@ -182,7 +182,7 @@ async function initDb() {
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           clerk_id VARCHAR(255),
-          full_name TEXT NOT NULL,
+          full_name TEXT,
           email TEXT UNIQUE NOT NULL,
           password TEXT,
           business_name TEXT,
@@ -249,10 +249,12 @@ async function initDb() {
       // Migrate existing tables to add clerk_id if missing
       await pool.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);
-        ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
       `).catch(() => {})
 
-      // Add unique index on clerk_id (partial, excludes NULLs)
+      await pool.query(`
+        ALTER TABLE users ALTER COLUMN full_name DROP NOT NULL;
+      `).catch(() => {})
+
       await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_id_unique
         ON users (clerk_id) WHERE clerk_id IS NOT NULL;
@@ -697,9 +699,20 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOString() }))
 
 async function startServer() {
+  console.log('Starting server...')
   await initDb()
-  app.listen(PORT, () => {
+  console.log('DB init complete, starting HTTP listener...')
+  const server = app.listen(PORT, () => {
     console.log(`🚀 PortalKit server running on http://localhost:${PORT}`)
+  })
+  server.on('error', (err) => {
+    console.error('Server error:', err)
+  })
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err)
+  })
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled rejection:', err)
   })
 }
 
