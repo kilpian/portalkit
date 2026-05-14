@@ -105,14 +105,14 @@ app.post('/api/stripe/webhook',
                   from: 'PortalKit <hello@mail.getportalkit.com>',
                   to: u.email,
                   subject: 'Welcome to PortalKit!',
-                  html: `
-                    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-                      <h1 style="color:#1B4332;font-size:24px;margin-bottom:8px">Welcome to PortalKit, ${u.full_name.split(' ')[0]}!</h1>
-                      <p style="color:#4B5563;font-size:15px;line-height:1.6">Your subscription is now active. You have unlimited access to create client portals, share contracts, and manage invoices.</p>
-                      <a href="${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1B4332;color:#FDFAF5;text-decoration:none;border-radius:8px;font-weight:600">Go to Dashboard →</a>
-                      <p style="color:#9CA3AF;font-size:12px;margin-top:32px">PortalKit by Kilpian LLC</p>
-                    </div>
-                  `,
+                  html: emailTemplate({
+                    title: 'Welcome to PortalKit',
+                    preheader: 'Your subscription is now active — unlimited access awaits.',
+                    body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Welcome, ${u.full_name.split(' ')[0]}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your subscription is now active. You have unlimited access to create client portals, share contracts, and manage invoices.</p>`,
+                    ctaText: 'Go to Dashboard →',
+                    ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
+                    footerNote: 'PortalKit by Kilpian LLC',
+                  }),
                 })
               } catch (emailErr) {
                 console.error('Welcome email failed:', emailErr)
@@ -180,10 +180,17 @@ app.post('/api/webhooks/clerk',
         const firstName = clerkUser.first_name || ''
         if (email && resend) {
           await resend.emails.send({
-            from: 'hello@mail.getportalkit.com',
+            from: 'PortalKit <hello@mail.getportalkit.com>',
             to: email,
-            subject: 'Welcome to PortalKit — you\'re all set 🎉',
-            html: `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;"><h1 style="font-family:Georgia,serif;color:#1B4332;font-size:28px;margin-bottom:4px;">Portal<span style="color:#C9A84C">Kit</span></h1><h2 style="font-size:22px;color:#1A1208;margin-bottom:12px;">Welcome${firstName ? `, ${firstName}` : ''}!</h2><p style="color:#6B5E4A;margin-bottom:24px;">Your 14-day free trial has started. Here's how to get going:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin-bottom:28px;"><li>Create your first client</li><li>Share their private portal link</li><li>Get paid faster</li></ol><a href="${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">Go to Dashboard →</a><p style="margin-top:32px;color:#9C8E7A;font-size:13px;">Questions? Reply to this email — we read every one.</p></div>`,
+            subject: "Welcome to PortalKit — you're all set",
+            html: emailTemplate({
+              title: 'Welcome to PortalKit',
+              preheader: 'Your 14-day free trial has started.',
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Welcome${firstName ? `, ${firstName}` : ''}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your 14-day free trial has started. Here's how to get going:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin:0 0 16px;"><li>Create your first client</li><li>Share their private portal link</li><li>Get paid faster</li></ol><p style="color:#9C8E7A;font-size:13px;margin:0;">Questions? Reply to this email — we read every one.</p>`,
+              ctaText: 'Go to Dashboard →',
+              ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
+              footerNote: 'PortalKit by Kilpian LLC',
+            }),
           })
           console.log('Welcome email sent to:', email)
         }
@@ -231,8 +238,39 @@ const aiLimiter = rateLimit({
 })
 
 function sanitize(str) {
-  if (!str) return ''
-  return str.replace(/[<>"';()&+]/g, '').trim().slice(0, 500)
+  if (!str) return str
+  return String(str).trim().slice(0, 10000)
+}
+
+function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#F5F5F0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F5F0;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:#1B4332;border-radius:12px 12px 0 0;padding:28px 40px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;color:#FDFAF5;letter-spacing:-0.03em;">Portal<span style="color:#C9A84C;">Kit</span></div>
+        </td></tr>
+        <tr><td style="background:#FFFFFF;padding:40px;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
+          ${body}
+        </td></tr>
+        ${ctaText && ctaUrl ? `<tr><td style="background:#FFFFFF;padding:0 40px 32px;text-align:center;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;"><a href="${ctaUrl}" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">${ctaText}</a></td></tr>` : ''}
+        <tr><td style="background:#F9F6F0;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;border:1px solid #E8E0D0;border-top:none;">
+          <p style="color:#9C8E7A;font-size:13px;margin:0 0 8px;">${footerNote || 'Sent by PortalKit · helping photographers deliver a beautiful client experience'}</p>
+          <p style="margin:0;"><a href="https://getportalkit.com" style="color:#6B5E4A;font-size:13px;text-decoration:none;">getportalkit.com</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
 }
 
 async function initDb() {
@@ -768,7 +806,14 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
             from: 'PortalKit <hello@mail.getportalkit.com>',
             to: info.email,
             subject: `Your invoice has been updated — ${senderName}`,
-            html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px"><h2 style="color:#1B4332;margin-bottom:4px">Invoice updated</h2><p style="color:#6B5E4A;margin-bottom:20px">Your invoice ${invNum} from ${senderName} has been updated.</p><p style="font-size:28px;font-weight:700;color:#1A1208;margin:0 0 8px">${amount}</p>${invoice.due_date ? `<p style="color:#6B5E4A;margin:0 0 24px">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</p>` : ''}<a href="${portalUrl}" style="display:inline-block;padding:12px 24px;background:#1B4332;color:#FDFAF5;border-radius:8px;text-decoration:none;font-weight:600">View details →</a></div>`,
+            html: emailTemplate({
+              title: 'Invoice Updated',
+              preheader: `Your invoice ${invNum} from ${senderName} has been updated.`,
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice updated</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Your invoice ${invNum} from <strong>${senderName}</strong> has been updated.</p><p style="font-size:36px;font-weight:800;color:#1A1208;margin:0 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
+              ctaText: 'View details →',
+              ctaUrl: portalUrl,
+              footerNote: `Sent on behalf of ${senderName} via PortalKit`,
+            }),
           })
           console.log('📧 Invoice update email sent:', emailResult)
         }
@@ -814,7 +859,14 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
           from: 'PortalKit <hello@mail.getportalkit.com>',
           to: contract.client_email,
           subject: `Contract ready to review: ${contract.title}`,
-          html: `<p>Hi ${contract.client_name},</p><p>${senderName} has sent you a contract to review: <strong>${contract.title}</strong></p><p><a href="${portalUrl}">View your portal →</a></p>`,
+          html: emailTemplate({
+            title: 'Contract Ready to Review',
+            preheader: `${senderName} has sent you a contract to review.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${contract.client_name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${senderName}</strong> has sent you a contract to review:</p><p style="font-size:18px;font-weight:700;color:#1A1208;margin:0;">${contract.title}</p>`,
+            ctaText: 'View your portal →',
+            ctaUrl: portalUrl,
+            footerNote: `Sent on behalf of ${senderName} via PortalKit`,
+          }),
         })
         console.log('📧 Contract email sent:', emailResult)
       } catch (emailErr) {
@@ -854,14 +906,20 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       const senderName = invoice.business_name || invoice.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${invoice.portal_token}`
       const amount = `$${((invoice.amount_cents || 0) / 100).toFixed(2)}`
-      const dueStr = invoice.due_date ? `<p style="color:#6B5E4A">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''
       console.log('📧 Sending invoice email to:', invoice.client_email)
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
           to: invoice.client_email,
           subject: `Invoice from ${senderName} — ${amount}`,
-          html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px"><h2 style="color:#1B4332;margin-bottom:4px">Invoice from ${senderName}</h2><p style="font-size:32px;font-weight:700;color:#1A1208;margin:16px 0">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A">Invoice #${invoice.invoice_number}</p>` : ''}${dueStr}<a href="${portalUrl}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1B4332;color:#FDFAF5;border-radius:8px;text-decoration:none;font-weight:600">View portal to pay →</a></div>`,
+          html: emailTemplate({
+            title: 'Invoice',
+            preheader: `You have a new invoice for ${amount} from ${senderName}.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice from ${senderName}</h2><p style="font-size:36px;font-weight:800;color:#1A1208;margin:16px 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A;margin:0 0 4px;">Invoice #${invoice.invoice_number}</p>` : ''}${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
+            ctaText: 'View portal to pay →',
+            ctaUrl: portalUrl,
+            footerNote: `Sent on behalf of ${senderName} via PortalKit`,
+          }),
         })
         console.log('📧 Invoice email sent:', emailResult)
       } catch (emailErr) {
@@ -888,7 +946,14 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
 
 // ── FILES ─────────────────────────────────────────────────────
 
-const upload = multer({ dest: 'uploads/' })
+const upload = multer({
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    cb(null, allowed.includes(file.mimetype))
+  },
+})
 app.use('/uploads', express.static('uploads'))
 
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
@@ -1061,7 +1126,14 @@ app.post('/api/messages', requireAuth, async (req, res) => {
           from: 'PortalKit <hello@mail.getportalkit.com>',
           to: client.email,
           subject: `New message from ${senderName}`,
-          html: `<p>Hi ${client.name},</p><p>You have a new message from ${senderName}.</p><p><a href="${portalUrl}">View your portal to reply →</a></p>`,
+          html: emailTemplate({
+            title: `New message from ${senderName}`,
+            preheader: `You have a new message from ${senderName}.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${client.name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0;">You have a new message from <strong>${senderName}</strong>.</p>`,
+            ctaText: 'View your portal to reply →',
+            ctaUrl: portalUrl,
+            footerNote: `Sent on behalf of ${senderName} via PortalKit`,
+          }),
         })
         console.log('📧 Message notification sent:', emailResult)
       } catch (emailErr) {
@@ -1114,7 +1186,14 @@ app.post('/api/portals/:token/messages', async (req, res) => {
           from: 'PortalKit <hello@mail.getportalkit.com>',
           to: client.photographer_email,
           subject: `${displaySender} sent you a message`,
-          html: `<p><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding-left:12px;color:#555">${sanitize(content)}</blockquote><p><a href="${dashUrl}">Reply in dashboard →</a></p>`,
+          html: emailTemplate({
+            title: `New message from ${displaySender}`,
+            preheader: `${displaySender} sent you a new message through their portal.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">New message</h2><p style="color:#6B5E4A;margin:0 0 16px;"><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding:12px 16px;margin:0;background:#F9F6F0;border-radius:0 8px 8px 0;color:#2D2416;line-height:1.6;">${sanitize(content)}</blockquote>`,
+            ctaText: 'Reply in dashboard →',
+            ctaUrl: dashUrl,
+            footerNote: 'PortalKit · your client communication hub',
+          }),
         })
         console.log('📧 Client message notification sent:', emailResult)
       } catch (emailErr) {
