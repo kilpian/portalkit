@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useAuth } from '@clerk/clerk-react'
-import { useApi, type Client, type UploadedFile, API_BASE } from '../../lib/api'
+import { useEffect, useState } from 'react'
+import { useApi, type UploadedFile, API_BASE } from '../../lib/api'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -24,64 +23,20 @@ function fileIcon(name: string): string {
 
 export default function Files() {
   const { authFetch } = useApi()
-  const { getToken } = useAuth()
   const [files, setFiles] = useState<UploadedFile[]>([])
-  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedClientId, setSelectedClientId] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
   const [toast, setToast] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    Promise.all([
-      authFetch('/api/files', { method: 'get' }),
-      authFetch('/api/clients', { method: 'get' }),
-    ]).then(([fRes, cRes]) => {
-      setFiles(Array.isArray(fRes.data) ? fRes.data : [])
-      setClients(Array.isArray(cRes.data) ? cRes.data : [])
-    }).catch(console.error).finally(() => setLoading(false))
+    authFetch('/api/files', { method: 'get' })
+      .then(res => setFiles(Array.isArray(res.data) ? res.data : []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
-
-  const uploadFiles = useCallback(async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return
-    if (!selectedClientId) { showToast('Select a client before uploading.'); return }
-    setUploading(true)
-    let successCount = 0
-    const token = await getToken()
-    for (const file of Array.from(fileList)) {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('client_id', selectedClientId)
-      try {
-        const res = await fetch(`${API_BASE}/api/files/upload`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        })
-        if (!res.ok) throw new Error('Upload failed')
-        const data = await res.json() as UploadedFile
-        setFiles(prev => [data, ...prev])
-        successCount++
-      } catch {
-        showToast(`Failed to upload ${file.name}.`)
-      }
-    }
-    setUploading(false)
-    if (successCount > 0) showToast(`${successCount} file${successCount > 1 ? 's' : ''} uploaded.`)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClientId, getToken])
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    uploadFiles(e.dataTransfer.files)
-  }
 
   const handleDelete = async (id: number) => {
     setDeleting(id)
@@ -113,59 +68,20 @@ export default function Files() {
         </div>
       </div>
 
-      {/* Upload area */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select
-            className="input"
-            style={{ flex: '1 1 200px', maxWidth: 280 }}
-            value={selectedClientId}
-            onChange={e => setSelectedClientId(e.target.value)}
-          >
-            <option value="">Select a client…</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <button
-            onClick={() => inputRef.current?.click()}
-            disabled={!selectedClientId || uploading}
-            className="btn btn-primary"
-            style={{ flexShrink: 0 }}
-          >
-            {uploading
-              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />Uploading…</>
-              : <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-                  Upload Files
-                </>
-            }
-          </button>
-          <input ref={inputRef} type="file" multiple hidden onChange={e => uploadFiles(e.target.files)} />
-        </div>
-
-        {/* Drag-and-drop zone */}
-        <div
-          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => { if (selectedClientId) inputRef.current?.click() }}
-          style={{
-            border: `2px dashed ${dragOver ? 'var(--green)' : 'var(--border)'}`,
-            borderRadius: 12,
-            padding: '28px 20px',
-            textAlign: 'center',
-            background: dragOver ? 'var(--green-bg)' : 'var(--bg-secondary)',
-            cursor: selectedClientId ? 'pointer' : 'default',
-            transition: 'all 0.15s',
-          }}
-        >
-          <div style={{ fontSize: 28, marginBottom: 8 }}>📁</div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-            {dragOver ? 'Drop files here' : 'Drag & drop files here'}
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-            {selectedClientId ? 'or click to browse — photos, PDFs, and more' : 'Select a client above first'}
-          </p>
-        </div>
+      {/* Upload area — temporarily disabled */}
+      <div style={{
+        background: 'var(--bg-secondary)',
+        border: '2px dashed var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '48px 24px',
+        textAlign: 'center',
+        marginBottom: 24,
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
+        <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>File uploads coming soon</p>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Cloud file storage is being set up. Available within 48 hours.
+        </p>
       </div>
 
       {/* File list */}

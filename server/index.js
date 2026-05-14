@@ -39,12 +39,13 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 
 app.use(cors({
   origin: [
+    'https://getportalkit.com',
+    'https://www.getportalkit.com',
+    'https://portalkit.vercel.app',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',
     'http://localhost:5176',
-    'https://getportalkit.com',
-    'https://www.getportalkit.com',
     process.env.FRONTEND_URL,
   ].filter(Boolean),
   credentials: true,
