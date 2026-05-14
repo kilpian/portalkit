@@ -10,6 +10,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Webhook } from 'svix'
 import multer from 'multer'
 import fs from 'fs'
+import crypto from 'crypto'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -399,6 +400,10 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_name TEXT;`).catch(() => {})
+      await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_ip TEXT;`).catch(() => {})
+      await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS content_hash TEXT;`).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -458,6 +463,20 @@ async function requireAuth(req, res, next) {
     }
 
     req.userId = String(req.user.id)
+
+    if (req.user.plan === 'trial' && req.user.trial_ends_at) {
+      if (new Date() > new Date(req.user.trial_ends_at)) {
+        const allowedAfterTrial = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/health']
+        if (!allowedAfterTrial.some(p => req.path.startsWith(p))) {
+          return res.status(402).json({
+            error: 'Trial expired',
+            message: 'Your 14-day trial has ended. Please upgrade to continue.',
+            upgradeUrl: 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00',
+          })
+        }
+      }
+    }
+
     next()
   } catch (err) {
     console.error('❌ Auth error:', err.message)
@@ -651,7 +670,7 @@ app.get('/api/clients/:id', requireAuth, async (req, res) => {
 
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
-  console.log('PUT /api/clients/:id body:', { name, email, phone, event_date, event_type, notesLen: notes?.length })
+  console.log('PUT client body:', req.body)
   try {
     const result = await pool.query(
       `UPDATE clients SET name=$1, email=$2, phone=$3, event_date=$4, event_type=$5, notes=$6, updated_at=NOW()
@@ -1018,7 +1037,7 @@ app.get('/api/portals/:token', async (req, res) => {
 
     const [contracts, invoices, files] = await Promise.all([
       pool.query(
-        `SELECT id, title, status, signed_at FROM contracts WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
+        `SELECT id, title, status, content, signed_at, signed_by_name FROM contracts WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
         [client.id]
       ),
       pool.query(
@@ -1039,6 +1058,82 @@ app.get('/api/portals/:token', async (req, res) => {
     })
   } catch (err) {
     console.error('Portal error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── CONTRACT SIGNING (public) ─────────────────────────────────
+
+app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
+  const { signer_name } = req.body
+  if (!signer_name?.trim()) return res.status(400).json({ error: 'signer_name is required' })
+  try {
+    const contractResult = await pool.query(
+      `SELECT c.*, cl.email as client_email, cl.name as client_name, cl.portal_token,
+              u.email as photographer_email, u.business_name, u.full_name as photographer_name
+       FROM contracts c
+       JOIN clients cl ON cl.id = c.client_id
+       JOIN users u ON u.id = c.user_id
+       WHERE c.id=$1 AND cl.portal_token=$2 AND c.status != 'signed'`,
+      [req.params.contractId, req.params.token]
+    )
+    if (!contractResult.rows.length) return res.status(404).json({ error: 'Contract not found or already signed' })
+    const contract = contractResult.rows[0]
+
+    const signerIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown'
+    const hash = crypto.createHash('sha256').update(contract.content || '').digest('hex')
+
+    const updated = await pool.query(
+      `UPDATE contracts SET status='signed', signed_by_name=$1, signed_by_ip=$2, signed_at=NOW(), content_hash=$3
+       WHERE id=$4 RETURNING *`,
+      [sanitize(signer_name), signerIp, hash, contract.id]
+    )
+    const signedContract = updated.rows[0]
+
+    const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
+    const signedDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+    if (contract.client_email && resend) {
+      try {
+        await resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: contract.client_email,
+          subject: `Contract signed — ${senderName}`,
+          html: emailTemplate({
+            title: 'Contract Signed',
+            preheader: `You signed ${contract.title}. Keep this email for your records.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You signed <strong>${contract.title}</strong> on ${signedDate}. Keep this email for your records.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}<br><strong>Reference:</strong> ${hash.slice(-8).toUpperCase()}</div>`,
+            footerNote: `Signed on behalf of ${senderName} via PortalKit`,
+          }),
+        })
+      } catch (emailErr) {
+        console.error('Sign confirmation email failed:', emailErr)
+      }
+    }
+
+    if (contract.photographer_email && resend) {
+      try {
+        await resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: contract.photographer_email,
+          subject: `${contract.client_name} signed their contract`,
+          html: emailTemplate({
+            title: 'Contract Signed',
+            preheader: `${contract.client_name} signed ${contract.title}.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${contract.client_name}</strong> signed <strong>${contract.title}</strong> on ${signedDate}.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}</div>`,
+            ctaText: 'View in Dashboard →',
+            ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/contracts`,
+            footerNote: 'PortalKit · contract management for photographers',
+          }),
+        })
+      } catch (emailErr) {
+        console.error('Sign notification email failed:', emailErr)
+      }
+    }
+
+    res.json(signedContract)
+  } catch (err) {
+    console.error('Sign contract error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

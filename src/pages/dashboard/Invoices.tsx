@@ -244,13 +244,23 @@ export default function Invoices() {
                   </button>
                   {inv.status !== 'paid' && (
                     <>
-                      {inv.status === 'draft' && (
+                      {inv.status === 'draft' ? (
                         <button
                           onClick={() => handleSend(inv.id)}
                           disabled={sending === inv.id}
                           style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--green-border)', background: 'var(--green-bg)', color: 'var(--green)', cursor: 'pointer' }}
                         >
-                          {sending === inv.id ? 'Sending…' : 'Send'}
+                          {sending === inv.id ? 'Sending…' : 'Send Invoice'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleSend(inv.id)}
+                          disabled={sending === inv.id}
+                          style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                        >
+                          {sending === inv.id ? 'Sending…' : 'Resend'}
                         </button>
                       )}
                       <button

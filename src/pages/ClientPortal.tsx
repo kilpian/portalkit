@@ -6,7 +6,9 @@ interface Contract {
   id: number
   title: string
   status: string
+  content: string | null
   signed_at: string | null
+  signed_by_name: string | null
 }
 
 interface Invoice {
@@ -206,6 +208,25 @@ export function ClientPortalContent({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [signAgreed, setSignAgreed] = useState<Record<number, boolean>>({})
+  const [signerNames, setSignerNames] = useState<Record<number, string>>({})
+  const [signing, setSigning] = useState<number | null>(null)
+  const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string }>>({})
+
+  const handleSign = async (contract: Contract) => {
+    const name = signerNames[contract.id]?.trim()
+    if (!name) return
+    setSigning(contract.id)
+    try {
+      await axios.post(`http://localhost:3001/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
+      const date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      setSignedContracts(prev => ({ ...prev, [contract.id]: { name, date } }))
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setSigning(null)
+    }
+  }
 
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
@@ -286,17 +307,67 @@ export function ClientPortalContent({ token }: { token: string }) {
           }>
             {data.contracts.length === 0
               ? <EmptySection message="No contracts yet — your photographer will share them here." />
-              : data.contracts.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.title}</p>
-                    {c.signed_at && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Signed {formatDate(c.signed_at)}</p>}
+              : data.contracts.map(c => {
+                const justSigned = signedContracts[c.id]
+                const isSigned = c.status === 'signed' || !!justSigned
+                const signerName = justSigned?.name || c.signed_by_name
+                const signedDate = justSigned?.date || (c.signed_at ? formatDate(c.signed_at) : null)
+
+                if (isSigned) {
+                  return (
+                    <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.title}</p>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }}>✓ Signed</span>
+                      </div>
+                      {(signerName || signedDate) && (
+                        <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+                          {signerName && `Signed by ${signerName}`}{signerName && signedDate && ' · '}{signedDate}
+                        </p>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>{c.title}</p>
+                    {c.content && (
+                      <div style={{ maxHeight: 300, overflowY: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '14px 16px', fontSize: 13, lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', marginBottom: 14, fontFamily: 'monospace' }}>
+                        {c.content}
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!signAgreed[c.id]}
+                        onChange={e => setSignAgreed(prev => ({ ...prev, [c.id]: e.target.checked }))}
+                        style={{ marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      I have read and agree to this contract
+                    </label>
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Type your full name to sign"
+                      value={signerNames[c.id] ?? ''}
+                      onChange={e => setSignerNames(prev => ({ ...prev, [c.id]: e.target.value }))}
+                      style={{ marginBottom: 10, fontSize: 14 }}
+                    />
+                    <button
+                      onClick={() => handleSign(c)}
+                      disabled={!signAgreed[c.id] || !signerNames[c.id]?.trim() || signing === c.id}
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginBottom: 8 }}
+                    >
+                      {signing === c.id ? 'Signing…' : 'Sign Contract'}
+                    </button>
+                    <p style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
+                      By clicking Sign Contract, you agree this constitutes your legal signature under the ESIGN Act.
+                    </p>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: c.status === 'signed' ? 'var(--color-green-bg)' : 'var(--gold-bg)', color: c.status === 'signed' ? 'var(--color-green)' : 'var(--gold-dim)', border: `1px solid ${c.status === 'signed' ? 'var(--color-green-border)' : 'var(--gold-border)'}` }}>
-                    {c.status === 'signed' ? 'Signed' : 'Awaiting signature'}
-                  </span>
-                </div>
-              ))
+                )
+              })
             }
           </SectionCard>
 

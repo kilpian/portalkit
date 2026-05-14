@@ -63,6 +63,9 @@ export interface Contract {
   content: string | null
   status: 'draft' | 'sent' | 'signed'
   signed_at: string | null
+  signed_by_name: string | null
+  signed_by_ip: string | null
+  content_hash: string | null
   created_at: string
   updated_at: string
 }
@@ -121,16 +124,23 @@ export function useApi() {
 
   const authFetch = async (url: string, options: Record<string, unknown> = {}) => {
     const token = await getToken()
-    return axios({
-      ...options,
-      url: `${API_BASE}${url}`,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(options.headers as Record<string, string> | undefined),
-      },
-      withCredentials: false,
-    })
+    try {
+      return await axios({
+        ...options,
+        url: `${API_BASE}${url}`,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(options.headers as Record<string, string> | undefined),
+        },
+        withCredentials: false,
+      })
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 402) {
+        window.location.href = '/dashboard/settings'
+      }
+      throw error
+    }
   }
 
   return { authFetch }

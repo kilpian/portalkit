@@ -4,6 +4,7 @@ import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
+import Onboarding from './Onboarding'
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -80,8 +81,43 @@ export default function Dashboard() {
     return 'Good evening'
   }
 
+  const STRIPE_UPGRADE_URL = 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00'
+
+  const showOnboarding = !loading && !user?.business_name && (stats?.total_clients === 0)
+  if (showOnboarding) return <Onboarding />
+
+  const trialExpired = user?.plan === 'trial' && days === 0
+  const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
+  const showAmberBanner = user?.plan === 'trial' && days > 3 && days <= 7
+
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
+
+      {trialExpired && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 440 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⏰</div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Your trial has ended</h2>
+            <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.</p>
+            <a href={STRIPE_UPGRADE_URL} className="btn btn-primary" style={{ display: 'inline-block', fontSize: 15, padding: '13px 28px' }}>Upgrade Now →</a>
+          </div>
+        </div>
+      )}
+
+      {showRedBanner && (
+        <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: '#DC2626', fontWeight: 600 }}>⚠️ Your trial expires in {days} day{days === 1 ? '' : 's'} — upgrade to keep your portals active.</p>
+          <a href={STRIPE_UPGRADE_URL} style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Upgrade Now →</a>
+        </div>
+      )}
+
+      {showAmberBanner && (
+        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>{days} days left in your trial.</p>
+          <a href={STRIPE_UPGRADE_URL} style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold-dim)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Upgrade Now →</a>
+        </div>
+      )}
+
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 4 }}>
           {greeting()}{firstName ? `, ${firstName}` : ''}.
