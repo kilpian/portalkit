@@ -227,7 +227,7 @@ const aiLimiter = rateLimit({
   message: { error: 'AI usage limit reached. Please wait before generating more content.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.userId?.toString() || req.ip,
+  keyGenerator: (req) => req.userId?.toString() || req.ip?.replace(/^.*:/, '') || 'unknown',
 })
 
 function sanitize(str) {
