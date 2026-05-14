@@ -400,6 +400,14 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS trials_used (
+          id SERIAL PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          first_trial_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_name TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_ip TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS content_hash TEXT;`).catch(() => {})
@@ -416,53 +424,45 @@ async function initDb() {
 }
 
 async function requireAuth(req, res, next) {
-  console.log('🔐 requireAuth called for:', req.method, req.path)
   const authHeader = req.headers.authorization
-  console.log('🔑 Authorization header:', authHeader ? 'present' : 'MISSING')
-
   try {
     const token = authHeader?.replace('Bearer ', '')
-    if (!token) {
-      console.log('❌ No token provided')
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
+    if (!token) return res.status(401).json({ error: 'Unauthorized' })
 
-    console.log('✅ Token found, verifying with Clerk...')
+    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY })
 
-    const payload = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
-    })
-
-    console.log('✅ Token verified, clerk user ID:', payload.sub)
-
-    const result = await pool.query(
-      'SELECT * FROM users WHERE clerk_id = $1',
-      [payload.sub]
-    )
+    const result = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [payload.sub])
 
     if (result.rows.length === 0) {
-      console.log('🆕 New user, creating in DB...')
       const clerkUser = await clerk.users.getUser(payload.sub)
       const email = clerkUser.emailAddresses[0]?.emailAddress
-      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim()
-        || email?.split('@')[0]
-        || 'User'
+      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'User'
+
+      const trialCheck = email ? await pool.query('SELECT id FROM trials_used WHERE email=$1', [email]) : { rows: [] }
+      const isRepeat = trialCheck.rows.length > 0
+      if (!isRepeat && email) {
+        await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email])
+      }
+      const trialEnd = isRepeat ? new Date().toISOString() : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
 
       const newUser = await pool.query(
         `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
-         VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days')
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (email) DO UPDATE SET clerk_id = $1
          RETURNING *`,
-        [payload.sub, email, fullName]
+        [payload.sub, email, fullName, isRepeat ? 'expired' : 'trial', trialEnd]
       )
       req.user = newUser.rows[0]
-      console.log('✅ New user created:', req.user.id)
+      console.log(`${isRepeat ? '🚫 Repeat trial blocked' : '🆕 New user created'}: ${req.user.id}`)
     } else {
       req.user = result.rows[0]
-      console.log('✅ Existing user found:', req.user.id)
     }
 
     req.userId = String(req.user.id)
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`${req.method} ${req.path} — user ${req.user?.id}`)
+    }
 
     if (req.user.plan === 'trial' && req.user.trial_ends_at) {
       if (new Date() > new Date(req.user.trial_ends_at)) {
@@ -630,7 +630,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 app.get('/api/clients', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, portal_token, created_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
       [req.userId]
     )
     res.json(result.rows)
@@ -1037,7 +1037,7 @@ app.get('/api/portals/:token', async (req, res) => {
 
     const [contracts, invoices, files] = await Promise.all([
       pool.query(
-        `SELECT id, title, status, content, signed_at, signed_by_name FROM contracts WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
+        `SELECT id, title, status, content, signed_at, signed_by_name, content_hash FROM contracts WHERE client_id=$1 AND status != 'draft' ORDER BY created_at DESC`,
         [client.id]
       ),
       pool.query(

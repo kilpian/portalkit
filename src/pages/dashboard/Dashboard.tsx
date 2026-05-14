@@ -83,8 +83,9 @@ export default function Dashboard() {
 
   const STRIPE_UPGRADE_URL = 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00'
 
-  const showOnboarding = !loading && !user?.business_name && (stats?.total_clients === 0)
-  if (showOnboarding) return <Onboarding />
+  const [onboardingDone, setOnboardingDone] = useState(false)
+  const showOnboarding = !onboardingDone && !loading && !user?.business_name && (stats?.total_clients === 0)
+  if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
   const trialExpired = user?.plan === 'trial' && days === 0
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3

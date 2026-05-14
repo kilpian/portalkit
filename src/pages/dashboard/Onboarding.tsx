@@ -1,8 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 
-export default function Onboarding() {
+interface OnboardingProps {
+  onComplete: () => void
+}
+
+export default function Onboarding({ onComplete }: OnboardingProps) {
   const { setUser } = usePortalAuth()
   const { authFetch } = useApi()
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -11,6 +15,8 @@ export default function Onboarding() {
   // Step 1
   const [businessName, setBusinessName] = useState('')
   const [brandColor, setBrandColor] = useState('#1B4332')
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   // Step 2
   const [clientName, setClientName] = useState('')
@@ -23,11 +29,21 @@ export default function Onboarding() {
 
   const portalLink = portalToken ? `${window.location.origin}/portal/${portalToken}` : ''
 
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setLogoDataUrl(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
   const handleStep1 = async () => {
     if (!businessName.trim()) return
     setSaving(true)
     try {
-      const res = await authFetch('/api/users/me', { method: 'put', data: { business_name: businessName.trim(), brand_color: brandColor } })
+      const payload: Record<string, string> = { business_name: businessName.trim(), brand_color: brandColor }
+      if (logoDataUrl) payload.logo_url = logoDataUrl
+      const res = await authFetch('/api/users/me', { method: 'put', data: payload })
       setUser(res.data)
       setStep(2)
     } catch { /* stay on step */ } finally { setSaving(false) }
@@ -76,11 +92,40 @@ export default function Onboarding() {
                 <label className="field-label">Business name <span style={{ color: 'var(--color-red)' }}>*</span></label>
                 <input className="input" type="text" placeholder="Your Photography Studio" value={businessName} onChange={e => setBusinessName(e.target.value)} autoFocus />
               </div>
-              <div style={{ marginBottom: 28 }}>
+              <div style={{ marginBottom: 18 }}>
                 <label className="field-label">Brand color</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} style={{ width: 44, height: 44, padding: 2, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'transparent' }} />
                   <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'monospace' }}>{brandColor}</span>
+                </div>
+              </div>
+              <div style={{ marginBottom: 28 }}>
+                <label className="field-label">Logo <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 400 }}>(optional)</span></label>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleLogoChange}
+                  style={{ display: 'none' }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {logoDataUrl ? (
+                    <img src={logoDataUrl} alt="Logo preview" style={{ height: 48, maxWidth: 120, objectFit: 'contain', borderRadius: 6, border: '1px solid var(--border)' }} />
+                  ) : (
+                    <div style={{ width: 48, height: 48, borderRadius: 6, border: '1px dashed var(--border)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <button type="button" onClick={() => logoInputRef.current?.click()} style={{ fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      {logoDataUrl ? 'Change' : 'Upload logo'}
+                    </button>
+                    {logoDataUrl && (
+                      <button type="button" onClick={() => setLogoDataUrl(null)} style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>Remove</button>
+                    )}
+                  </div>
                 </div>
               </div>
               <button onClick={handleStep1} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%' }}>
@@ -122,9 +167,9 @@ export default function Onboarding() {
                   {copied ? '✓ Copied' : 'Copy'}
                 </button>
               </div>
-              <a href="/dashboard" className="btn btn-primary" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', boxSizing: 'border-box' }}>
+              <button onClick={onComplete} className="btn btn-primary" style={{ display: 'block', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>
                 Go to Dashboard →
-              </a>
+              </button>
             </>
           )}
 

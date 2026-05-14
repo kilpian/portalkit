@@ -79,6 +79,7 @@ export default function Clients() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const openInfoPanel = (client: Client) => {
+    console.log('Client info:', client)
     setPreviewClient(null)
     setEditingClient(client)
     setForm({ name: client.name, email: client.email ?? '', phone: client.phone ?? '', event_type: client.event_type ?? '', event_date: client.event_date ? client.event_date.slice(0, 10) : '', notes: client.notes ?? '' })

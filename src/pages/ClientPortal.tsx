@@ -9,6 +9,7 @@ interface Contract {
   content: string | null
   signed_at: string | null
   signed_by_name: string | null
+  content_hash: string | null
 }
 
 interface Invoice {
@@ -211,21 +212,48 @@ export function ClientPortalContent({ token }: { token: string }) {
   const [signAgreed, setSignAgreed] = useState<Record<number, boolean>>({})
   const [signerNames, setSignerNames] = useState<Record<number, string>>({})
   const [signing, setSigning] = useState<number | null>(null)
-  const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string }>>({})
+  const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string; hash: string | null; content: string | null }>>({})
 
   const handleSign = async (contract: Contract) => {
     const name = signerNames[contract.id]?.trim()
     if (!name) return
     setSigning(contract.id)
     try {
-      await axios.post(`http://localhost:3001/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
+      const res = await axios.post(`http://localhost:3001/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
       const date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-      setSignedContracts(prev => ({ ...prev, [contract.id]: { name, date } }))
+      setSignedContracts(prev => ({ ...prev, [contract.id]: { name, date, hash: res.data.content_hash ?? null, content: contract.content } }))
     } catch {
       // silently fail — user can retry
     } finally {
       setSigning(null)
     }
+  }
+
+  const downloadContract = (title: string, content: string | null, signerName: string, signedDate: string, hash: string | null) => {
+    const hashLine = hash ? `\nDIGITAL SIGNATURE REF: ...${hash.slice(-8)}` : ''
+    const text = [
+      `CONTRACT: ${title}`,
+      `SIGNED BY: ${signerName}`,
+      `DATE: ${signedDate}`,
+      ``,
+      `─────────────────────────────────────────`,
+      ``,
+      content ?? '',
+      ``,
+      `─────────────────────────────────────────`,
+      `ELECTRONIC SIGNATURE RECORD`,
+      `Signed by: ${signerName}`,
+      `Date: ${signedDate}`,
+      hashLine,
+      `Signed via PortalKit (ESIGN Act compliant)`,
+    ].join('\n')
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${title.replace(/[^a-z0-9]/gi, '_')}_signed.txt`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   useEffect(() => {
@@ -313,18 +341,32 @@ export function ClientPortalContent({ token }: { token: string }) {
                 const signerName = justSigned?.name || c.signed_by_name
                 const signedDate = justSigned?.date || (c.signed_at ? formatDate(c.signed_at) : null)
 
+                const contractContent = justSigned?.content ?? c.content
+                const contractHash = justSigned?.hash ?? c.content_hash
+
                 if (isSigned) {
                   return (
                     <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.title}</p>
-                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }}>✓ Signed</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)', flexShrink: 0, marginLeft: 8 }}>✓ Signed</span>
                       </div>
                       {(signerName || signedDate) && (
-                        <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+                        <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 10 }}>
                           {signerName && `Signed by ${signerName}`}{signerName && signedDate && ' · '}{signedDate}
                         </p>
                       )}
+                      {contractContent && (
+                        <div style={{ maxHeight: 240, overflowY: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 14px', fontSize: 13, lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', marginBottom: 10, fontFamily: 'monospace' }}>
+                          {contractContent}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => downloadContract(c.title, contractContent, signerName ?? '', signedDate ?? '', contractHash)}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--color-green-border)', background: 'var(--color-green-bg)', color: 'var(--color-green)', cursor: 'pointer' }}
+                      >
+                        ↓ Download Contract
+                      </button>
                     </div>
                   )
                 }
