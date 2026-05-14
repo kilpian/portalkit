@@ -196,7 +196,7 @@ app.post('/api/webhooks/clerk',
   }
 )
 
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
 
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -220,6 +220,15 @@ const apiLimiter = rateLimit({
 })
 
 app.use('/api/', apiLimiter)
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'AI usage limit reached. Please wait before generating more content.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.userId?.toString() || req.ip,
+})
 
 function sanitize(str) {
   if (!str) return ''
@@ -334,6 +343,24 @@ async function initDb() {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_color TEXT DEFAULT '#1B4332';
       `).catch(() => {})
 
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_today INTEGER DEFAULT 0;
+      `).catch(() => {})
+
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_reset_at TIMESTAMPTZ DEFAULT NOW();
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS contract_templates (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -409,14 +436,27 @@ app.get('/api/test', (req, res) => {
 // ── USERS ─────────────────────────────────────────────────────
 
 app.put('/api/users/me', requireAuth, async (req, res) => {
+  console.log('PUT /api/users/me body keys:', Object.keys(req.body))
   const { full_name, business_name, logo_url, brand_color } = req.body
-  if (!full_name) return res.status(400).json({ error: 'Name is required.' })
+  // 'logo_url' in req.body distinguishes "sent as null (remove)" from "not sent (keep)"
+  const logoProvided = 'logo_url' in req.body
   try {
     const result = await pool.query(
-      `UPDATE users SET full_name=$1, business_name=$2, logo_url=$3, brand_color=$4
-       WHERE id=$5
+      `UPDATE users SET
+         full_name=COALESCE($1, full_name),
+         business_name=COALESCE($2, business_name),
+         logo_url=CASE WHEN $3 THEN $4 ELSE logo_url END,
+         brand_color=COALESCE($5, brand_color)
+       WHERE id=$6
        RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, created_at`,
-      [sanitize(full_name), sanitize(business_name) || null, logo_url || null, brand_color || null, req.userId]
+      [
+        full_name ? sanitize(full_name) : null,
+        business_name !== undefined ? (sanitize(business_name) || null) : null,
+        logoProvided,
+        logo_url || null,
+        brand_color || null,
+        req.userId,
+      ]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' })
     res.json(result.rows[0])
@@ -573,6 +613,7 @@ app.get('/api/clients/:id', requireAuth, async (req, res) => {
 
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
+  console.log('PUT /api/clients/:id body:', { name, email, phone, event_date, event_type, notesLen: notes?.length })
   try {
     const result = await pool.query(
       `UPDATE clients SET name=$1, email=$2, phone=$3, event_date=$4, event_type=$5, notes=$6, updated_at=NOW()
@@ -689,7 +730,7 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
 })
 
 app.put('/api/invoices/:id', requireAuth, async (req, res) => {
-  const { status, paid_at, amount_cents, due_date, invoice_number, notes } = req.body
+  const { status, paid_at, amount_cents, due_date, invoice_number, notes, notify_client } = req.body
   try {
     const result = await pool.query(
       `UPDATE invoices SET
@@ -704,7 +745,39 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
       [status || null, paid_at || null, amount_cents || null, due_date || null, invoice_number || null, sanitize(notes) || null, req.params.id, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' })
-    res.json(result.rows[0])
+    const invoice = result.rows[0]
+
+    if (notify_client && invoice.client_id && resend) {
+      try {
+        const infoResult = await pool.query(
+          `SELECT cl.email, cl.portal_token, u.business_name, u.full_name
+           FROM invoices i
+           JOIN clients cl ON cl.id = i.client_id
+           JOIN users u ON u.id = i.user_id
+           WHERE i.id=$1`,
+          [invoice.id]
+        )
+        if (infoResult.rows.length && infoResult.rows[0].email) {
+          const info = infoResult.rows[0]
+          const senderName = info.business_name || info.full_name || 'Your photographer'
+          const amount = `$${(invoice.amount_cents / 100).toFixed(2)}`
+          const invNum = invoice.invoice_number ? `#${invoice.invoice_number}` : ''
+          const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${info.portal_token}`
+          console.log('📧 Sending invoice update email to:', info.email)
+          const emailResult = await resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            to: info.email,
+            subject: `Your invoice has been updated — ${senderName}`,
+            html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px"><h2 style="color:#1B4332;margin-bottom:4px">Invoice updated</h2><p style="color:#6B5E4A;margin-bottom:20px">Your invoice ${invNum} from ${senderName} has been updated.</p><p style="font-size:28px;font-weight:700;color:#1A1208;margin:0 0 8px">${amount}</p>${invoice.due_date ? `<p style="color:#6B5E4A;margin:0 0 24px">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</p>` : ''}<a href="${portalUrl}" style="display:inline-block;padding:12px 24px;background:#1B4332;color:#FDFAF5;border-radius:8px;text-decoration:none;font-weight:600">View details →</a></div>`,
+          })
+          console.log('📧 Invoice update email sent:', emailResult)
+        }
+      } catch (emailErr) {
+        console.error('📧 Invoice update email failed:', emailErr)
+      }
+    }
+
+    res.json(invoice)
   } catch (err) {
     console.error('Update invoice error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -1073,11 +1146,30 @@ app.delete('/api/messages/:id', requireAuth, async (req, res) => {
 
 const aiRateLimit = new Map()
 
-app.post('/api/ai/suggest-message', requireAuth, async (req, res) => {
+async function checkAndIncrementAiCalls(userId) {
+  const result = await pool.query(
+    'SELECT ai_calls_today, ai_calls_reset_at FROM users WHERE id=$1', [userId]
+  )
+  if (!result.rows.length) return false
+  const { ai_calls_today, ai_calls_reset_at } = result.rows[0]
+  const hoursSinceReset = (Date.now() - new Date(ai_calls_reset_at).getTime()) / 3_600_000
+  const currentCalls = hoursSinceReset >= 24 ? 0 : (ai_calls_today || 0)
+  if (currentCalls >= 20) return false
+  if (hoursSinceReset >= 24) {
+    await pool.query('UPDATE users SET ai_calls_today=1, ai_calls_reset_at=NOW() WHERE id=$1', [userId])
+  } else {
+    await pool.query('UPDATE users SET ai_calls_today=ai_calls_today+1 WHERE id=$1', [userId])
+  }
+  return true
+}
+
+app.post('/api/ai/suggest-message', requireAuth, aiLimiter, async (req, res) => {
   if (!anthropic) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' })
   const now = Date.now()
   const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
   if (timestamps.length >= 10) return res.status(429).json({ error: 'Rate limit: 10 AI suggestions per hour' })
+  const allowed = await checkAndIncrementAiCalls(req.userId)
+  if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
   aiRateLimit.set(req.userId, [...timestamps, now])
   const { client_id, context } = req.body
   try {
@@ -1091,7 +1183,7 @@ app.post('/api/ai/suggest-message', requireAuth, async (req, res) => {
     }
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
+      max_tokens: 1000,
       system: 'You are a helpful assistant for a professional photographer. Write a professional, warm, concise message to send to a client. Keep it under 100 words. No subject line.',
       messages: [{ role: 'user', content: `Write a message for this client: ${clientContext}` }],
     })
@@ -1103,11 +1195,13 @@ app.post('/api/ai/suggest-message', requireAuth, async (req, res) => {
   }
 })
 
-app.post('/api/ai/generate-contract', requireAuth, async (req, res) => {
+app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) => {
   if (!anthropic) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' })
   const now = Date.now()
   const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
   if (timestamps.length >= 10) return res.status(429).json({ error: 'Rate limit: 10 AI requests per hour' })
+  const allowed = await checkAndIncrementAiCalls(req.userId)
+  if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
   aiRateLimit.set(req.userId, [...timestamps, now])
   const { client_id, template_type } = req.body
   try {
@@ -1124,8 +1218,8 @@ app.post('/api/ai/generate-contract', requireAuth, async (req, res) => {
     }
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-      system: [{ type: 'text', text: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract. Protect the photographer legally, keep it clear for clients. Write only the contract text — no preamble, no "here is your contract", just the contract itself.', cache_control: { type: 'ephemeral' } }],
+      max_tokens: 2000,
+      system: [{ type: 'text', text: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract text — no preamble, no commentary, just the contract itself.', cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: `Generate a ${template_type || 'photography services'} contract. Photographer/business: ${businessName}. ${clientContext}.` }],
     })
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
@@ -1133,6 +1227,51 @@ app.post('/api/ai/generate-contract', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('AI contract error:', err)
     res.status(500).json({ error: 'AI generation failed' })
+  }
+})
+
+// ── CONTRACT TEMPLATES ────────────────────────────────────────
+
+app.get('/api/contract-templates', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, content, created_at FROM contract_templates WHERE user_id=$1 ORDER BY created_at DESC',
+      [req.userId]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get templates error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/contract-templates', requireAuth, async (req, res) => {
+  const { name, content } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Template name is required.' })
+  if (!content?.trim()) return res.status(400).json({ error: 'Template content is required.' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO contract_templates (user_id, name, content) VALUES ($1, $2, $3) RETURNING *',
+      [req.userId, sanitize(name).slice(0, 80), content]
+    )
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Save template error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/contract-templates/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM contract_templates WHERE id=$1 AND user_id=$2 RETURNING id',
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Template not found' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete template error:', err)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 

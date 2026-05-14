@@ -713,3 +713,12 @@ textarea {
 }
 
 .progress-fill.green { background: var(--color-green); }
+
+/* ── Contract rendered preview ──────────────────────────────── */
+.contract-content h1, .contract-content h2 { color: var(--green); margin: 16px 0 8px; font-family: var(--font-display); }
+.contract-content h3 { color: var(--text-primary); margin: 12px 0 6px; }
+.contract-content strong { font-weight: 600; }
+.contract-content p { margin: 8px 0; line-height: 1.6; color: var(--text-primary); }
+.contract-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.contract-content ul, .contract-content ol { padding-left: 20px; margin: 8px 0; }
+.contract-content li { margin: 4px 0; line-height: 1.6; }

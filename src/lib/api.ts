@@ -67,6 +67,13 @@ export interface Contract {
   updated_at: string
 }
 
+export interface ContractTemplate {
+  id: number
+  name: string
+  content: string
+  created_at: string
+}
+
 export interface Invoice {
   id: number
   user_id: number

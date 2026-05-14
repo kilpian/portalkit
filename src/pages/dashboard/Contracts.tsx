@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import { useApi, type Client, type Contract } from '../../lib/api'
+import { marked } from 'marked'
+import { useApi, type Client, type Contract, type ContractTemplate } from '../../lib/api'
 
 const TEMPLATES = [
   {
@@ -71,6 +72,7 @@ export default function Contracts() {
   const { authFetch } = useApi()
   const [contracts, setContracts] = useState<Contract[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [customTemplates, setCustomTemplates] = useState<ContractTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingContract, setEditingContract] = useState<Contract | null>(null)
@@ -81,21 +83,28 @@ export default function Contracts() {
   const [toast, setToast] = useState('')
   const [form, setForm] = useState({ client_id: '', title: '', content: '' })
   const [formError, setFormError] = useState('')
+  const [previewMode, setPreviewMode] = useState(false)
+  const [saveTemplateMode, setSaveTemplateMode] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [deletingTemplate, setDeletingTemplate] = useState<number | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([
       authFetch('/api/contracts', { method: 'get' }),
       authFetch('/api/clients', { method: 'get' }),
-    ]).then(([cRes, clRes]) => {
+      authFetch('/api/contract-templates', { method: 'get' }),
+    ]).then(([cRes, clRes, tRes]) => {
       setContracts(Array.isArray(cRes.data) ? cRes.data : [])
       setClients(Array.isArray(clRes.data) ? clRes.data : [])
+      setCustomTemplates(Array.isArray(tRes.data) ? tRes.data : [])
     }).catch(console.error).finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDrawer() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -106,10 +115,19 @@ export default function Contracts() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    setPreviewMode(false)
+    setSaveTemplateMode(false)
+    setTemplateName('')
+  }
+
   const openNew = () => {
     setEditingContract(null)
     setForm({ client_id: '', title: '', content: '' })
     setFormError('')
+    setPreviewMode(false)
+    setSaveTemplateMode(false)
     setDrawerOpen(true)
   }
 
@@ -117,6 +135,8 @@ export default function Contracts() {
     setEditingContract(c)
     setForm({ client_id: c.client_id?.toString() ?? '', title: c.title, content: c.content ?? '' })
     setFormError('')
+    setPreviewMode(false)
+    setSaveTemplateMode(false)
     setDrawerOpen(true)
   }
 
@@ -132,7 +152,7 @@ export default function Contracts() {
           data: { title: form.title.trim(), content: form.content, status: editingContract.status },
         })
         setContracts(prev => prev.map(c => c.id === editingContract.id ? res.data as Contract : c))
-        setDrawerOpen(false)
+        closeDrawer()
         showToast('Contract saved.')
       } else {
         const res = await authFetch('/api/contracts', {
@@ -140,7 +160,7 @@ export default function Contracts() {
           data: { client_id: form.client_id || null, title: form.title.trim(), content: form.content },
         })
         setContracts(prev => [res.data as Contract, ...prev])
-        setDrawerOpen(false)
+        closeDrawer()
         showToast('Contract created.')
       }
     } catch {
@@ -176,8 +196,9 @@ export default function Contracts() {
     }
   }
 
-  const applyTemplate = (t: typeof TEMPLATES[0]) => {
-    setForm(f => ({ ...f, title: f.title || t.label, content: t.content }))
+  const applyTemplate = (content: string, label: string) => {
+    setForm(f => ({ ...f, title: f.title || label, content }))
+    setPreviewMode(false)
   }
 
   const handleAiGenerate = async () => {
@@ -199,6 +220,40 @@ export default function Contracts() {
       setAiLoading(false)
     }
   }
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return
+    if (!form.content.trim()) { showToast('Add content before saving as template.'); return }
+    setSavingTemplate(true)
+    try {
+      const res = await authFetch('/api/contract-templates', {
+        method: 'post',
+        data: { name: templateName.trim(), content: form.content },
+      })
+      setCustomTemplates(prev => [res.data as ContractTemplate, ...prev])
+      setSaveTemplateMode(false)
+      setTemplateName('')
+      showToast('Template saved.')
+    } catch {
+      showToast('Failed to save template.')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  const handleDeleteTemplate = async (id: number) => {
+    setDeletingTemplate(id)
+    try {
+      await authFetch(`/api/contract-templates/${id}`, { method: 'delete' })
+      setCustomTemplates(prev => prev.filter(t => t.id !== id))
+    } catch {
+      showToast('Failed to delete template.')
+    } finally {
+      setDeletingTemplate(null)
+    }
+  }
+
+  const renderedContent = String(marked.parse(form.content || ''))
 
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
@@ -275,15 +330,15 @@ export default function Contracts() {
       )}
 
       {/* Drawer backdrop */}
-      {drawerOpen && <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 199, backdropFilter: 'blur(2px)' }} />}
+      {drawerOpen && <div onClick={closeDrawer} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 199, backdropFilter: 'blur(2px)' }} />}
 
       {/* Drawer */}
-      <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 200, width: 'min(520px, 100vw)', background: 'var(--bg-elevated)', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' }}>
+      <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 200, width: 'min(560px, 100vw)', background: 'var(--bg-elevated)', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
             {editingContract ? 'Edit Contract' : 'New Contract'}
           </h2>
-          <button onClick={() => setDrawerOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
+          <button onClick={closeDrawer} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -307,15 +362,39 @@ export default function Contracts() {
           </div>
 
           <div>
+            {/* Template selector row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
               <label className="field-label" style={{ margin: 0 }}>Contract content</label>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* Built-in templates */}
                 {TEMPLATES.map(t => (
-                  <button key={t.label} type="button" onClick={() => applyTemplate(t)}
+                  <button key={t.label} type="button" onClick={() => applyTemplate(t.content, t.label)}
                     style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-dim)', cursor: 'pointer' }}>
                     {t.label}
                   </button>
                 ))}
+                {/* Custom templates */}
+                {customTemplates.length > 0 && (
+                  <>
+                    <span style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+                    {customTemplates.map(t => (
+                      <span key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <button type="button" onClick={() => applyTemplate(t.content, t.name)}
+                          style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--green-border)', background: 'var(--green-bg)', color: 'var(--green)', cursor: 'pointer' }}>
+                          {t.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTemplate(t.id)}
+                          disabled={deletingTemplate === t.id}
+                          style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}
+                          title="Delete template"
+                        >×</button>
+                      </span>
+                    ))}
+                  </>
+                )}
+                {/* AI generate */}
                 <button
                   type="button"
                   onClick={handleAiGenerate}
@@ -329,19 +408,75 @@ export default function Contracts() {
                 </button>
               </div>
             </div>
-            <textarea
-              className="input"
-              placeholder="Write your contract terms here, use a template, or click ✨ AI Generate…"
-              rows={14}
-              value={form.content}
-              onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-              style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 13, minHeight: 260 }}
-            />
+
+            {/* Edit / Preview toggle */}
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 8, width: 'fit-content' }}>
+              {(['Edit', 'Preview'] as const).map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setPreviewMode(mode === 'Preview')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, padding: '4px 14px', border: 'none', cursor: 'pointer',
+                    background: (mode === 'Preview') === previewMode ? 'var(--green)' : 'transparent',
+                    color: (mode === 'Preview') === previewMode ? '#FDFAF5' : 'var(--text-dim)',
+                  }}
+                >{mode}</button>
+              ))}
+            </div>
+
+            {previewMode ? (
+              <div
+                className="contract-content"
+                dangerouslySetInnerHTML={{ __html: renderedContent }}
+                style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', minHeight: 260, background: '#fff', fontSize: 14, lineHeight: 1.6, overflowY: 'auto' }}
+              />
+            ) : (
+              <textarea
+                className="input"
+                placeholder="Write your contract terms here, use a template above, or click ✨ AI Generate…"
+                rows={14}
+                value={form.content}
+                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 13, minHeight: 260 }}
+              />
+            )}
           </div>
+
+          {/* Save as Template */}
+          {!saveTemplateMode ? (
+            <button
+              type="button"
+              onClick={() => { setSaveTemplateMode(true); setTemplateName(form.title || '') }}
+              style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}
+            >
+              Save as Template…
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Template name…"
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                style={{ flex: 1, minWidth: 160, fontSize: 13 }}
+              />
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                disabled={savingTemplate || !templateName.trim()}
+                className="btn btn-primary btn-sm"
+              >
+                {savingTemplate ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" onClick={() => setSaveTemplateMode(false)} className="btn btn-ghost btn-sm">Cancel</button>
+            </div>
+          )}
         </form>
 
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexShrink: 0 }}>
-          <button type="button" onClick={() => setDrawerOpen(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+          <button type="button" onClick={closeDrawer} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
             {saving
               ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />{editingContract ? 'Saving…' : 'Creating…'}</>

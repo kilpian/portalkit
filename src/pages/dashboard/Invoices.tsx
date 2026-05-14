@@ -43,6 +43,7 @@ export default function Invoices() {
   const [deleting, setDeleting] = useState<number | null>(null)
   const [toast, setToast] = useState('')
   const [form, setForm] = useState({ client_id: '', invoice_number: '', amount: '', due_date: '', notes: '' })
+  const [notifyClient, setNotifyClient] = useState(false)
   const [formError, setFormError] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
 
@@ -87,6 +88,7 @@ export default function Invoices() {
       due_date: inv.due_date ?? '',
       notes: inv.notes ?? '',
     })
+    setNotifyClient(inv.status === 'sent')
     setFormError('')
     setDrawerOpen(true)
   }
@@ -106,7 +108,7 @@ export default function Invoices() {
         notes: form.notes || null,
       }
       if (editingInvoice) {
-        const res = await authFetch(`/api/invoices/${editingInvoice.id}`, { method: 'put', data: payload })
+        const res = await authFetch(`/api/invoices/${editingInvoice.id}`, { method: 'put', data: { ...payload, notify_client: notifyClient } })
         setInvoices(prev => prev.map(i => i.id === editingInvoice.id ? (res.data as Invoice) : i))
         closeDrawer()
         showToast('Invoice updated.')
@@ -321,6 +323,18 @@ export default function Invoices() {
             <label className="field-label">Notes</label>
             <textarea className="input" placeholder="Any details to include on the invoice…" rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: 'vertical', minHeight: 80 }} />
           </div>
+
+          {editingInvoice && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
+              <input
+                type="checkbox"
+                checked={notifyClient}
+                onChange={e => setNotifyClient(e.target.checked)}
+                style={{ width: 15, height: 15, cursor: 'pointer' }}
+              />
+              Notify client of changes by email
+            </label>
+          )}
         </form>
 
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexShrink: 0 }}>

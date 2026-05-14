@@ -25,7 +25,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5175/signup)",
       "Bash(kill %1)",
       "Bash(curl -s http://localhost:3001/api/test)",
-      "Bash(pkill -f \"node.*server/index.js\")"
+      "Bash(pkill -f \"node.*server/index.js\")",
+      "Bash(npx playwright *)"
     ]
   }
 }
