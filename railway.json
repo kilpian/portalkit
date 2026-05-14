@@ -1,6 +1,7 @@
 {
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install --production=false"
   },
   "deploy": {
     "startCommand": "node server/index.js",
