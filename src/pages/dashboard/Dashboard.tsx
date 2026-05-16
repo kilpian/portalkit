@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, type DashboardStats, type Client } from '../../lib/api'
@@ -56,9 +56,21 @@ export default function Dashboard() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paymentStatus = searchParams.get('payment')
+  const [upgrading, setUpgrading] = useState(false)
+
   const days = trialDaysLeft(user)
 
   const firstName = clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0] || ''
+
+  useEffect(() => {
+    if (paymentStatus) {
+      const t = setTimeout(() => setSearchParams({}, { replace: true }), 10000)
+      return () => clearTimeout(t)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentStatus])
 
   useEffect(() => {
     Promise.all([
@@ -81,7 +93,15 @@ export default function Dashboard() {
     return 'Good evening'
   }
 
-  const STRIPE_UPGRADE_URL = 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00'
+  const createCheckout = async () => {
+    setUpgrading(true)
+    try {
+      const res = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
+      window.location.href = res.data.url
+    } catch {
+      setUpgrading(false)
+    }
+  }
 
   const [onboardingDone, setOnboardingDone] = useState(false)
   const showOnboarding = !onboardingDone && !loading && !user?.business_name && (stats?.total_clients === 0)
@@ -100,7 +120,31 @@ export default function Dashboard() {
             <div style={{ fontSize: 48, marginBottom: 16 }}>⏰</div>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Your trial has ended</h2>
             <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.</p>
-            <a href={STRIPE_UPGRADE_URL} className="btn btn-primary" style={{ display: 'inline-block', fontSize: 15, padding: '13px 28px' }}>Upgrade Now →</a>
+            <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
+              {upgrading ? 'Loading…' : 'Upgrade Now →'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {paymentStatus === 'success' && (
+        <div style={{ background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: 'var(--color-green)', fontWeight: 600 }}>
+            🎉 You're all set! Your 14-day trial has started. You won't be charged until{' '}
+            {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+          </p>
+          <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--color-green)', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+        </div>
+      )}
+
+      {paymentStatus === 'cancelled' && (
+        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>No worries — you can add your card anytime in Settings to keep access after your trial.</p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--gold-border)', background: 'transparent', color: 'var(--gold-dim)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {upgrading ? 'Loading…' : 'Add Payment Method →'}
+            </button>
+            <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer' }}>✕</button>
           </div>
         </div>
       )}
@@ -108,14 +152,18 @@ export default function Dashboard() {
       {showRedBanner && (
         <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, color: '#DC2626', fontWeight: 600 }}>⚠️ Your trial expires in {days} day{days === 1 ? '' : 's'} — upgrade to keep your portals active.</p>
-          <a href={STRIPE_UPGRADE_URL} style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Upgrade Now →</a>
+          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+            {upgrading ? 'Loading…' : 'Upgrade Now →'}
+          </button>
         </div>
       )}
 
       {showAmberBanner && (
         <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>{days} days left in your trial.</p>
-          <a href={STRIPE_UPGRADE_URL} style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold-dim)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Upgrade Now →</a>
+          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold-dim)', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+            {upgrading ? 'Loading…' : 'Upgrade Now →'}
+          </button>
         </div>
       )}
 

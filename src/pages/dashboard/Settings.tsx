@@ -38,6 +38,7 @@ export default function Settings() {
 
   // Billing
   const [billingLoading, setBillingLoading] = useState(false)
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
 
   // Delete
   const [deleteModal, setDeleteModal] = useState(false)
@@ -103,6 +104,16 @@ export default function Settings() {
       setBrandingErr('Failed to save branding.')
     } finally {
       setBrandingSaving(false)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    setUpgradeLoading(true)
+    try {
+      const res = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
+      window.location.href = res.data.url
+    } catch {
+      setUpgradeLoading(false)
     }
   }
 
@@ -239,26 +250,21 @@ export default function Settings() {
                   {billingLoading ? 'Loading…' : 'Manage Subscription'}
                 </button>
               ) : (
-                <a
-                  href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={handleUpgrade}
+                  disabled={upgradeLoading}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                     padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
                     color: '#1B4332', background: '#C9A84C',
-                    textDecoration: 'none', whiteSpace: 'nowrap',
+                    border: 'none', whiteSpace: 'nowrap', cursor: upgradeLoading ? 'not-allowed' : 'pointer',
                     boxShadow: '0 1px 4px rgba(201,168,76,0.35)',
+                    opacity: upgradeLoading ? 0.7 : 1,
                     transition: 'opacity 0.15s',
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.88' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
                 >
-                  Upgrade to All-In — $39/mo
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
-                  </svg>
-                </a>
+                  {upgradeLoading ? 'Loading…' : 'Upgrade to All-In — $39/mo'}
+                </button>
               )}
             </div>
           </div>

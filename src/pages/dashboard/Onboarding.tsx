@@ -9,25 +9,13 @@ interface OnboardingProps {
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const { setUser } = usePortalAuth()
   const { authFetch } = useApi()
-  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [saving, setSaving] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
-  // Step 1
   const [businessName, setBusinessName] = useState('')
   const [brandColor, setBrandColor] = useState('#1B4332')
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
-
-  // Step 2
-  const [clientName, setClientName] = useState('')
-  const [clientEmail, setClientEmail] = useState('')
-  const [eventDate, setEventDate] = useState('')
-
-  // Step 3
-  const [portalToken, setPortalToken] = useState('')
-  const [copied, setCopied] = useState(false)
-
-  const portalLink = portalToken ? `${window.location.origin}/portal/${portalToken}` : ''
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -37,7 +25,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     reader.readAsDataURL(file)
   }
 
-  const handleStep1 = async () => {
+  const handleSave = async () => {
     if (!businessName.trim()) return
     setSaving(true)
     try {
@@ -45,53 +33,44 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       if (logoDataUrl) payload.logo_url = logoDataUrl
       const res = await authFetch('/api/users/me', { method: 'put', data: payload })
       setUser(res.data)
-      setStep(2)
-    } catch { /* stay on step */ } finally { setSaving(false) }
-  }
 
-  const handleStep2 = async () => {
-    if (!clientName.trim()) return
-    setSaving(true)
-    try {
-      const res = await authFetch('/api/clients', {
-        method: 'post',
-        data: { name: clientName.trim(), email: clientEmail.trim() || undefined, event_date: eventDate || undefined },
-      })
-      setPortalToken(res.data.portal_token)
-      setStep(3)
-    } catch { /* stay on step */ } finally { setSaving(false) }
-  }
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(portalLink).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+      setRedirecting(true)
+      const checkoutRes = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
+      window.location.href = checkoutRes.data.url
+    } catch {
+      setSaving(false)
+      setRedirecting(false)
+    }
   }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)', padding: '24px 16px' }}>
       <div style={{ width: '100%', maxWidth: 480 }}>
 
-        {/* Progress */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 36 }}>
-          {([1, 2, 3] as const).map(n => (
-            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: n <= step ? 'var(--green)' : 'var(--bg-secondary)', color: n <= step ? '#FDFAF5' : 'var(--text-dim)', border: `1px solid ${n <= step ? 'var(--green)' : 'var(--border)'}`, transition: 'all 0.2s' }}>
-                {n < step ? '✓' : n}
-              </div>
-              {n < 3 && <div style={{ width: 32, height: 2, background: n < step ? 'var(--green)' : 'var(--border)', transition: 'background 0.2s' }} />}
-            </div>
-          ))}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.04em', marginBottom: 6 }}>
+            Portal<em style={{ fontStyle: 'normal', color: '#C9A84C' }}>Kit</em>
+          </div>
+          <p style={{ fontSize: 14, color: 'var(--text-dim)' }}>Let's set up your account</p>
         </div>
 
         <div className="card" style={{ padding: '40px 36px' }}>
-
-          {step === 1 && (
+          {redirecting ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 20px' }} />
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>Redirecting to checkout…</p>
+              <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>You'll start your 14-day free trial. No charge today.</p>
+            </div>
+          ) : (
             <>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--green)', marginBottom: 6 }}>Set up your profile</h1>
               <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 28, lineHeight: 1.5 }}>This is what your clients see when they open their portal.</p>
+
               <div style={{ marginBottom: 18 }}>
                 <label className="field-label">Business name <span style={{ color: 'var(--color-red)' }}>*</span></label>
                 <input className="input" type="text" placeholder="Your Photography Studio" value={businessName} onChange={e => setBusinessName(e.target.value)} autoFocus />
               </div>
+
               <div style={{ marginBottom: 18 }}>
                 <label className="field-label">Brand color</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -99,15 +78,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'monospace' }}>{brandColor}</span>
                 </div>
               </div>
+
               <div style={{ marginBottom: 28 }}>
                 <label className="field-label">Logo <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 400 }}>(optional)</span></label>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleLogoChange}
-                  style={{ display: 'none' }}
-                />
+                <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleLogoChange} style={{ display: 'none' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {logoDataUrl ? (
                     <img src={logoDataUrl} alt="Logo preview" style={{ height: 48, maxWidth: 120, objectFit: 'contain', borderRadius: 6, border: '1px solid var(--border)' }} />
@@ -128,51 +102,24 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   </div>
                 </div>
               </div>
-              <button onClick={handleStep1} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%' }}>
-                {saving ? 'Saving…' : 'Next →'}
+
+              <button onClick={handleSave} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%', marginBottom: 14 }}>
+                {saving ? 'Saving…' : 'Continue to Payment →'}
+              </button>
+
+              <p style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
+                14-day free trial · No charge today · Cancel anytime
+              </p>
+
+              <button
+                type="button"
+                onClick={onComplete}
+                style={{ display: 'block', width: '100%', marginTop: 12, fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'center' }}
+              >
+                Skip for now →
               </button>
             </>
           )}
-
-          {step === 2 && (
-            <>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--green)', marginBottom: 6 }}>Create your first client</h1>
-              <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 28, lineHeight: 1.5 }}>A private portal link will be generated for them instantly.</p>
-              <div style={{ marginBottom: 16 }}>
-                <label className="field-label">Client name <span style={{ color: 'var(--color-red)' }}>*</span></label>
-                <input className="input" type="text" placeholder="Jane & Mark Smith" value={clientName} onChange={e => setClientName(e.target.value)} autoFocus />
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <label className="field-label">Email address</label>
-                <input className="input" type="email" placeholder="jane@example.com" value={clientEmail} onChange={e => setClientEmail(e.target.value)} />
-              </div>
-              <div style={{ marginBottom: 28 }}>
-                <label className="field-label">Event date</label>
-                <input className="input" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
-              </div>
-              <button onClick={handleStep2} disabled={saving || !clientName.trim()} className="btn btn-primary" style={{ width: '100%' }}>
-                {saving ? 'Creating…' : 'Create Portal →'}
-              </button>
-            </>
-          )}
-
-          {step === 3 && (
-            <>
-              <div style={{ fontSize: 48, marginBottom: 16, textAlign: 'center' }}>🎉</div>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--green)', marginBottom: 6, textAlign: 'center' }}>You're ready!</h1>
-              <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 24, textAlign: 'center', lineHeight: 1.5 }}>Share this link with your client. They can view their portal, sign contracts, and see invoices.</p>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <p style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{portalLink}</p>
-                <button onClick={copyLink} style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: `1px solid ${copied ? 'var(--color-green-border)' : 'var(--border)'}`, background: copied ? 'var(--color-green-bg)' : 'transparent', color: copied ? 'var(--color-green)' : 'var(--text-dim)', cursor: 'pointer' }}>
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-              <button onClick={onComplete} className="btn btn-primary" style={{ display: 'block', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>
-                Go to Dashboard →
-              </button>
-            </>
-          )}
-
         </div>
       </div>
     </div>

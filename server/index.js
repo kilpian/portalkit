@@ -92,14 +92,29 @@ app.post('/api/stripe/webhook',
         }
         case 'customer.subscription.created': {
           const sub = event.data.object
-          await pool.query(
-            'UPDATE users SET plan=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3',
-            ['active', sub.id, sub.customer]
-          )
+          const subUserId = sub.metadata?.user_id
+          let rowsUpdated = 0
+          if (subUserId) {
+            const r = await pool.query(
+              'UPDATE users SET plan=$1, stripe_subscription_id=$2, stripe_customer_id=$4 WHERE id=$3',
+              ['active', sub.id, subUserId, sub.customer]
+            )
+            rowsUpdated = r.rowCount ?? 0
+          }
+          if (!rowsUpdated) {
+            await pool.query(
+              'UPDATE users SET plan=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3',
+              ['active', sub.id, sub.customer]
+            )
+          }
           break
         }
         case 'invoice.payment_succeeded': {
           const inv = event.data.object
+          await pool.query(
+            'UPDATE users SET plan=$1 WHERE stripe_customer_id=$2',
+            ['active', inv.customer]
+          ).catch(() => {})
           if (inv.billing_reason === 'subscription_create') {
             const userResult = await pool.query(
               'SELECT email, full_name FROM users WHERE stripe_customer_id=$1',
@@ -131,14 +146,57 @@ app.post('/api/stripe/webhook',
         case 'invoice.payment_failed': {
           const inv = event.data.object
           console.warn(`Payment failed for customer ${inv.customer}: ${inv.id}`)
+          if (resend) {
+            try {
+              const userResult = await pool.query('SELECT email, full_name FROM users WHERE stripe_customer_id=$1', [inv.customer])
+              const u = userResult.rows[0]
+              if (u) {
+                await resend.emails.send({
+                  from: 'PortalKit <hello@mail.getportalkit.com>',
+                  to: u.email,
+                  subject: 'Action required — payment failed',
+                  html: emailTemplate({
+                    title: 'Payment Failed',
+                    preheader: 'Your PortalKit payment failed — please update your card.',
+                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment failed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${u.full_name?.split(' ')[0] || 'there'}, your recent PortalKit payment failed. Please update your payment method to keep access to your client portals.</p>`,
+                    ctaText: 'Update Payment Method →',
+                    ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+                    footerNote: 'PortalKit by Kilpian LLC',
+                  }),
+                })
+              }
+            } catch (emailErr) {
+              console.error('Payment failed email error:', emailErr)
+            }
+          }
           break
         }
         case 'customer.subscription.deleted': {
           const sub = event.data.object
-          await pool.query(
-            'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2',
-            ['free', sub.id]
+          const cancelResult = await pool.query(
+            'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2 RETURNING email, full_name',
+            ['cancelled', sub.id]
           )
+          const u = cancelResult.rows[0]
+          if (u && resend) {
+            try {
+              await resend.emails.send({
+                from: 'PortalKit <hello@mail.getportalkit.com>',
+                to: u.email,
+                subject: 'Your PortalKit subscription has been cancelled',
+                html: emailTemplate({
+                  title: 'Subscription Cancelled',
+                  preheader: 'Your PortalKit subscription has ended.',
+                  body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Subscription cancelled</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${u.full_name?.split(' ')[0] || 'there'}, your PortalKit subscription has been cancelled. You can resubscribe at any time to regain access to your client portals.</p>`,
+                  ctaText: 'Resubscribe →',
+                  ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+                  footerNote: 'PortalKit by Kilpian LLC',
+                }),
+              })
+            } catch (emailErr) {
+              console.error('Cancellation email error:', emailErr)
+            }
+          }
           break
         }
         case 'customer.subscription.updated': {
@@ -241,11 +299,6 @@ const aiLimiter = rateLimit({
   message: { error: 'AI usage limit reached. Please wait before generating more content.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    if (req.user?.id) return `user_${req.user.id}`
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown'
-    return ip.replace(/^::ffff:/, '')
-  },
 })
 
 function sanitize(str) {
@@ -604,6 +657,48 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Portal error:', err)
     res.status(500).json({ error: 'Failed to create portal session' })
+  }
+})
+
+app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const priceId = process.env.STRIPE_PRICE_PORTALKIT
+    if (!priceId) return res.status(500).json({ error: 'Price not configured' })
+
+    const userResult = await pool.query('SELECT email, stripe_customer_id FROM users WHERE id=$1', [req.userId])
+    const user = userResult.rows[0]
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    let customerId = user.stripe_customer_id
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId: String(req.userId) },
+      })
+      customerId = customer.id
+      await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [customerId, req.userId])
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: 14,
+        metadata: { user_id: String(req.user.id), clerk_id: req.user.clerk_id || '' },
+      },
+      success_url: `${frontendUrl}/dashboard?payment=success`,
+      cancel_url: `${frontendUrl}/dashboard?payment=cancelled`,
+      metadata: { user_id: String(req.user.id) },
+    })
+
+    res.json({ url: session.url })
+  } catch (err) {
+    console.error('Checkout with trial error:', err)
+    res.status(500).json({ error: 'Failed to create checkout session' })
   }
 })
 
