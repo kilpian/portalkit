@@ -35,7 +35,12 @@ const PORT = process.env.PORT || 3001
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL environment variable is required')
 if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY environment variable is required')
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
+})
 
 app.use(cors({
   origin: [
@@ -236,7 +241,11 @@ const aiLimiter = rateLimit({
   message: { error: 'AI usage limit reached. Please wait before generating more content.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.userId?.toString() || req.ip?.replace(/^.*:/, '') || 'unknown',
+  keyGenerator: (req) => {
+    if (req.user?.id) return `user_${req.user.id}`
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown'
+    return ip.replace(/^::ffff:/, '')
+  },
 })
 
 function sanitize(str) {
