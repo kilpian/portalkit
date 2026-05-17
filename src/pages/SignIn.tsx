@@ -22,23 +22,40 @@ export default function SignInPage() {
           path="/signin"
           afterSignInUrl="/dashboard"
           appearance={{
-            baseTheme: undefined,
             variables: {
               colorPrimary: '#1B4332',
               colorBackground: '#FDFAF5',
               colorInputBackground: '#FFFFFF',
-              colorInputText: '#1B4332',
+              colorInputText: '#374151',
               colorText: '#374151',
               colorTextSecondary: '#6B7280',
-              colorNeutral: '#E8E0D0',
+              colorNeutral: '#1B4332',
               fontFamily: 'Inter, sans-serif',
               borderRadius: '8px',
             },
             elements: {
-              card: { background: '#FDFAF5' },
-              rootBox: { background: '#FDFAF5' },
-              formButtonPrimary: { background: '#1B4332', color: 'white' },
-              socialButtonsBlockButton: { border: '1px solid #E8E0D0', background: 'white' },
+              rootBox: { width: '100%' },
+              card: {
+                backgroundColor: '#FDFAF5',
+                boxShadow: 'none',
+                border: '1px solid #E8E0D0',
+                borderRadius: '12px',
+              },
+              headerTitle: {
+                color: '#1B4332',
+                fontFamily: "'Bricolage Grotesque', sans-serif",
+              },
+              headerSubtitle: { color: '#6B7280' },
+              socialButtonsBlockButton: {
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D4C9B4',
+                color: '#374151',
+                fontWeight: '500',
+              },
+              socialButtonsBlockButtonText: { color: '#374151', fontWeight: '500' },
+              formButtonPrimary: { backgroundColor: '#1B4332', color: '#FDFAF5' },
+              footerActionLink: { color: '#1B4332' },
+              identityPreviewEditButton: { color: '#1B4332' },
             },
           }}
         />

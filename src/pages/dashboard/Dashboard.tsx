@@ -107,9 +107,13 @@ export default function Dashboard() {
   const showOnboarding = !onboardingDone && !loading && !user?.business_name && (stats?.total_clients === 0)
   if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
+  const [greenDismissed, setGreenDismissed] = useState(() => localStorage.getItem('trial-welcome-dismissed') === 'true')
+  const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
+
   const trialExpired = user?.plan === 'trial' && days === 0
+  const showGreenBanner = user?.plan === 'trial' && days > 11 && !greenDismissed
+  const showAmberBanner = user?.plan === 'trial' && days > 3 && days <= 11
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
-  const showAmberBanner = user?.plan === 'trial' && days > 3 && days <= 7
 
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
@@ -123,6 +127,20 @@ export default function Dashboard() {
             <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
               {upgrading ? 'Loading…' : 'Upgrade Now →'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showGreenBanner && (
+        <div style={{ background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: 'var(--color-green)', fontWeight: 600 }}>
+            🎉 Welcome! Your 14-day free trial has started. Add your payment method to keep access after your trial.
+          </p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--color-green-border)', background: 'transparent', color: 'var(--color-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {upgrading ? 'Loading…' : 'Add Payment Method →'}
+            </button>
+            <button onClick={dismissGreenBanner} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--color-green)', cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
         </div>
       )}
@@ -160,7 +178,7 @@ export default function Dashboard() {
 
       {showAmberBanner && (
         <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>{days} days left in your trial.</p>
+          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>{days} day{days === 1 ? '' : 's'} left in your trial — add a payment method to keep access.</p>
           <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold-dim)', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
             {upgrading ? 'Loading…' : 'Upgrade Now →'}
           </button>

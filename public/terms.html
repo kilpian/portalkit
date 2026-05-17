@@ -238,6 +238,16 @@
       margin-bottom: 6px;
     }
 
+    /* ── Notice ── */
+    .legal__notice {
+      margin-top: 48px;
+      padding: 16px 20px;
+      background: var(--cream-2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .legal__notice p { font-size: .8125rem; color: var(--text-muted); line-height: 1.6; }
+
     /* ── Footer ── */
     .footer {
       background: #0C2016;
@@ -295,7 +305,7 @@
   <div class="nav__inner">
     <a href="/" class="nav__logo">Portal<em>Kit</em></a>
     <div class="nav__right">
-      <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold nav__cta">Start Free Trial</a>
+      <a href="/signup" class="btn btn--gold nav__cta">Start Free Trial</a>
       <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
         <span class="nav__bar"></span>
         <span class="nav__bar"></span>
@@ -308,7 +318,7 @@
     <a href="/#how-it-works" class="nav__mobile-link">How It Works</a>
     <a href="/#pricing" class="nav__mobile-link">Pricing</a>
     <a href="/#faq" class="nav__mobile-link">FAQ</a>
-    <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
+    <a href="/signup" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
   </div>
 </nav>
 
@@ -317,7 +327,7 @@
   <div class="container">
     <span class="page-header__eyebrow">Legal</span>
     <h1 class="page-header__h">Terms of Service</h1>
-    <p class="page-header__meta">Effective date: May 11, 2026 &middot; Kilpian LLC, doing business as PortalKit</p>
+    <p class="page-header__meta">Effective date: May 11, 2026</p>
   </div>
 </div>
 
@@ -327,76 +337,85 @@
     <div class="legal__inner">
 
       <div class="legal__section">
-        <h2 class="legal__h">1. Acceptance of Terms</h2>
-        <p class="legal__p">By accessing or using PortalKit, you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to these terms, you may not use the service. These terms apply to all users of the platform, including photographers and their clients.</p>
+        <h2 class="legal__h">By using PortalKit, you agree to these terms</h2>
+        <p class="legal__p">These terms apply to everyone who uses PortalKit — photographers who manage their business on the platform and their clients who access portals. If you don't agree, please don't use the service.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">2. Service Description</h2>
-        <p class="legal__p">PortalKit is a client portal platform designed for wedding photographers. It provides tools for contract management, e-signatures, invoice creation, payment collection, file sharing, and client communication — all within a single branded portal.</p>
-        <p class="legal__p">We reserve the right to modify, suspend, or discontinue any aspect of the service at any time with reasonable notice.</p>
+        <h2 class="legal__h">The service</h2>
+        <p class="legal__p">PortalKit is a client portal platform for wedding photographers. It lets you manage contracts, e-signatures, invoices, file sharing, and client messaging in one branded space.</p>
+        <p class="legal__p">PortalKit is a tool — it doesn't provide legal, financial, or professional advice. You're responsible for the contracts you send and the terms you set with your own clients.</p>
+        <p class="legal__p">We may update, improve, or occasionally remove features. We'll give you reasonable notice for changes that significantly affect how you use the product.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">3. Account Registration</h2>
-        <p class="legal__p">To use PortalKit, you must register for an account by providing accurate and complete information. You agree to keep your account information up to date.</p>
-        <p class="legal__p">You are solely responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> if you suspect unauthorized use of your account.</p>
+        <h2 class="legal__h">Your account</h2>
+        <p class="legal__p">You must provide accurate information when creating your account and keep it up to date. You're responsible for everything that happens under your account — keep your login credentials secure. If you suspect unauthorized access, contact us immediately at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a>.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">4. Payment Terms</h2>
-        <p class="legal__p">PortalKit is offered at <strong>$39 per month</strong>, billed monthly via Stripe. All prices are in USD.</p>
-        <p class="legal__p">New accounts receive a <strong>14-day free trial</strong>. No credit card is required at signup. At the end of your trial, you will be prompted to enter a payment method to continue using the service.</p>
-        <p class="legal__p">Subscription fees are charged on the same day each month from the date your trial ends. All payments are processed securely by Stripe.</p>
+        <h2 class="legal__h">Payment</h2>
+        <p class="legal__p">PortalKit costs <strong>$39/month</strong>, billed monthly. All prices are in USD and processed securely by Stripe.</p>
+        <p class="legal__p">New accounts get a <strong>14-day free trial</strong> with a payment method on file. Your card won't be charged until the trial ends. Subscriptions auto-renew monthly and you can cancel anytime.</p>
+        <p class="legal__p">No refunds for partial months. If you cancel mid-cycle, you keep access until the end of the period — then billing stops.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">5. Cancellation Policy</h2>
-        <p class="legal__p">You may cancel your subscription at any time from your account settings. Cancellation takes effect at the end of your current billing period — you will retain full access to PortalKit until that date.</p>
-        <p class="legal__p">We do not provide refunds for partial months. If you cancel mid-cycle, you will not be charged again, but the current period will not be refunded.</p>
-      </div>
-
-      <div class="legal__section">
-        <h2 class="legal__h">6. Trial Abuse</h2>
-        <p class="legal__p">The free trial is offered once per person. Creating multiple accounts to access repeated free trials is prohibited. We reserve the right to terminate accounts that abuse the trial system, including accounts created with the intent to avoid payment.</p>
-      </div>
-
-      <div class="legal__section">
-        <h2 class="legal__h">7. Acceptable Use</h2>
-        <p class="legal__p">You agree not to use PortalKit for any of the following:</p>
+        <h2 class="legal__h">What you can do</h2>
         <ul class="legal__ul">
-          <li>Any illegal activity or in violation of any applicable law or regulation.</li>
-          <li>Sending unsolicited commercial messages (spam) to clients or third parties.</li>
-          <li>Impersonating any person or entity, or falsely representing your affiliation with any person or entity.</li>
-          <li>Uploading or transmitting malicious files, viruses, or any software intended to damage or disrupt systems.</li>
-          <li>Attempting to gain unauthorized access to PortalKit systems or other users' accounts.</li>
+          <li>Use PortalKit to manage your photography clients and business.</li>
+          <li>Create client portals, send contracts, collect invoices, and share files.</li>
+          <li>Use AI features to draft contract language and client messages.</li>
+          <li>Customize portals with your own branding.</li>
         </ul>
-        <p class="legal__p">Violation of this section may result in immediate termination of your account without refund.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">8. Intellectual Property</h2>
-        <p class="legal__p">PortalKit and its underlying software, design, and branding are owned by Kilpian LLC. All rights reserved. You may not copy, modify, distribute, or reverse-engineer any part of the platform without our prior written consent.</p>
-        <p class="legal__p">You retain full ownership of all content you upload to PortalKit — including contracts, photos, documents, and client data. By uploading content, you grant PortalKit a limited license to store and display that content solely for the purpose of providing the service to you.</p>
+        <h2 class="legal__h">What you cannot do</h2>
+        <ul class="legal__ul">
+          <li>Use PortalKit for any illegal activity or to violate anyone's rights.</li>
+          <li>Send spam or unsolicited messages through the platform.</li>
+          <li>Impersonate another person or business.</li>
+          <li>Abuse the AI features — generating misleading, harmful, or fraudulent content is prohibited.</li>
+          <li>Share account access with others or resell access to the platform.</li>
+          <li>Attempt to reverse-engineer, hack, or disrupt PortalKit's systems.</li>
+        </ul>
+        <p class="legal__p">Violations may result in immediate account termination without refund.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">9. Limitation of Liability</h2>
-        <p class="legal__p">PortalKit is provided "as is" without warranties of any kind, express or implied. We do not guarantee that the service will be uninterrupted, error-free, or completely secure.</p>
-        <p class="legal__p">To the maximum extent permitted by applicable law, Kilpian LLC's total liability to you for any claim arising from or related to your use of PortalKit shall not exceed the total amount you paid us in the three (3) months immediately preceding the event giving rise to the claim.</p>
-        <p class="legal__p">We are not liable for any indirect, incidental, consequential, or punitive damages arising from your use of the service.</p>
+        <h2 class="legal__h">Your content</h2>
+        <p class="legal__p">You own everything you upload — contracts, files, client data, images. By using PortalKit, you grant us a limited license to store and display your content solely to provide the service to you. We don't use your content for anything else.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">10. Governing Law</h2>
-        <p class="legal__p">These Terms of Service are governed by the laws of the State of Maryland, United States, without regard to its conflict of law provisions. Any disputes arising under these terms shall be subject to the exclusive jurisdiction of the courts located in Maryland.</p>
+        <h2 class="legal__h">Our content</h2>
+        <p class="legal__p">PortalKit — the platform, code, design, and branding — belongs to us. You may not copy, modify, distribute, or reverse-engineer any part of it without written permission.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">11. Contact</h2>
-        <p class="legal__p">If you have questions about these Terms of Service, please contact us:</p>
-        <p class="legal__p"><strong>Kilpian LLC, doing business as PortalKit</strong><br>
-        Email: <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a></p>
+        <h2 class="legal__h">Limitation of liability</h2>
+        <p class="legal__p">PortalKit is provided as-is. We do our best to keep it reliable and secure, but we can't guarantee it will always be available or error-free.</p>
+        <p class="legal__p">Our total liability to you for any claim is capped at the amount you paid us in the 3 months before the claim arose. We're not liable for indirect, incidental, or consequential damages.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">Cancellation</h2>
+        <p class="legal__p">Cancel anytime from your account settings. You keep full access until the end of your billing period. No partial-month refunds.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">Changes to these terms</h2>
+        <p class="legal__p">We may update these terms. For significant changes, we'll email you before they take effect. Continuing to use PortalKit after that means you accept the updated terms.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">Contact</h2>
+        <p class="legal__p">Questions? Email <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a>.</p>
+      </div>
+
+      <div class="legal__notice">
+        <p>PortalKit is operated by Kilpian LLC. Governing law: State of Maryland, United States. Disputes resolved in Maryland courts.</p>
       </div>
 
     </div>

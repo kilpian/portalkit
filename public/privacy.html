@@ -238,6 +238,43 @@
       margin-bottom: 6px;
     }
 
+    /* ── Table ── */
+    .legal__table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      margin-bottom: 12px;
+      font-size: .875rem;
+    }
+    .legal__table th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--green-pale);
+      color: var(--green);
+      font-weight: 600;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      border-bottom: 2px solid var(--border);
+    }
+    .legal__table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      line-height: 1.5;
+      vertical-align: top;
+    }
+    .legal__table td a { color: var(--green); text-decoration: underline; text-underline-offset: 2px; }
+    .legal__table tr:last-child td { border-bottom: none; }
+    .legal__notice {
+      margin-top: 48px;
+      padding: 16px 20px;
+      background: var(--cream-2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .legal__notice p { font-size: .8125rem; color: var(--text-muted); line-height: 1.6; }
+
     /* ── Footer ── */
     .footer {
       background: #0C2016;
@@ -295,7 +332,7 @@
   <div class="nav__inner">
     <a href="/" class="nav__logo">Portal<em>Kit</em></a>
     <div class="nav__right">
-      <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold nav__cta">Start Free Trial</a>
+      <a href="/signup" class="btn btn--gold nav__cta">Start Free Trial</a>
       <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
         <span class="nav__bar"></span>
         <span class="nav__bar"></span>
@@ -308,7 +345,7 @@
     <a href="/#how-it-works" class="nav__mobile-link">How It Works</a>
     <a href="/#pricing" class="nav__mobile-link">Pricing</a>
     <a href="/#faq" class="nav__mobile-link">FAQ</a>
-    <a href="https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00" target="_blank" rel="noopener noreferrer" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
+    <a href="/signup" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
   </div>
 </nav>
 
@@ -316,8 +353,8 @@
 <div class="page-header">
   <div class="container">
     <span class="page-header__eyebrow">Legal</span>
-    <h1 class="page-header__h">Privacy Policy</h1>
-    <p class="page-header__meta">Effective date: May 11, 2026 &middot; Kilpian LLC, doing business as PortalKit</p>
+    <h1 class="page-header__h">Your Privacy at PortalKit</h1>
+    <p class="page-header__meta">Effective date: May 11, 2026</p>
   </div>
 </div>
 
@@ -327,71 +364,92 @@
     <div class="legal__inner">
 
       <div class="legal__section">
-        <h2 class="legal__h">1. Information We Collect</h2>
-        <p class="legal__p">When you create an account or use PortalKit, we collect the following types of information:</p>
+        <h2 class="legal__h">The short version</h2>
+        <p class="legal__p">We collect your name, email, and usage data to run PortalKit. Your payment info goes directly to Stripe — we never see your card number. We don't sell your data. Ever. Here's the full picture.</p>
+      </div>
+
+      <div class="legal__section">
+        <h2 class="legal__h">What we collect</h2>
         <ul class="legal__ul">
-          <li><strong>Name and email address</strong> — collected at account registration and used to identify your account and communicate with you.</li>
-          <li><strong>Payment information</strong> — billing is handled entirely by Stripe. We never store, see, or have access to your credit card details. Stripe's privacy policy governs payment data.</li>
-          <li><strong>Usage data</strong> — we collect information about how you interact with the PortalKit platform, including pages visited, features used, and actions taken, to improve the product.</li>
+          <li><strong>Name and email</strong> — provided when you create an account. Used to identify you and send you important account emails.</li>
+          <li><strong>Payment method</strong> — handled entirely by Stripe. PortalKit never stores or sees your card number. Stripe is PCI-DSS compliant.</li>
+          <li><strong>Usage data</strong> — pages visited, features used, and actions taken inside the app. Helps us understand what's working and what to improve.</li>
         </ul>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">2. How We Use Your Information</h2>
-        <p class="legal__p">We use the information we collect for the following purposes:</p>
+        <h2 class="legal__h">What we never do</h2>
         <ul class="legal__ul">
-          <li>To provide and operate the PortalKit service.</li>
-          <li>To send transactional emails such as account confirmations, invoices, and important service updates.</li>
-          <li>To improve and develop the product based on how users interact with it.</li>
-          <li>To respond to support requests and communicate with you about your account.</li>
+          <li>We never sell your personal data to anyone.</li>
+          <li>We never share your data with advertisers.</li>
+          <li>We never use your clients' information for anything other than delivering your portal.</li>
         </ul>
-        <p class="legal__p">We do not use your data for advertising or sell it to third parties.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">3. Data Sharing</h2>
-        <p class="legal__p">We do not sell, rent, or trade your personal data. We share your data only with the following trusted service providers, and only to the extent necessary to provide the service:</p>
-        <ul class="legal__ul">
-          <li><strong>Stripe</strong> — payment processing. Stripe is PCI-DSS compliant and handles all billing data directly.</li>
-          <li><strong>Brevo</strong> — transactional email delivery (account notifications, receipts).</li>
-        </ul>
-        <p class="legal__p">We may also disclose your information if required by law or to protect our legal rights.</p>
+        <h2 class="legal__h">Third-party services we use</h2>
+        <p class="legal__p">PortalKit relies on the following services to operate. Each has its own privacy policy governing data they collect directly.</p>
+        <table class="legal__table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Purpose</th>
+              <th>Their privacy policy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Stripe</strong></td>
+              <td>Payment processing</td>
+              <td><a href="https://stripe.com/privacy" target="_blank" rel="noopener">stripe.com/privacy</a></td>
+            </tr>
+            <tr>
+              <td><strong>Clerk</strong></td>
+              <td>Authentication</td>
+              <td><a href="https://clerk.com/privacy" target="_blank" rel="noopener">clerk.com/privacy</a></td>
+            </tr>
+            <tr>
+              <td><strong>Resend</strong></td>
+              <td>Transactional email</td>
+              <td><a href="https://resend.com/privacy" target="_blank" rel="noopener">resend.com/privacy</a></td>
+            </tr>
+            <tr>
+              <td><strong>Anthropic</strong></td>
+              <td>AI features</td>
+              <td><a href="https://anthropic.com/privacy" target="_blank" rel="noopener">anthropic.com/privacy</a></td>
+            </tr>
+            <tr>
+              <td><strong>Railway</strong></td>
+              <td>Infrastructure</td>
+              <td><a href="https://railway.app/privacy" target="_blank" rel="noopener">railway.app/privacy</a></td>
+            </tr>
+            <tr>
+              <td><strong>Vercel</strong></td>
+              <td>Hosting</td>
+              <td><a href="https://vercel.com/privacy" target="_blank" rel="noopener">vercel.com/privacy</a></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="legal__p">PortalKit does not control how these services handle data collected directly by them.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">4. Cookies</h2>
-        <p class="legal__p">We use essential cookies only. These cookies are strictly necessary for the operation of PortalKit — specifically for session management so you remain logged in while using the platform.</p>
-        <p class="legal__p">We do not use tracking cookies, advertising cookies, or third-party analytics cookies without your explicit consent.</p>
+        <h2 class="legal__h">Your rights</h2>
+        <p class="legal__p">You can request access to, correction of, deletion of, or a copy of your personal data at any time. Email us at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> and we'll respond within 5 business days.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">5. Data Retention</h2>
-        <p class="legal__p">We retain your personal data for as long as your account is active. If you cancel your subscription, we will retain your data for 30 days after the cancellation date, after which it will be deleted from our systems.</p>
-        <p class="legal__p">You may request earlier deletion at any time — see Section 6 for details.</p>
+        <h2 class="legal__h">Data retention</h2>
+        <p class="legal__p">We keep your data while your account is active. After you cancel, we retain it for 30 days before deleting it — giving you time to change your mind or export anything you need.</p>
       </div>
 
       <div class="legal__section">
-        <h2 class="legal__h">6. Your Rights</h2>
-        <p class="legal__p">You have the right to access, correct, or request deletion of your personal data at any time. To exercise these rights, email us at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> and we will respond within 5 business days.</p>
-        <p class="legal__p">If you are located in the European Economic Area (EEA), you may have additional rights under the GDPR, including the right to data portability and the right to lodge a complaint with your local supervisory authority.</p>
+        <h2 class="legal__h">Contact</h2>
+        <p class="legal__p">Questions about your privacy? Email <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a>. We're happy to help.</p>
       </div>
 
-      <div class="legal__section">
-        <h2 class="legal__h">7. Children</h2>
-        <p class="legal__p">PortalKit is not intended for use by individuals under the age of 18. We do not knowingly collect personal data from anyone under 18. If you believe a minor has provided us with their information, please contact us at <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a> and we will delete it promptly.</p>
-      </div>
-
-      <div class="legal__section">
-        <h2 class="legal__h">8. Changes to This Policy</h2>
-        <p class="legal__p">We may update this Privacy Policy from time to time. For any material changes — meaning changes that significantly affect your rights or how we use your data — we will notify you by email prior to the change taking effect.</p>
-        <p class="legal__p">Minor updates may be posted to this page with an updated effective date. We encourage you to review this policy periodically.</p>
-      </div>
-
-      <div class="legal__section">
-        <h2 class="legal__h">9. Contact</h2>
-        <p class="legal__p">If you have any questions about this Privacy Policy or how we handle your data, please contact us:</p>
-        <p class="legal__p"><strong>Kilpian LLC, doing business as PortalKit</strong><br>
-        Email: <a href="mailto:hello@getportalkit.com">hello@getportalkit.com</a></p>
+      <div class="legal__notice">
+        <p>PortalKit is a product of Kilpian LLC. This policy is governed by the laws of the State of Maryland, United States.</p>
       </div>
 
     </div>
