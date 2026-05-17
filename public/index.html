@@ -4,6 +4,7 @@
   <!-- GTM: Paste Google Tag Manager <script> snippet here (head) -->
 
   <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PortalKit — Client Portals for Wedding Photographers</title>
 
@@ -74,6 +75,19 @@
   <meta property="og:description" content="PortalKit gives wedding photographers a branded client portal — contracts, galleries, invoices, and messaging. One link. Zero chaos.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://getportalkit.com">
+
+  <!-- Redirect logged-in users to dashboard -->
+  <script>
+    (function() {
+      try {
+        var keys = Object.keys(localStorage);
+        var hasClerkSession = keys.some(function(k) {
+          return (k.startsWith('__clerk') || k.includes('clerk_db_jwt') || k.includes('clerk-client')) && localStorage.getItem(k);
+        });
+        if (hasClerkSession) window.location.replace('/dashboard');
+      } catch(e) {}
+    })();
+  </script>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -983,6 +997,7 @@
   <div class="nav__inner">
     <a href="/" class="nav__logo">Portal<em>Kit</em></a>
     <div class="nav__right">
+      <a href="/signin" class="nav__cta" style="display:inline-block;padding:10px 20px;color:#1B4332;font-weight:600;font-size:14px;text-decoration:none;margin-right:4px;">Sign In</a>
       <a href="/signup" class="btn btn--gold nav__cta">Start Free Trial</a>
       <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
         <span class="nav__bar"></span>
@@ -992,6 +1007,7 @@
     </div>
   </div>
   <div class="nav__mobile" id="mobileMenu">
+    <a href="/signin" class="nav__mobile-link">Sign In</a>
     <a href="#features" class="nav__mobile-link">Features</a>
     <a href="#how-it-works" class="nav__mobile-link">How It Works</a>
     <a href="#pricing" class="nav__mobile-link">Pricing</a>

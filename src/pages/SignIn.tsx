@@ -21,6 +21,7 @@ export default function SignInPage() {
           routing="path"
           path="/signin"
           afterSignInUrl="/dashboard"
+          redirectUrl="/dashboard"
           appearance={{
             variables: {
               colorPrimary: '#1B4332',

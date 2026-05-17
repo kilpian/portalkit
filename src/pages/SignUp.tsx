@@ -17,10 +17,18 @@ export default function SignUpPage() {
       </header>
 
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: '#FDFAF5' }}>
+        {/*
+          MANUAL CLERK SETUP REQUIRED:
+          1. Go to clerk.com → your app → User & Authentication → Email, Phone, Username
+          2. Set "Email address" verification to "Email code" (not "None")
+          3. Enable "Require email address"
+          This ensures users verify their email before accessing the dashboard.
+        */}
         <SignUp
           routing="path"
           path="/signup"
           afterSignUpUrl="/dashboard"
+          redirectUrl="/dashboard"
           appearance={{
             variables: {
               colorPrimary: '#1B4332',
