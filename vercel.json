@@ -9,10 +9,9 @@
     {"source": "/thank-you", "destination": "/thank-you.html"},
     {"source": "/signin", "destination": "/app.html"},
     {"source": "/signup", "destination": "/app.html"},
-    {"source": "/dashboard/(.*)", "destination": "/app.html"},
     {"source": "/dashboard", "destination": "/app.html"},
-    {"source": "/portal/(.*)", "destination": "/app.html"},
-    {"source": "/(.*)", "destination": "/app.html"}
+    {"source": "/dashboard/(.*)", "destination": "/app.html"},
+    {"source": "/portal/(.*)", "destination": "/app.html"}
   ],
   "headers": [
     {
