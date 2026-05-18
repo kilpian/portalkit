@@ -76,19 +76,6 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://getportalkit.com">
 
-  <!-- Redirect logged-in users to dashboard -->
-  <script>
-    (function() {
-      try {
-        var keys = Object.keys(localStorage);
-        var hasClerkSession = keys.some(function(k) {
-          return (k.startsWith('__clerk') || k.includes('clerk_db_jwt') || k.includes('clerk-client')) && localStorage.getItem(k);
-        });
-        if (hasClerkSession) window.location.replace('/dashboard');
-      } catch(e) {}
-    })();
-  </script>
-
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

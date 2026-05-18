@@ -7,7 +7,11 @@
     {"source": "/terms", "destination": "/terms.html"},
     {"source": "/thank-you", "destination": "/thank-you.html"},
     {"source": "/signin", "destination": "/app.html"},
+    {"source": "/signin/sso-callback", "destination": "/app.html"},
+    {"source": "/signin/factor-one", "destination": "/app.html"},
+    {"source": "/signin/factor-two", "destination": "/app.html"},
     {"source": "/signup", "destination": "/app.html"},
+    {"source": "/signup/sso-callback", "destination": "/app.html"},
     {"source": "/dashboard", "destination": "/app.html"},
     {"source": "/dashboard/(.*)", "destination": "/app.html"},
     {"source": "/portal/(.*)", "destination": "/app.html"}
