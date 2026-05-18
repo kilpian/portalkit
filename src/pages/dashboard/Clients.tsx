@@ -118,7 +118,8 @@ export default function Clients() {
         notes: form.notes?.trim() || undefined,
       }
       if (editingClient?.id) {
-        console.log('Submitting edit:', payload)
+        console.log('📝 Submitting client update:', JSON.stringify(payload))
+        console.log('📝 Notes in payload:', payload.notes)
         const res = await authFetch(`/api/clients/${editingClient.id}`, { method: 'put', data: payload })
         const updated: Client = res.data
         setClients(prev => prev.map(c => c.id === updated.id ? updated : c))

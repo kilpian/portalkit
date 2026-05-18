@@ -36,21 +36,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setSaving(true)
     try {
       await saveProfile()
-      onComplete()
-    } catch {
-      setSaving(false)
-    }
-  }
-
-  const handlePayNow = async () => {
-    if (!businessName.trim()) return
-    setSaving(true)
-    try {
-      await saveProfile()
       const checkoutRes = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
       window.location.href = checkoutRes.data.url
-    } catch {
-      setSaving(false)
+    } catch (err) {
+      console.error('Onboarding error:', err)
+      onComplete()
     }
   }
 
@@ -114,16 +104,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             14-day free trial · No charge today · Cancel anytime
           </p>
 
-          <div style={{ textAlign: 'center' }}>
+          <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
             <button
-              type="button"
-              onClick={handlePayNow}
-              disabled={saving || !businessName.trim()}
-              style={{ fontSize: 13, color: 'var(--green)', background: 'transparent', border: 'none', cursor: saving || !businessName.trim() ? 'not-allowed' : 'pointer', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 3, opacity: !businessName.trim() ? 0.4 : 1 }}
+              onClick={onComplete}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
             >
-              Add payment method now
+              Skip for now — add payment method later in Settings
             </button>
-          </div>
+          </p>
         </div>
       </div>
     </div>

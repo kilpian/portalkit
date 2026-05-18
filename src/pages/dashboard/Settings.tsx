@@ -304,6 +304,24 @@ export default function Settings() {
           </div>
         </SectionCard>
 
+        {/* ── Dev Tools ────────────────────────────────────────── */}
+        {import.meta.env.DEV && (
+          <SectionCard title="Dev Tools">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Reset Onboarding</p>
+                <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Force the onboarding flow to show on next dashboard load.</p>
+              </div>
+              <button
+                onClick={() => { localStorage.removeItem('pk_onboarding_done'); window.location.reload() }}
+                style={{ fontSize: 13, fontWeight: 600, padding: '8px 16px', borderRadius: 8, cursor: 'pointer', color: 'var(--green)', background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)', flexShrink: 0 }}
+              >
+                Reset Onboarding
+              </button>
+            </div>
+          </SectionCard>
+        )}
+
         {/* ── Footer ───────────────────────────────────────────── */}
         <div style={{ marginTop: 16, paddingTop: 24, borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
           <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>

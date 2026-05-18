@@ -104,11 +104,15 @@ export default function Dashboard() {
   }
 
   const [onboardingDone, setOnboardingDone] = useState(false)
-  const showOnboarding = !onboardingDone && !loading && !user?.business_name && (stats?.total_clients === 0)
-  if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
-
   const [greenDismissed, setGreenDismissed] = useState(() => localStorage.getItem('trial-welcome-dismissed') === 'true')
   const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
+
+  const isNewUser = !!user && !!clerkUser?.createdAt &&
+    (Date.now() - new Date(clerkUser.createdAt).getTime()) < 5 * 60 * 1000
+  const showOnboarding = !onboardingDone && (
+    (!user?.business_name && stats?.total_clients === 0) || isNewUser
+  )
+  if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
   const trialExpired = user?.plan === 'trial' && days === 0
   const showGreenBanner = user?.plan === 'trial' && days > 3 && !greenDismissed

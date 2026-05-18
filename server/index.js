@@ -509,22 +509,35 @@ async function requireAuth(req, res, next) {
       const email = clerkUser.emailAddresses[0]?.emailAddress
       const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'User'
 
-      const trialCheck = email ? await pool.query('SELECT id FROM trials_used WHERE email=$1', [email]) : { rows: [] }
-      const isRepeat = trialCheck.rows.length > 0
-      if (!isRepeat && email) {
-        await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email])
-      }
-      const trialEnd = isRepeat ? new Date().toISOString() : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      const existingByEmail = email ? await pool.query('SELECT * FROM users WHERE email = $1', [email]) : { rows: [] }
 
-      const newUser = await pool.query(
-        `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (email) DO UPDATE SET clerk_id = $1
-         RETURNING *`,
-        [payload.sub, email, fullName, isRepeat ? 'expired' : 'trial', trialEnd]
-      )
-      req.user = newUser.rows[0]
-      console.log(`${isRepeat ? '🚫 Repeat trial blocked' : '🆕 New user created'}: ${req.user.id}`)
+      if (existingByEmail.rows.length > 0) {
+        const updated = await pool.query(
+          'UPDATE users SET clerk_id = $1 WHERE email = $2 RETURNING *',
+          [payload.sub, email]
+        )
+        req.user = updated.rows[0]
+        console.log(`🔗 Linked clerk_id to existing account: ${req.user.id}`)
+      } else {
+        const trialUsed = email ? await pool.query('SELECT * FROM trials_used WHERE email = $1', [email]) : { rows: [] }
+        const plan = trialUsed.rows.length > 0 ? 'expired' : 'trial'
+        const trialEndsAt = trialUsed.rows.length > 0
+          ? new Date().toISOString()
+          : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+
+        if (trialUsed.rows.length === 0 && email) {
+          await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
+        }
+
+        const newUser = await pool.query(
+          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [payload.sub, email, fullName, plan, trialEndsAt]
+        )
+        req.user = newUser.rows[0]
+        console.log(`${plan === 'expired' ? '🚫 Repeat trial blocked' : '🆕 New user created'}: ${req.user.id}`)
+      }
     } else {
       req.user = result.rows[0]
     }
@@ -783,12 +796,16 @@ app.get('/api/clients/:id', requireAuth, async (req, res) => {
 
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
-  console.log('PUT client body:', req.body)
+  console.log('📝 PUT client body:', JSON.stringify(req.body))
+  console.log('📝 Notes value:', req.body.notes)
+  console.log('📝 Notes type:', typeof req.body.notes)
   try {
+    const sqlParams = [sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, req.params.id, req.userId]
+    console.log('📝 SQL params:', sqlParams)
     const result = await pool.query(
       `UPDATE clients SET name=$1, email=$2, phone=$3, event_date=$4, event_type=$5, notes=$6, updated_at=NOW()
        WHERE id=$7 AND user_id=$8 RETURNING *`,
-      [sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, req.params.id, req.userId]
+      sqlParams
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
     res.json(result.rows[0])
