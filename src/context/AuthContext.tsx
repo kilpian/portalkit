@@ -23,15 +23,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!clerkLoaded) return
     if (!clerkUser) { setPortalUser(null); return }
 
-    getToken()
-      .then(token =>
-        fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      )
-      .then(r => r.json())
-      .then((data: PortalUser) => {
-        if (data.id) setPortalUser(data)
-      })
-      .catch(console.error)
+    const fetchUser = async (retries = 3) => {
+      try {
+        const token = await getToken()
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (data.id) {
+          setPortalUser(data)
+        } else if (retries > 0) {
+          setTimeout(() => fetchUser(retries - 1), 1000)
+        }
+      } catch (err) {
+        if (retries > 0) setTimeout(() => fetchUser(retries - 1), 1000)
+      }
+    }
+
+    fetchUser()
   }, [clerkUser, clerkLoaded, getToken])
 
   const signOut = useCallback(() => {
