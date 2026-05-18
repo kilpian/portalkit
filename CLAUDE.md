@@ -32,3 +32,4 @@
 - Never hardcode URLs - use import.meta.env.VITE_API_URL
 - Run npm run build before every commit
 - Redeploy Railway after every server/index.js change
+# deploy Mon May 18 18:50:25 EDT 2026
