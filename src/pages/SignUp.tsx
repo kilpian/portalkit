@@ -16,7 +16,7 @@ export default function SignUpPage() {
         </span>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: '#FDFAF5' }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', minHeight: '100vh', background: '#FDFAF5' }}>
         {/*
           MANUAL CLERK SETUP REQUIRED:
           1. Go to clerk.com → your app → User & Authentication → Email, Phone, Username

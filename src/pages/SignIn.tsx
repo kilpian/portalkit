@@ -16,7 +16,7 @@ export default function SignInPage() {
         </span>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: '#FDFAF5' }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', minHeight: '100vh', background: '#FDFAF5' }}>
         <SignIn
           routing="path"
           path="/signin"

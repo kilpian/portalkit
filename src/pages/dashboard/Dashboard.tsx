@@ -111,13 +111,11 @@ export default function Dashboard() {
   const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
 
   const trialExpired = user?.plan === 'trial' && days === 0
-  const showGreenBanner = user?.plan === 'trial' && days > 11 && !greenDismissed
-  const showAmberBanner = user?.plan === 'trial' && days > 3 && days <= 11
+  const showGreenBanner = user?.plan === 'trial' && days > 3 && !greenDismissed
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   return (
-    <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
-
+    <>
       {trialExpired && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 440 }}>
@@ -125,67 +123,59 @@ export default function Dashboard() {
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Your trial has ended</h2>
             <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.</p>
             <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
-              {upgrading ? 'Loading…' : 'Upgrade Now →'}
+              {upgrading ? 'Loading…' : 'Upgrade — $39/mo'}
             </button>
           </div>
         </div>
       )}
 
       {showGreenBanner && (
-        <div style={{ background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--color-green)', fontWeight: 600 }}>
-            🎉 Welcome! Your 14-day free trial has started. Add your payment method to keep access after your trial.
+        <div style={{ background: '#EAF3DE', borderBottom: '1px solid #C0DD97', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: '#1B4332', fontWeight: 600 }}>
+            🎉 Your 14-day free trial is active. Add your payment method to keep access after your trial ends.
           </p>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--color-green-border)', background: 'transparent', color: 'var(--color-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #C0DD97', background: 'transparent', color: '#1B4332', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {upgrading ? 'Loading…' : 'Add Payment Method →'}
             </button>
-            <button onClick={dismissGreenBanner} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--color-green)', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-          </div>
-        </div>
-      )}
-
-      {paymentStatus === 'success' && (
-        <div style={{ background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--color-green)', fontWeight: 600 }}>
-            🎉 You're all set! Your 14-day trial has started. You won't be charged until{' '}
-            {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
-          </p>
-          <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--color-green)', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-        </div>
-      )}
-
-      {paymentStatus === 'cancelled' && (
-        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>No worries — you can add your card anytime in Settings to keep access after your trial.</p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--gold-border)', background: 'transparent', color: 'var(--gold-dim)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {upgrading ? 'Loading…' : 'Add Payment Method →'}
-            </button>
-            <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer' }}>✕</button>
+            <button onClick={dismissGreenBanner} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#1B4332', cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
         </div>
       )}
 
       {showRedBanner && (
-        <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: '#DC2626', fontWeight: 600 }}>⚠️ Your trial expires in {days} day{days === 1 ? '' : 's'} — upgrade to keep your portals active.</p>
-          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
-            {upgrading ? 'Loading…' : 'Upgrade Now →'}
+        <div style={{ background: '#FCEBEB', borderBottom: '1px solid #FCA5A5', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: '#A32D2D', fontWeight: 600 }}>⚠️ Your trial expires in {days} day{days === 1 ? '' : 's'}. Add payment now to avoid losing access.</p>
+          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'transparent', color: '#A32D2D', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {upgrading ? 'Loading…' : 'Add Card Now →'}
           </button>
         </div>
       )}
 
-      {showAmberBanner && (
-        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>{days} day{days === 1 ? '' : 's'} left in your trial — add a payment method to keep access.</p>
-          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold-dim)', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
-            {upgrading ? 'Loading…' : 'Upgrade Now →'}
-          </button>
+      {paymentStatus === 'success' && (
+        <div style={{ background: '#EAF3DE', borderBottom: '1px solid #C0DD97', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: '#1B4332', fontWeight: 600 }}>
+            🎉 You're all set! Your 14-day trial has started. You won't be charged until{' '}
+            {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+          </p>
+          <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#1B4332', cursor: 'pointer', flexShrink: 0 }}>✕</button>
         </div>
       )}
 
-      <div style={{ marginBottom: 32 }}>
+      {paymentStatus === 'cancelled' && (
+        <div style={{ background: '#FFF9EC', borderBottom: '1px solid #F0D090', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: '#7A5E00', fontWeight: 600 }}>No worries — you can add your card anytime in Settings to keep access after your trial.</p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #F0D090', background: 'transparent', color: '#7A5E00', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {upgrading ? 'Loading…' : 'Add Payment Method →'}
+            </button>
+            <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#7A5E00', cursor: 'pointer' }}>✕</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 4 }}>
           {greeting()}{firstName ? `, ${firstName}` : ''}.
         </h1>
@@ -278,6 +268,7 @@ export default function Dashboard() {
           </table>
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }

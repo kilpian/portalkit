@@ -42,17 +42,25 @@ const pool = new Pool({
     : false,
 })
 
+const allowedOrigins = [
+  'https://getportalkit.com',
+  'https://www.getportalkit.com',
+  'https://portalkit.vercel.app',
+  'https://portalkit-one.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+]
+
 app.use(cors({
-  origin: [
-    'https://getportalkit.com',
-    'https://www.getportalkit.com',
-    'https://portalkit.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5175',
-    'http://localhost:5176',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
