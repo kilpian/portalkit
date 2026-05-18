@@ -639,6 +639,28 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
   res.json(req.user)
 })
 
+// Temporary diagnostic — inspect raw DB row + schema. Remove after onboarding stabilizes.
+app.get('/api/debug/me', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId])
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' })
+    const row = result.rows[0]
+    res.json({
+      raw_row: row,
+      onboarding_completed: row.onboarding_completed,
+      onboarding_completed_type: typeof row.onboarding_completed,
+      has_onboarding_column: 'onboarding_completed' in row,
+      business_name: row.business_name,
+      business_name_type: typeof row.business_name,
+      schema_columns: Object.keys(row),
+      auth_version: 'v2 - email dedup + onboarding flag active',
+    })
+  } catch (err) {
+    console.error('Debug endpoint error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── STRIPE ────────────────────────────────────────────────────
 
 app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {

@@ -108,10 +108,11 @@ export default function Dashboard() {
   const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
 
   // DB-backed: never evaluate until `user` is fully loaded, then trust onboarding_completed.
-  // This eliminates the race condition where stats loads before user and !user?.business_name
-  // briefly reads as true (because null), causing onboarding to flash on screen.
+  // Use `!== true` (not `=== false`) so the flag defaults to "show onboarding" when the
+  // column is missing (e.g. before migration runs) or returns undefined for any reason.
+  // This eliminates the race condition where stats loaded before user.
   const userLoaded = !!user
-  const showOnboarding = userLoaded && !onboardingDone && user.onboarding_completed === false
+  const showOnboarding = userLoaded && !onboardingDone && user.onboarding_completed !== true
 
   if (import.meta.env.DEV) {
     console.log('Onboarding check:', {
