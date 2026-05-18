@@ -107,11 +107,23 @@ export default function Dashboard() {
   const [greenDismissed, setGreenDismissed] = useState(() => localStorage.getItem('trial-welcome-dismissed') === 'true')
   const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
 
-  const isNewUser = !!user && !!clerkUser?.createdAt &&
-    (Date.now() - new Date(clerkUser.createdAt).getTime()) < 5 * 60 * 1000
-  const showOnboarding = !onboardingDone && (
-    (!user?.business_name && stats?.total_clients === 0) || isNewUser
-  )
+  // DB-backed: never evaluate until `user` is fully loaded, then trust onboarding_completed.
+  // This eliminates the race condition where stats loads before user and !user?.business_name
+  // briefly reads as true (because null), causing onboarding to flash on screen.
+  const userLoaded = !!user
+  const showOnboarding = userLoaded && !onboardingDone && user.onboarding_completed === false
+
+  if (import.meta.env.DEV) {
+    console.log('Onboarding check:', {
+      userLoaded,
+      businessName: user?.business_name,
+      totalClients: stats?.total_clients,
+      onboardingCompleted: user?.onboarding_completed,
+      onboardingDone,
+      showOnboarding,
+    })
+  }
+
   if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
   const trialExpired = user?.plan === 'trial' && days === 0

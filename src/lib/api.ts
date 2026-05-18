@@ -114,6 +114,7 @@ export interface PortalUser {
   stripe_customer_id?: string
   logo_url?: string | null
   brand_color?: string | null
+  onboarding_completed?: boolean
   created_at: string
 }
 

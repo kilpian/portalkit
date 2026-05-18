@@ -12,6 +12,8 @@ import multer from 'multer'
 import fs from 'fs'
 import crypto from 'crypto'
 
+console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
+
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null
@@ -462,6 +464,16 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false;
+      `).catch(() => {})
+
+      // Backfill: existing users with a business_name are considered onboarded
+      await pool.query(`
+        UPDATE users SET onboarding_completed = true
+        WHERE business_name IS NOT NULL AND business_name <> '' AND onboarding_completed = false;
+      `).catch(() => {})
+
+      await pool.query(`
         CREATE TABLE IF NOT EXISTS contract_templates (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -578,18 +590,20 @@ app.get('/api/test', (req, res) => {
 
 app.put('/api/users/me', requireAuth, async (req, res) => {
   console.log('PUT /api/users/me body keys:', Object.keys(req.body))
-  const { full_name, business_name, logo_url, brand_color } = req.body
+  const { full_name, business_name, logo_url, brand_color, onboarding_completed } = req.body
   // 'logo_url' in req.body distinguishes "sent as null (remove)" from "not sent (keep)"
   const logoProvided = 'logo_url' in req.body
+  const onboardingProvided = 'onboarding_completed' in req.body
   try {
     const result = await pool.query(
       `UPDATE users SET
          full_name=COALESCE($1, full_name),
          business_name=COALESCE($2, business_name),
          logo_url=CASE WHEN $3 THEN $4 ELSE logo_url END,
-         brand_color=COALESCE($5, brand_color)
+         brand_color=COALESCE($5, brand_color),
+         onboarding_completed=CASE WHEN $7 THEN $8 ELSE onboarding_completed END
        WHERE id=$6
-       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, created_at`,
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, created_at`,
       [
         full_name ? sanitize(full_name) : null,
         business_name !== undefined ? (sanitize(business_name) || null) : null,
@@ -597,6 +611,8 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
         logo_url || null,
         brand_color || null,
         req.userId,
+        onboardingProvided,
+        onboarding_completed === true,
       ]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' })

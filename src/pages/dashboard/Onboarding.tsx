@@ -24,8 +24,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     reader.readAsDataURL(file)
   }
 
-  const saveProfile = async () => {
-    const payload: Record<string, string> = { business_name: businessName.trim(), brand_color: brandColor }
+  const saveProfileAndMarkComplete = async () => {
+    const payload: Record<string, string | boolean> = {
+      business_name: businessName.trim(),
+      brand_color: brandColor,
+      onboarding_completed: true,
+    }
     if (logoDataUrl) payload.logo_url = logoDataUrl
     const res = await authFetch('/api/users/me', { method: 'put', data: payload })
     setUser(res.data)
@@ -35,7 +39,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     if (!businessName.trim()) return
     setSaving(true)
     try {
-      await saveProfile()
+      await saveProfileAndMarkComplete()
       const checkoutRes = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
       window.location.href = checkoutRes.data.url
     } catch (err) {
