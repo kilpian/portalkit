@@ -16,7 +16,8 @@ export default function SignInPage() {
         </span>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', minHeight: '100vh', background: '#FDFAF5' }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: '#FDFAF5', minHeight: 'calc(100vh - 70px)' }}>
+        <div style={{ width: '100%', maxWidth: '480px' }}>
         <SignIn
           routing="path"
           path="/signin"
@@ -60,6 +61,7 @@ export default function SignInPage() {
             },
           }}
         />
+        </div>
       </main>
 
       <footer style={{ textAlign: 'center', padding: '20px 24px', borderTop: '1px solid var(--border-subtle)' }}>

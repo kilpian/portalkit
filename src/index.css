@@ -721,4 +721,28 @@ textarea {
 .contract-content p { margin: 8px 0; line-height: 1.6; color: var(--text-primary); }
 .contract-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .contract-content ul, .contract-content ol { padding-left: 20px; margin: 8px 0; }
+
+/* ── Clerk component overrides ───────────────────────────────── */
+.cl-rootBox {
+  width: 100% !important;
+}
+.cl-card {
+  width: 100% !important;
+  background: #FDFAF5 !important;
+  border: 1px solid #E8E0D0 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+.cl-socialButtonsBlockButton {
+  background: #FFFFFF !important;
+  border: 1px solid #D4C9B4 !important;
+  color: #374151 !important;
+}
+.cl-socialButtonsBlockButtonText {
+  color: #374151 !important;
+  font-weight: 500 !important;
+}
+.cl-formButtonPrimary {
+  background: #1B4332 !important;
+  color: #FDFAF5 !important;
+}
 .contract-content li { margin: 4px 0; line-height: 1.6; }
