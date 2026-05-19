@@ -512,7 +512,15 @@ async function requireAuth(req, res, next) {
     const token = authHeader?.replace('Bearer ', '')
     if (!token) return res.status(401).json({ error: 'Unauthorized' })
 
-    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY })
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+      authorizedParties: [
+        'https://getportalkit.com',
+        'https://www.getportalkit.com',
+        'http://localhost:5173',
+        'http://localhost:4173',
+      ],
+    })
 
     const result = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [payload.sub])
 
