@@ -42,8 +42,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       await saveProfileAndMarkComplete()
       const checkoutRes = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
       window.location.href = checkoutRes.data.url
-    } catch (err) {
-      console.error('Onboarding error:', err)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('Stripe checkout error:', err)
+      alert('Could not start payment setup: ' + msg)
       onComplete()
     }
   }

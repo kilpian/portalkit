@@ -503,6 +503,16 @@ async function initDb() {
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_ip TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS content_hash TEXT;`).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS reminders_sent (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          reminder_type TEXT NOT NULL,
+          sent_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(client_id, reminder_type)
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -513,6 +523,68 @@ async function initDb() {
     }
   }
 }
+
+async function sendEventReminders() {
+  if (!resend) return
+  const reminders = [
+    { days: 30, type: '30_day', subject: '30 days until your wedding! 🎉' },
+    { days: 14, type: '14_day', subject: '2 weeks until your big day! 💍' },
+    { days: 7,  type: '7_day',  subject: 'One week to go! 📸' },
+    { days: 3,  type: '3_day',  subject: '3 days until your wedding! ✨' },
+    { days: 1,  type: '1_day',  subject: 'Tomorrow is your wedding day! 🥂' },
+  ]
+  for (const reminder of reminders) {
+    try {
+      const clients = await pool.query(`
+        SELECT c.*, u.business_name, u.full_name as photographer_name
+        FROM clients c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.event_date = CURRENT_DATE + INTERVAL '${reminder.days} days'
+        AND c.email IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM reminders_sent rs
+          WHERE rs.client_id = c.id AND rs.reminder_type = $1
+        )
+      `, [reminder.type])
+      for (const client of clients.rows) {
+        const eventDate = new Date(client.event_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+        const biz = client.business_name || client.photographer_name
+        try {
+          await resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            to: client.email,
+            subject: reminder.subject,
+            html: emailTemplate({
+              title: reminder.subject,
+              preheader: `Your wedding with ${biz} is coming up!`,
+              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${reminder.subject}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${client.name}! Your wedding day is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your contract, check your invoice status, and send any last-minute messages to ${biz}.</p>`,
+              ctaText: 'Visit Your Portal →',
+              ctaUrl: portalLink,
+              footerNote: `Reminder sent on behalf of ${biz} via PortalKit`,
+            }),
+          })
+          await pool.query(
+            'INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [client.id, reminder.type]
+          )
+          console.log(`📅 Reminder sent: ${reminder.type} to ${client.email}`)
+        } catch (emailErr) {
+          console.error('📅 Reminder email failed:', emailErr.message)
+        }
+      }
+    } catch (err) {
+      console.error('📅 Reminder error:', err.message)
+    }
+  }
+}
+
+setInterval(async () => {
+  const now = new Date()
+  if (now.getHours() === 9 && now.getMinutes() < 5) {
+    await sendEventReminders()
+  }
+}, 5 * 60 * 1000)
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization
@@ -732,6 +804,7 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
 
 app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res) => {
   try {
+    console.log('💳 Creating Stripe checkout for user:', req.user.id)
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
     const priceId = process.env.STRIPE_PRICE_PORTALKIT
     if (!priceId) return res.status(500).json({ error: 'Price not configured' })
@@ -767,7 +840,7 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
 
     res.json({ url: session.url })
   } catch (err) {
-    console.error('Checkout with trial error:', err)
+    console.error('💳 Stripe checkout error:', err)
     res.status(500).json({ error: 'Failed to create checkout session' })
   }
 })
@@ -908,12 +981,12 @@ app.post('/api/contracts', requireAuth, async (req, res) => {
 })
 
 app.put('/api/contracts/:id', requireAuth, async (req, res) => {
-  const { title, content, status } = req.body
+  const { title, content, status, client_id } = req.body
   try {
     const result = await pool.query(
-      `UPDATE contracts SET title=$1, content=$2, status=$3, updated_at=NOW()
-       WHERE id=$4 AND user_id=$5 RETURNING *`,
-      [sanitize(title), content || null, status || 'draft', req.params.id, req.userId]
+      `UPDATE contracts SET title=$1, content=$2, status=$3, client_id=$4, updated_at=NOW()
+       WHERE id=$5 AND user_id=$6 RETURNING *`,
+      [sanitize(title), content || null, status || 'draft', client_id || null, req.params.id, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Contract not found' })
     res.json(result.rows[0])
@@ -1057,12 +1130,12 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
           to: contract.client_email,
-          subject: `Contract ready to review: ${contract.title}`,
+          subject: `Please review and sign your contract — ${senderName}`,
           html: emailTemplate({
-            title: 'Contract Ready to Review',
-            preheader: `${senderName} has sent you a contract to review.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${contract.client_name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${senderName}</strong> has sent you a contract to review:</p><p style="font-size:18px;font-weight:700;color:#1A1208;margin:0;">${contract.title}</p>`,
-            ctaText: 'View your portal →',
+            title: 'Contract Ready to Sign',
+            preheader: `${senderName} has sent you a contract to review and sign.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${contract.client_name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${senderName}</strong> has sent you a contract to review and sign:</p><p style="font-size:18px;font-weight:700;color:#1A1208;margin:0 0 16px;">${contract.title}</p><p style="color:#6B5E4A;line-height:1.6;margin:0;">Please open your client portal to read the contract and add your electronic signature. This only takes a minute.</p>`,
+            ctaText: 'Review & Sign Contract →',
             ctaUrl: portalUrl,
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
           }),
@@ -1482,6 +1555,25 @@ app.post('/api/portals/:token/messages', async (req, res) => {
   }
 })
 
+app.put('/api/messages/:id', requireAuth, async (req, res) => {
+  const { content } = req.body
+  if (!content?.trim()) return res.status(400).json({ error: 'Content required' })
+  try {
+    const result = await pool.query(
+      `UPDATE messages SET content=$1
+       WHERE id=$2 AND user_id=$3 AND sender='photographer'
+         AND created_at > NOW() - INTERVAL '5 minutes'
+       RETURNING *`,
+      [content.trim(), req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(403).json({ error: 'Messages can only be edited within 5 minutes' })
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Edit message error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 app.delete('/api/messages/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -1560,6 +1652,7 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
   aiRateLimit.set(req.userId, [...timestamps, now])
   const { client_id, template_type: rawTemplateType } = req.body
   const template_type = sanitizePrompt(rawTemplateType)
+  console.log('🤖 AI contract request:', { client_id, template_type, user: req.user.id })
   try {
     const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
     const photographer = userResult.rows[0]
@@ -1581,7 +1674,7 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
     res.json({ content })
   } catch (err) {
-    console.error('AI contract error:', err)
+    console.error('🤖 AI contract error:', err.message, err.stack)
     res.status(500).json({ error: 'AI generation failed' })
   }
 })

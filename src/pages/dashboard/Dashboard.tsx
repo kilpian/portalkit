@@ -97,8 +97,15 @@ export default function Dashboard() {
     setUpgrading(true)
     try {
       const res = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
-      window.location.href = res.data.url
-    } catch {
+      if (res.data?.url) {
+        window.location.href = res.data.url
+      } else {
+        alert('Could not create checkout session. Please try again.')
+      }
+    } catch (err: unknown) {
+      console.error('Upgrade error:', err)
+      alert('Payment setup failed. Please try again.')
+    } finally {
       setUpgrading(false)
     }
   }

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
+
 interface Contract {
   id: number
   title: string
@@ -108,7 +110,7 @@ function PortalMessages({ token }: { token: string }) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    axios.get<PortalMessage[]>(`http://localhost:3001/api/portals/${token}/messages`)
+    axios.get<PortalMessage[]>(`${API_URL}/api/portals/${token}/messages`)
       .then(r => setMessages(r.data))
       .catch(() => {})
   }, [token])
@@ -122,7 +124,7 @@ function PortalMessages({ token }: { token: string }) {
     setSending(true)
     setError('')
     try {
-      const res = await axios.post<PortalMessage>(`http://localhost:3001/api/portals/${token}/messages`, {
+      const res = await axios.post<PortalMessage>(`${API_URL}/api/portals/${token}/messages`, {
         content: content.trim(),
         sender_name: senderName.trim() || undefined,
       })
@@ -219,7 +221,7 @@ export function ClientPortalContent({ token }: { token: string }) {
     if (!name) return
     setSigning(contract.id)
     try {
-      const res = await axios.post(`http://localhost:3001/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
+      const res = await axios.post(`${API_URL}/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
       const date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
       setSignedContracts(prev => ({ ...prev, [contract.id]: { name, date, hash: res.data.content_hash ?? null, content: contract.content } }))
     } catch {
@@ -258,7 +260,7 @@ export function ClientPortalContent({ token }: { token: string }) {
 
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
-    axios.get<PortalData>(`http://localhost:3001/api/portals/${token}`)
+    axios.get<PortalData>(`${API_URL}/api/portals/${token}`)
       .then(r => { setData(r.data); setLoading(false) })
       .catch(err => {
         setError(err?.response?.data?.error || 'This portal link is invalid or has expired.')
@@ -379,6 +381,13 @@ export function ClientPortalContent({ token }: { token: string }) {
                         {c.content}
                       </div>
                     )}
+                    <div style={{ background: '#EAF3DE', padding: '12px 16px', borderRadius: 8, marginBottom: 16 }}>
+                      <p style={{ fontSize: 14, color: '#1B4332', fontWeight: 600, margin: '0 0 4px' }}>✍️ Client Signature Required</p>
+                      <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.5 }}>
+                        Please read the contract above and sign below to confirm your agreement.
+                        This is your legal signature as the client.
+                      </p>
+                    </div>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
                       <input
                         type="checkbox"
@@ -470,6 +479,20 @@ export function ClientPortalContent({ token }: { token: string }) {
           }>
             <PortalMessages token={token} />
           </SectionCard>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid #E8E0D0' }}>
+          <div style={{ marginBottom: 12 }}>
+            <a href="https://getportalkit.com/privacy" target="_blank" rel="noopener noreferrer"
+               style={{ fontSize: 12, color: '#6B7280', marginRight: 16, textDecoration: 'none' }}>Privacy Policy</a>
+            <a href="https://getportalkit.com/terms" target="_blank" rel="noopener noreferrer"
+               style={{ fontSize: 12, color: '#6B7280', textDecoration: 'none' }}>Terms of Service</a>
+          </div>
+          <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>
+            This portal is private and secure. Powered by{' '}
+            <a href="https://getportalkit.com" target="_blank" rel="noopener noreferrer"
+               style={{ color: '#1B4332', fontWeight: 600, textDecoration: 'none' }}>PortalKit</a>
+          </p>
         </div>
       </div>
     </div>

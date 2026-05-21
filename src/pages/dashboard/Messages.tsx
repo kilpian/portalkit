@@ -45,6 +45,9 @@ export default function Messages() {
   const [deletingMsg, setDeletingMsg] = useState<number | null>(null)
   const [openMsgMenu, setOpenMsgMenu] = useState<number | null>(null)
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
+  const [editingMsgId, setEditingMsgId] = useState<number | null>(null)
+  const [editMsgContent, setEditMsgContent] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -132,6 +135,27 @@ export default function Messages() {
       // silent
     } finally {
       setDeletingMsg(null)
+    }
+  }
+
+  const handleStartEdit = (m: Message) => {
+    setOpenMsgMenu(null)
+    setEditingMsgId(m.id)
+    setEditMsgContent(m.content)
+  }
+
+  const handleSaveEdit = async (id: number) => {
+    if (!editMsgContent.trim()) return
+    setSavingEdit(true)
+    try {
+      const res = await authFetch(`/api/messages/${id}`, { method: 'put', data: { content: editMsgContent.trim() } })
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, content: (res.data as Message).content } : m))
+      setEditingMsgId(null)
+    } catch (err: unknown) {
+      const errObj = err as { response?: { data?: { error?: string } } }
+      alert(errObj.response?.data?.error || 'Failed to edit message.')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -306,6 +330,17 @@ export default function Messages() {
                               >⋯</button>
                               {openMsgMenu === m.id && (
                                 <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: 140, overflow: 'hidden' }}>
+                                  {(new Date().getTime() - new Date(m.created_at).getTime()) < 5 * 60 * 1000 && (
+                                    <button
+                                      onClick={() => handleStartEdit(m)}
+                                      style={{ width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                      Edit
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleDeleteMsg(m.id)}
                                     style={{ width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#DC2626', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
@@ -319,10 +354,29 @@ export default function Messages() {
                               )}
                             </div>
                             <div style={{ maxWidth: '72%', padding: '10px 14px', borderRadius: '14px 4px 14px 14px', background: 'var(--green)', color: '#FDFAF5', boxShadow: 'var(--shadow-sm)', opacity: deletingMsg === m.id ? 0.5 : 1 }}>
-                              <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
-                              <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
-                                {formatFull(m.created_at)}{m.read_at && <span> · Read</span>}
-                              </p>
+                              {editingMsgId === m.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <textarea
+                                    value={editMsgContent}
+                                    onChange={e => setEditMsgContent(e.target.value)}
+                                    rows={2}
+                                    style={{ fontSize: 14, lineHeight: 1.5, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, color: '#FDFAF5', padding: '4px 8px', resize: 'none', width: '100%' }}
+                                    autoFocus
+                                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveEdit(m.id) } if (e.key === 'Escape') setEditingMsgId(null) }}
+                                  />
+                                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                    <button onClick={() => setEditingMsgId(null)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#FDFAF5', cursor: 'pointer' }}>Cancel</button>
+                                    <button onClick={() => handleSaveEdit(m.id)} disabled={savingEdit} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, border: 'none', background: '#FDFAF5', color: 'var(--green)', fontWeight: 700, cursor: 'pointer' }}>{savingEdit ? '…' : 'Save'}</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
+                                  <p style={{ fontSize: 11, margin: '5px 0 0', opacity: 0.55 }}>
+                                    {formatFull(m.created_at)}{m.read_at && <span> · Read</span>}
+                                  </p>
+                                </>
+                              )}
                             </div>
                           </div>
                         ) : (

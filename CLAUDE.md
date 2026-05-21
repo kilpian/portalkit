@@ -22,9 +22,23 @@
 - Git push → Railway auto-deploys backend
 - After backend changes: Railway → redeploy manually
 
+## URLs
+- Frontend: https://getportalkit.com
+- Backend: https://portalkit-production.up.railway.app
+
+## Known Working in Production
+- Auth (Clerk), onboarding → Stripe checkout, dashboard, client portal
+- Messaging (send/receive, email notifications)
+- Contract send email (goes to client, subject: "Please review and sign your contract")
+- Invoice send email (goes to client with amount)
+- Event reminders (daily job at 9am via setInterval)
+
 ## Active Bugs
 - Notes not persisting (logging added, check Railway logs)
 - Signin box left-aligned on production
+
+## New DB Tables (need Railway redeploy to create)
+- reminders_sent (client_id, reminder_type UNIQUE) — tracks sent event reminders
 
 ## Rules
 - Always read this file first

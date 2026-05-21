@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { marked } from 'marked'
 import { useApi, type Client, type Contract, type ContractTemplate } from '../../lib/api'
+import { usePortalAuth } from '../../context/AuthContext'
 
 const TEMPLATES = [
   {
@@ -70,6 +71,8 @@ function statusStyle(status: Contract['status']): React.CSSProperties {
 
 export default function Contracts() {
   const { authFetch } = useApi()
+  const { user } = usePortalAuth()
+  const businessName = user?.business_name || ''
   const [contracts, setContracts] = useState<Contract[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [customTemplates, setCustomTemplates] = useState<ContractTemplate[]>([])
@@ -77,6 +80,7 @@ export default function Contracts() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingContract, setEditingContract] = useState<Contract | null>(null)
   const [saving, setSaving] = useState(false)
+  const [sendingDrawer, setSendingDrawer] = useState(false)
   const [sending, setSending] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -89,6 +93,7 @@ export default function Contracts() {
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [deletingTemplate, setDeletingTemplate] = useState<number | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([
@@ -149,7 +154,7 @@ export default function Contracts() {
       if (editingContract) {
         const res = await authFetch(`/api/contracts/${editingContract.id}`, {
           method: 'put',
-          data: { title: form.title.trim(), content: form.content, status: editingContract.status },
+          data: { title: form.title.trim(), content: form.content, status: editingContract.status, client_id: form.client_id || null },
         })
         setContracts(prev => prev.map(c => c.id === editingContract.id ? res.data as Contract : c))
         closeDrawer()
@@ -167,6 +172,39 @@ export default function Contracts() {
       setFormError(editingContract ? 'Failed to save contract.' : 'Failed to create contract.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveAndSend = async () => {
+    if (!form.title.trim()) { setFormError('Contract title is required.'); return }
+    setFormError('')
+    setSendingDrawer(true)
+    try {
+      let contractId: number
+      if (editingContract) {
+        const res = await authFetch(`/api/contracts/${editingContract.id}`, {
+          method: 'put',
+          data: { title: form.title.trim(), content: form.content, status: editingContract.status, client_id: form.client_id || null },
+        })
+        contractId = (res.data as Contract).id
+        setContracts(prev => prev.map(c => c.id === editingContract.id ? res.data as Contract : c))
+      } else {
+        const res = await authFetch('/api/contracts', {
+          method: 'post',
+          data: { client_id: form.client_id || null, title: form.title.trim(), content: form.content },
+        })
+        contractId = (res.data as Contract).id
+        setContracts(prev => [res.data as Contract, ...prev])
+      }
+      await authFetch(`/api/contracts/${contractId}/send`, { method: 'post' })
+      setContracts(prev => prev.map(c => c.id === contractId ? { ...c, status: 'sent' as const } : c))
+      closeDrawer()
+      showToast('Contract saved and sent to client.')
+    } catch (err: unknown) {
+      const errObj = err as { response?: { data?: { error?: string } }; message?: string }
+      setFormError(errObj.response?.data?.error || errObj.message || 'Failed to save and send.')
+    } finally {
+      setSendingDrawer(false)
     }
   }
 
@@ -197,7 +235,10 @@ export default function Contracts() {
   }
 
   const applyTemplate = (content: string, label: string) => {
-    setForm(f => ({ ...f, title: f.title || label, content }))
+    const injected = businessName
+      ? content.replace(/the Photographer/g, businessName)
+      : content
+    setForm(f => ({ ...f, title: f.title || label, content: injected }))
     setPreviewMode(false)
   }
 
@@ -214,8 +255,10 @@ export default function Contracts() {
       })
       const { content } = res.data as { content: string }
       if (content) setForm(f => ({ ...f, content }))
-    } catch {
-      showToast('AI generation failed.')
+    } catch (err: unknown) {
+      const errObj = err as { response?: { data?: { error?: string } }; message?: string }
+      const msg = errObj.response?.data?.error || errObj.message || 'AI generation failed'
+      showToast('AI Error: ' + msg)
     } finally {
       setAiLoading(false)
     }
@@ -256,25 +299,34 @@ export default function Contracts() {
   const renderedContent = String(marked.parse(form.content || ''))
 
   const downloadSignatureRecord = (c: Contract) => {
-    const lines = [
-      'CONTRACT SIGNATURE RECORD',
-      '─────────────────────────────────────',
-      `Contract:   ${c.title}`,
-      `Signed by:  ${c.signed_by_name ?? '—'}`,
-      `IP Address: ${c.signed_by_ip ?? '—'}`,
-      `Date/Time:  ${c.signed_at ? new Date(c.signed_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'long' }) : '—'}`,
-      `Content Hash: ${c.content_hash ?? '—'}`,
-      '─────────────────────────────────────',
-      'This record was generated by PortalKit.',
-      'https://getportalkit.com',
-    ].join('\n')
-    const blob = new Blob([lines], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `signature-record-${c.id}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+    const content = `
+      <html><head><title>Contract Signature Record</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #333; }
+        h1 { color: #1B4332; border-bottom: 2px solid #1B4332; padding-bottom: 10px; }
+        .field { margin: 12px 0; }
+        .label { font-weight: bold; color: #555; font-size: 12px; text-transform: uppercase; }
+        .value { font-size: 14px; margin-top: 4px; }
+        .contract-text { background: #f5f5f5; padding: 20px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; margin-top: 20px; }
+        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #888; }
+      </style></head>
+      <body>
+        <h1>Contract Signature Record</h1>
+        <div class="field"><div class="label">Contract</div><div class="value">${c.title}</div></div>
+        <div class="field"><div class="label">Signed By</div><div class="value">${c.signed_by_name ?? '—'}</div></div>
+        <div class="field"><div class="label">Date &amp; Time</div><div class="value">${c.signed_at ? new Date(c.signed_at).toLocaleString() : '—'}</div></div>
+        <div class="field"><div class="label">IP Address</div><div class="value">Verified</div></div>
+        <div class="field"><div class="label">Reference</div><div class="value">${c.content_hash?.slice(-8).toUpperCase() ?? '—'}</div></div>
+        <div class="contract-text">${c.content ?? ''}</div>
+        <div class="footer">This record was generated by PortalKit. This constitutes a legally binding electronic signature under the ESIGN Act.</div>
+      </body></html>
+    `
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(content)
+      printWindow.document.close()
+      printWindow.print()
+    }
   }
 
   return (
@@ -390,15 +442,13 @@ export default function Contracts() {
         <form onSubmit={handleSave} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {formError && <div className="alert alert-error">{formError}</div>}
 
-          {!editingContract && (
-            <div>
-              <label className="field-label">Client</label>
-              <select className="input" value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
-                <option value="">No client selected</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="field-label">Client</label>
+            <select className="input" value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
+              <option value="">No client selected</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
 
           <div>
             <label className="field-label">Contract title <span style={{ color: 'var(--color-red)' }}>*</span></label>
@@ -443,14 +493,43 @@ export default function Contracts() {
                   type="button"
                   onClick={handleAiGenerate}
                   disabled={aiLoading}
-                  style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--gold-border)', background: 'var(--gold-bg)', color: 'var(--gold-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  style={{ background: 'linear-gradient(135deg, #C9A84C, #D4B35A)', color: '#1B4332', border: 'none', padding: '4px 12px', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, opacity: aiLoading ? 0.7 : 1 }}
                 >
                   {aiLoading
-                    ? <><span className="spinner-sm" style={{ borderColor: 'rgba(201,168,76,0.3)', borderTopColor: 'var(--gold)', width: 10, height: 10 }} />Generating…</>
-                    : <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>✨ AI Generate</>
+                    ? <><span className="spinner-sm" style={{ borderColor: 'rgba(27,67,50,0.3)', borderTopColor: '#1B4332', width: 10, height: 10 }} />Generating…</>
+                    : <>✨ Generate with AI</>
                   }
                 </button>
               </div>
+            </div>
+
+            {/* File upload */}
+            <div style={{ marginBottom: 8 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (file.name.endsWith('.pdf') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) {
+                    showToast('PDF/Word upload coming soon — paste contract text for now.')
+                    return
+                  }
+                  const reader = new FileReader()
+                  reader.onload = ev => setForm(f => ({ ...f, content: ev.target?.result as string || '' }))
+                  reader.readAsText(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{ fontSize: 12, color: 'var(--text-dim)', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+              >
+                📎 Upload contract file (.txt) · PDF/Word coming soon
+              </button>
             </div>
 
             {/* Edit / Preview toggle */}
@@ -519,12 +598,18 @@ export default function Contracts() {
           )}
         </form>
 
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexShrink: 0 }}>
-          <button type="button" onClick={closeDrawer} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex: 2 }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, flexShrink: 0, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={closeDrawer} className="btn btn-ghost">Cancel</button>
+          <button onClick={handleSave} disabled={saving || sendingDrawer} className="btn btn-ghost" style={{ border: '1px solid var(--border)' }}>
             {saving
-              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />{editingContract ? 'Saving…' : 'Creating…'}</>
-              : editingContract ? 'Save Contract' : 'Create Contract'
+              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(0,0,0,0.2)', borderTopColor: 'var(--text-primary)' }} />Saving…</>
+              : 'Save Contract'
+            }
+          </button>
+          <button onClick={handleSaveAndSend} disabled={saving || sendingDrawer} className="btn btn-primary">
+            {sendingDrawer
+              ? <><span className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />Sending…</>
+              : 'Send to Client →'
             }
           </button>
         </div>
