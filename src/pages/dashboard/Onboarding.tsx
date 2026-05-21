@@ -108,14 +108,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             14-day free trial · No charge today · Cancel anytime
           </p>
 
-          <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
-            <button
-              onClick={onComplete}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              Skip for now — add payment method later in Settings
-            </button>
-          </p>
         </div>
       </div>
     </div>
