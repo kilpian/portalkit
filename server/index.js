@@ -285,6 +285,12 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }))
 
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  next()
+})
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -315,6 +321,8 @@ function sanitize(str) {
   if (!str) return str
   return String(str).trim().slice(0, 10000)
 }
+
+const sanitizePrompt = (str) => str?.replace(/<[^>]*>/g, '').slice(0, 2000) || ''
 
 function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) {
   return `<!DOCTYPE html>
@@ -886,6 +894,7 @@ app.get('/api/contracts', requireAuth, async (req, res) => {
 app.post('/api/contracts', requireAuth, async (req, res) => {
   const { client_id, title, content } = req.body
   if (!title) return res.status(400).json({ error: 'Contract title is required' })
+  if (content && content.length > 50000) return res.status(400).json({ error: 'Contract too long' })
   try {
     const result = await pool.query(
       `INSERT INTO contracts (user_id, client_id, title, content) VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -1516,7 +1525,8 @@ app.post('/api/ai/suggest-message', requireAuth, aiLimiter, async (req, res) => 
   const allowed = await checkAndIncrementAiCalls(req.userId)
   if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
   aiRateLimit.set(req.userId, [...timestamps, now])
-  const { client_id, context } = req.body
+  const { client_id, context: rawContext } = req.body
+  const context = sanitizePrompt(rawContext)
   try {
     let clientContext = context || ''
     if (client_id) {
@@ -1548,7 +1558,8 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
   const allowed = await checkAndIncrementAiCalls(req.userId)
   if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
   aiRateLimit.set(req.userId, [...timestamps, now])
-  const { client_id, template_type } = req.body
+  const { client_id, template_type: rawTemplateType } = req.body
+  const template_type = sanitizePrompt(rawTemplateType)
   try {
     const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
     const photographer = userResult.rows[0]
