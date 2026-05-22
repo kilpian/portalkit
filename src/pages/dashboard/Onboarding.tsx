@@ -4,7 +4,10 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
+const STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+if (!STRIPE_KEY) throw new Error('Missing VITE_STRIPE_PUBLISHABLE_KEY')
+// Clerk key must NEVER be used here — it lives only in main.tsx for ClerkProvider
+const stripePromise = loadStripe(STRIPE_KEY)
 
 interface OnboardingProps {
   onComplete: () => void
