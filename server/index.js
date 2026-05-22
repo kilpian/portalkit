@@ -14,6 +14,11 @@ import crypto from 'crypto'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
+;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL'].forEach(v => {
+  if (!process.env[v]) console.error(`❌ Missing env var: ${v}`)
+  else console.log(`✅ ${v}: set`)
+})
+
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null
@@ -1122,7 +1127,15 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
       [req.params.id]
     )
 
-    if (contract.client_email && resend) {
+    console.log('📤 Contract client_email:', contract.client_email)
+    console.log('📤 Resend configured:', !!resend)
+    if (!contract.client_email) {
+      return res.status(400).json({ error: 'This contract has no client assigned. Please assign a client first.' })
+    }
+    if (!resend) {
+      return res.status(500).json({ error: 'Email service not configured' })
+    }
+    {
       const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${contract.portal_token}`
       console.log('📧 Sending contract email to:', contract.client_email)
@@ -1465,10 +1478,15 @@ app.post('/api/messages', requireAuth, async (req, res) => {
       `INSERT INTO messages (client_id, user_id, sender, content) VALUES ($1,$2,'photographer',$3) RETURNING *`,
       [client_id, req.userId, sanitize(content)]
     )
-    if (client.email && resend) {
+    if (!client.email) {
+      console.warn('⚠️ Client has no email - notification skipped')
+    } else if (!resend) {
+      console.warn('⚠️ Resend not configured - notification skipped')
+    } else {
       const senderName = client.business_name || client.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
-      console.log('📧 Sending message notification to:', client.email)
+      console.log('💬 Message created, sending email to client:', client.email)
+      console.log('💬 Photographer business:', client.business_name || client.photographer_name)
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
@@ -1668,7 +1686,7 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
-      system: [{ type: 'text', text: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract text — no preamble, no commentary, just the contract itself.', cache_control: { type: 'ephemeral' } }],
+      system: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract text — no preamble, no commentary, just the contract itself.',
       messages: [{ role: 'user', content: `Generate a ${template_type || 'photography services'} contract. Photographer/business: ${businessName}. ${clientContext}.` }],
     })
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
