@@ -131,19 +131,33 @@ export default function Dashboard() {
 
   if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
-  const trialExpired = user?.plan === 'trial' && days === 0
+  const trialExpired = (user?.plan === 'trial' && days === 0) || user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace'
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
+
+  const blockedHeading = user?.plan === 'cancelled'
+    ? 'Your subscription has been cancelled'
+    : user?.plan === 'grace'
+    ? 'Payment failed — please update your card'
+    : 'Your trial has ended'
+
+  const blockedBody = user?.plan === 'cancelled'
+    ? 'Your PortalKit subscription has ended. Resubscribe to regain access to your client portals, contracts, and invoices.'
+    : user?.plan === 'grace'
+    ? 'Your last payment didn\'t go through. Please update your payment method to keep your account active.'
+    : 'Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.'
+
+  const blockedIcon = user?.plan === 'cancelled' ? '❌' : user?.plan === 'grace' ? '💳' : '⏰'
 
   return (
     <>
       {trialExpired && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 440 }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⏰</div>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Your trial has ended</h2>
-            <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.</p>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>{blockedIcon}</div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>{blockedHeading}</h2>
+            <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>{blockedBody}</p>
             <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
-              {upgrading ? 'Loading…' : 'Upgrade — $39/mo'}
+              {upgrading ? 'Loading…' : user?.plan === 'grace' ? 'Update Payment Method →' : 'Upgrade — $39/mo'}
             </button>
           </div>
         </div>

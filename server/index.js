@@ -161,24 +161,41 @@ app.post('/api/stripe/webhook',
         case 'invoice.payment_failed': {
           const inv = event.data.object
           console.warn(`Payment failed for customer ${inv.customer}: ${inv.id}`)
-          if (resend) {
+          // Set grace period instead of immediately cancelling
+          await pool.query(
+            "UPDATE users SET plan='grace', grace_period_ends_at=NOW() + INTERVAL '7 days' WHERE stripe_customer_id=$1",
+            [inv.customer]
+          ).catch(e => console.error('Grace period update failed:', e))
+          if (resend && stripe) {
             try {
-              const userResult = await pool.query('SELECT email, full_name FROM users WHERE stripe_customer_id=$1', [inv.customer])
+              const userResult = await pool.query('SELECT email, full_name, stripe_customer_id FROM users WHERE stripe_customer_id=$1', [inv.customer])
               const u = userResult.rows[0]
               if (u) {
+                let portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`
+                try {
+                  const portalSession = await stripe.billingPortal.sessions.create({
+                    customer: u.stripe_customer_id,
+                    return_url: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
+                  })
+                  portalUrl = portalSession.url
+                } catch (portalErr) {
+                  console.error('Portal session creation failed:', portalErr)
+                }
+                const firstName = u.full_name?.split(' ')[0] || 'there'
                 await resend.emails.send({
                   from: 'PortalKit <hello@mail.getportalkit.com>',
                   to: u.email,
-                  subject: 'Action required — payment failed',
+                  subject: 'Action required: Update your payment method',
                   html: emailTemplate({
-                    title: 'Payment Failed',
-                    preheader: 'Your PortalKit payment failed — please update your card.',
-                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment failed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${u.full_name?.split(' ')[0] || 'there'}, your recent PortalKit payment failed. Please update your payment method to keep access to your client portals.</p>`,
+                    title: 'Your payment didn\'t go through',
+                    preheader: 'Action required — please update your payment method to keep access.',
+                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your payment didn't go through</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${firstName}, your recent PortalKit payment failed. Don't worry — Stripe will automatically retry the charge, but we recommend updating your card now to avoid any interruption.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can update your payment method, view past invoices, or manage your subscription from the link below.</p><p style="color:#A32D2D;font-weight:600;line-height:1.6;margin:0 0 16px;">⚠️ If payment isn't resolved within 7 days, your account will be paused.</p>`,
                     ctaText: 'Update Payment Method →',
-                    ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+                    ctaUrl: portalUrl,
                     footerNote: 'PortalKit by Kilpian LLC',
                   }),
                 })
+                console.log(`📧 Dunning email sent to ${u.email}`)
               }
             } catch (emailErr) {
               console.error('Payment failed email error:', emailErr)
@@ -480,6 +497,10 @@ async function initDb() {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false;
       `).catch(() => {})
 
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS grace_period_ends_at TIMESTAMPTZ;
+      `).catch(() => {})
+
       // Backfill: existing users with a business_name are considered onboarded
       await pool.query(`
         UPDATE users SET onboarding_completed = true
@@ -648,14 +669,27 @@ async function requireAuth(req, res, next) {
       console.log(`${req.method} ${req.path} — user ${req.user?.id}`)
     }
 
+    const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/health']
+
     if (req.user.plan === 'trial' && req.user.trial_ends_at) {
       if (new Date() > new Date(req.user.trial_ends_at)) {
-        const allowedAfterTrial = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/health']
-        if (!allowedAfterTrial.some(p => req.path.startsWith(p))) {
+        if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
           return res.status(402).json({
             error: 'Trial expired',
             message: 'Your 14-day trial has ended. Please upgrade to continue.',
             upgradeUrl: 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00',
+          })
+        }
+      }
+    }
+
+    if (req.user.plan === 'grace' && req.user.grace_period_ends_at) {
+      if (new Date() > new Date(req.user.grace_period_ends_at)) {
+        if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
+          return res.status(402).json({
+            error: 'Payment failed',
+            message: 'Please update your payment method to continue.',
+            upgradeUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
           })
         }
       }
@@ -789,6 +823,9 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
   }
 })
 
+// NOTE: Configure Stripe Customer Portal at stripe.com → Settings → Billing → Customer portal
+// Enable: Update payment method, Cancel subscription, View invoice history
+// Set cancellation to: Cancel at end of billing period (not immediately)
 app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
