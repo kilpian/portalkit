@@ -831,6 +831,7 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
     const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
+      customer_email: customerId ? undefined : user.email,
       payment_method_types: ['card'],
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
@@ -838,8 +839,12 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
         trial_period_days: 14,
         metadata: { user_id: String(req.user.id), clerk_id: req.user.clerk_id || '' },
       },
+      phone_number_collection: { enabled: false },
+      custom_text: {
+        submit: { message: 'You won\'t be charged for 14 days. Cancel anytime before your trial ends.' },
+      },
       success_url: `${frontendUrl}/dashboard?payment=success`,
-      cancel_url: `${frontendUrl}/dashboard?payment=cancelled`,
+      cancel_url: `${frontendUrl}/dashboard/setup`,
       metadata: { user_id: String(req.user.id) },
     })
 

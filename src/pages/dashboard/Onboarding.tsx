@@ -104,8 +104,13 @@ export default function Onboarding({ onComplete: _onComplete }: OnboardingProps)
             </div>
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+            <span>🔒</span>
+            <span>Secured by Stripe · 256-bit encryption · Cancel anytime</span>
+          </div>
+
           <button onClick={handleContinue} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%', marginBottom: 14 }}>
-            {saving ? 'Saving…' : 'Continue to Dashboard →'}
+            {saving ? 'Saving…' : 'Complete Setup →'}
           </button>
 
           {stripeError && (
@@ -117,7 +122,7 @@ export default function Onboarding({ onComplete: _onComplete }: OnboardingProps)
           )}
 
           <p style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 12, lineHeight: 1.5 }}>
-            14-day free trial · No charge today · Cancel anytime
+            Your card won't be charged for 14 days. Cancel anytime before then.
           </p>
 
         </div>

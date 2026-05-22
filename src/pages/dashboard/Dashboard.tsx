@@ -159,23 +159,22 @@ export default function Dashboard() {
       )}
 
       {paymentStatus === 'success' && (
-        <div style={{ background: '#EAF3DE', borderBottom: '1px solid #C0DD97', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: '#1B4332', fontWeight: 600 }}>
-            🎉 You're all set! Your 14-day trial has started. You won't be charged until{' '}
-            {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
-          </p>
-          <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#1B4332', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-        </div>
-      )}
-
-      {paymentStatus === 'cancelled' && (
-        <div style={{ background: '#FFF9EC', borderBottom: '1px solid #F0D090', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: '#7A5E00', fontWeight: 600 }}>No worries — you can add your card anytime in Settings to keep access after your trial.</p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #F0D090', background: 'transparent', color: '#7A5E00', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {upgrading ? 'Loading…' : 'Add Payment Method →'}
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 440 }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--green)', marginBottom: 10 }}>You're all set!</h2>
+            <p style={{ fontSize: 15, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 8 }}>
+              Your 14-day free trial has started.
+            </p>
+            <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>
+              You won't be charged until{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </strong>. Cancel anytime before then.
+            </p>
+            <button onClick={() => setSearchParams({}, { replace: true })} className="btn btn-primary" style={{ width: '100%', fontSize: 15, padding: '13px 28px' }}>
+              Go to Dashboard →
             </button>
-            <button onClick={() => setSearchParams({}, { replace: true })} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#7A5E00', cursor: 'pointer' }}>✕</button>
           </div>
         </div>
       )}

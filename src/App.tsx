@@ -16,6 +16,7 @@ import Invoices from './pages/dashboard/Invoices'
 import Files from './pages/dashboard/Files'
 import Messages from './pages/dashboard/Messages'
 import Settings from './pages/dashboard/Settings'
+import Setup from './pages/dashboard/Setup'
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="files" element={<Files />} />
             <Route path="messages" element={<Messages />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="setup" element={<Setup />} />
           </Route>
 
           {/* Fallback */}
