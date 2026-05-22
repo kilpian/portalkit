@@ -669,7 +669,7 @@ async function requireAuth(req, res, next) {
       console.log(`${req.method} ${req.path} — user ${req.user?.id}`)
     }
 
-    const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/health']
+    const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/stripe/create-setup-intent', '/api/stripe/confirm-setup', '/api/health']
 
     if (req.user.plan === 'trial' && req.user.trial_ends_at) {
       if (new Date() > new Date(req.user.trial_ends_at)) {
@@ -841,6 +841,72 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Portal error:', err)
     res.status(500).json({ error: 'Failed to create portal session' })
+  }
+})
+
+app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
+  try {
+    console.log('💳 Creating setup intent for user:', req.user.id)
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+
+    let customerId = req.user.stripe_customer_id
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        name: req.user.full_name || req.user.business_name,
+        metadata: { user_id: String(req.user.id) },
+      })
+      customerId = customer.id
+      await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [customerId, req.user.id])
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      metadata: { user_id: String(req.user.id) },
+    })
+
+    res.json({ clientSecret: setupIntent.client_secret, customerId })
+  } catch (err) {
+    console.error('💳 Setup intent error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const { paymentMethodId } = req.body
+    if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId required' })
+
+    const customerId = req.user.stripe_customer_id
+    if (!customerId) return res.status(400).json({ error: 'No Stripe customer found' })
+
+    const priceId = process.env.STRIPE_PRICE_PORTALKIT
+    if (!priceId) return res.status(500).json({ error: 'Price not configured' })
+
+    await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId })
+    await stripe.customers.update(customerId, {
+      invoice_settings: { default_payment_method: paymentMethodId },
+    })
+
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      trial_period_days: 14,
+      metadata: { user_id: String(req.user.id) },
+    })
+
+    await pool.query(
+      'UPDATE users SET stripe_subscription_id=$1, plan=$2 WHERE id=$3',
+      [subscription.id, 'trial', req.user.id]
+    )
+
+    console.log(`💳 Subscription created for user ${req.user.id}: ${subscription.id}`)
+    res.json({ success: true, subscription: subscription.id })
+  } catch (err) {
+    console.error('💳 Confirm setup error:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 
