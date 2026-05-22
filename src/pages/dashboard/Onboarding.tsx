@@ -6,10 +6,11 @@ interface OnboardingProps {
   onComplete: () => void
 }
 
-export default function Onboarding({ onComplete }: OnboardingProps) {
+export default function Onboarding({ onComplete: _onComplete }: OnboardingProps) {
   const { setUser } = usePortalAuth()
   const { authFetch } = useApi()
   const [saving, setSaving] = useState(false)
+  const [stripeError, setStripeError] = useState('')
 
   const [businessName, setBusinessName] = useState('')
   const [brandColor, setBrandColor] = useState('#1B4332')
@@ -38,6 +39,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const handleContinue = async () => {
     if (!businessName.trim()) return
     setSaving(true)
+    setStripeError('')
     try {
       await saveProfileAndMarkComplete()
       const checkoutRes = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
@@ -45,8 +47,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       console.error('Stripe checkout error:', err)
-      alert('Could not start payment setup: ' + msg)
-      onComplete()
+      setStripeError('Payment setup failed: ' + msg + '. Please try again.')
+      setSaving(false)
     }
   }
 
@@ -105,6 +107,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <button onClick={handleContinue} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%', marginBottom: 14 }}>
             {saving ? 'Saving…' : 'Continue to Dashboard →'}
           </button>
+
+          {stripeError && (
+            <div style={{ color: '#A32D2D', fontSize: 13, padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>
+              {stripeError}
+              <br />
+              <a href="/dashboard" style={{ color: '#A32D2D', fontSize: 12 }}>Skip for now →</a>
+            </div>
+          )}
 
           <p style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 12, lineHeight: 1.5 }}>
             14-day free trial · No charge today · Cancel anytime

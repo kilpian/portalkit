@@ -111,9 +111,6 @@ export default function Dashboard() {
   }
 
   const [onboardingDone, setOnboardingDone] = useState(false)
-  const [greenDismissed, setGreenDismissed] = useState(() => localStorage.getItem('trial-welcome-dismissed') === 'true')
-  const dismissGreenBanner = () => { localStorage.setItem('trial-welcome-dismissed', 'true'); setGreenDismissed(true) }
-
   // DB-backed: never evaluate until `user` is fully loaded, then trust onboarding_completed.
   // Use `!== true` (not `=== false`) so the flag defaults to "show onboarding" when the
   // column is missing (e.g. before migration runs) or returns undefined for any reason.
@@ -135,7 +132,6 @@ export default function Dashboard() {
   if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
   const trialExpired = user?.plan === 'trial' && days === 0
-  const showGreenBanner = user?.plan === 'trial' && days > 3 && !greenDismissed
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   return (
@@ -149,20 +145,6 @@ export default function Dashboard() {
             <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
               {upgrading ? 'Loading…' : 'Upgrade — $39/mo'}
             </button>
-          </div>
-        </div>
-      )}
-
-      {showGreenBanner && (
-        <div style={{ background: '#EAF3DE', borderBottom: '1px solid #C0DD97', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: '#1B4332', fontWeight: 600 }}>
-            🎉 Your 14-day free trial is active. Add your payment method to keep access after your trial ends.
-          </p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-            <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #C0DD97', background: 'transparent', color: '#1B4332', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {upgrading ? 'Loading…' : 'Add Payment Method →'}
-            </button>
-            <button onClick={dismissGreenBanner} style={{ fontSize: 12, background: 'transparent', border: 'none', color: '#1B4332', cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
         </div>
       )}
@@ -210,7 +192,7 @@ export default function Dashboard() {
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-          {[0,1,2,3].map(i => (
+          {[0,1,2].map(i => (
             <div key={i} className="card" style={{ padding: '20px 24px' }}>
               <div className="skeleton" style={{ height: 12, width: '60%', marginBottom: 12 }} />
               <div className="skeleton" style={{ height: 28, width: '40%' }} />
@@ -222,12 +204,6 @@ export default function Dashboard() {
           <StatCard label="Total Clients" value={stats?.total_clients ?? 0} />
           <StatCard label="Active Portals" value={stats?.active_portals ?? 0} />
           <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} />
-          {user?.plan !== 'active' && (
-            <StatCard label="Trial Days Left" value={days} sub={days === 0 ? 'Trial expired' : `day${days === 1 ? '' : 's'} remaining`} accent />
-          )}
-          {user?.plan === 'active' && (
-            <StatCard label="Plan" value="Active" sub="Subscription active" />
-          )}
         </div>
       )}
 
