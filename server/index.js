@@ -1424,9 +1424,9 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
     }
 
     const result = await pool.query(
-      `INSERT INTO files (user_id, client_id, original_name, storage_url, storage_key, size_bytes)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [req.userId, client_id || null, req.file.originalname, storageUrl, storageKey, req.file.size]
+      `INSERT INTO files (user_id, client_id, filename, original_name, mime_type, size_bytes, storage_url, storage_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [req.userId, client_id || null, storageKey, req.file.originalname, req.file.mimetype, req.file.size, storageUrl, storageKey]
     )
     res.json(result.rows[0])
   } catch (err) {
