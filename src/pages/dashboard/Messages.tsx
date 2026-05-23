@@ -51,15 +51,20 @@ export default function Messages() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Load clients + summaries
+  const fetchClients = () =>
+    authFetch('/api/clients', { method: 'get' })
+      .then(res => setClients(Array.isArray(res.data) ? res.data : []))
+      .catch(console.error)
+
+  const fetchUnreadCount = () =>
+    authFetch('/api/messages/summaries', { method: 'get' })
+      .then(res => setSummaries(Array.isArray(res.data) ? res.data : []))
+      .catch(console.error)
+
+  // Load clients + summaries on mount
   useEffect(() => {
-    Promise.all([
-      authFetch('/api/clients', { method: 'get' }),
-      authFetch('/api/messages/summaries', { method: 'get' }),
-    ]).then(([cRes, sRes]) => {
-      setClients(Array.isArray(cRes.data) ? cRes.data : [])
-      setSummaries(Array.isArray(sRes.data) ? sRes.data : [])
-    }).catch(console.error)
+    fetchClients()
+    fetchUnreadCount()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

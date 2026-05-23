@@ -64,9 +64,16 @@ Both parties have read and agree to the terms above.`,
 ]
 
 function statusStyle(status: Contract['status']): React.CSSProperties {
+  if (status === 'fully_signed') return { background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }
   if (status === 'signed') return { background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }
   if (status === 'sent') return { background: 'var(--gold-bg)', color: 'var(--gold-dim)', border: '1px solid var(--gold-border)' }
   return { background: 'var(--bg-secondary)', color: 'var(--text-dim)', border: '1px solid var(--border)' }
+}
+
+function statusLabel(status: Contract['status']): string {
+  if (status === 'fully_signed') return '✓ Fully Executed'
+  if (status === 'signed') return 'client signed'
+  return status
 }
 
 export default function Contracts() {
@@ -92,6 +99,9 @@ export default function Contracts() {
   const [templateName, setTemplateName] = useState('')
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [deletingTemplate, setDeletingTemplate] = useState<number | null>(null)
+  const [counterSignContract, setCounterSignContract] = useState<Contract | null>(null)
+  const [counterSignName, setCounterSignName] = useState('')
+  const [counterSigning, setCounterSigning] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -234,6 +244,25 @@ export default function Contracts() {
     }
   }
 
+  const handleCounterSign = async () => {
+    if (!counterSignContract || !counterSignName.trim()) return
+    setCounterSigning(true)
+    try {
+      const res = await authFetch(`/api/contracts/${counterSignContract.id}/photographer-sign`, {
+        method: 'post',
+        data: { signature_name: counterSignName.trim() },
+      })
+      setContracts(prev => prev.map(c => c.id === counterSignContract.id ? res.data as Contract : c))
+      setCounterSignContract(null)
+      setCounterSignName('')
+      showToast('Contract countersigned.')
+    } catch {
+      showToast('Failed to countersign contract.')
+    } finally {
+      setCounterSigning(false)
+    }
+  }
+
   const applyTemplate = (content: string, label: string) => {
     const injected = businessName
       ? content.replace(/the Photographer/g, businessName)
@@ -251,6 +280,7 @@ export default function Contracts() {
         data: {
           client_id: form.client_id || null,
           template_type: selectedTemplate?.type || 'photography services',
+          custom_instructions: form.content.trim() || undefined,
         },
       })
       const { content } = res.data as { content: string }
@@ -299,25 +329,45 @@ export default function Contracts() {
   const renderedContent = String(marked.parse(form.content || ''))
 
   const downloadSignatureRecord = (c: Contract) => {
+    const photographerDate = c.photographer_signed_at ? new Date(c.photographer_signed_at).toLocaleString() : ''
+    const clientDate = c.signed_at ? new Date(c.signed_at).toLocaleString() : ''
     const content = `
       <html><head><title>Contract Signature Record</title>
       <style>
-        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #333; }
+        body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; color: #333; }
         h1 { color: #1B4332; border-bottom: 2px solid #1B4332; padding-bottom: 10px; }
         .field { margin: 12px 0; }
         .label { font-weight: bold; color: #555; font-size: 12px; text-transform: uppercase; }
         .value { font-size: 14px; margin-top: 4px; }
         .contract-text { background: #f5f5f5; padding: 20px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; margin-top: 20px; }
+        .sig-grid { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        .sig-block p { margin: 0 0 4px; font-size: 13px; }
+        .sig-line { border-bottom: 1px solid #333; margin: 24px 0 6px; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #888; }
       </style></head>
       <body>
         <h1>Contract Signature Record</h1>
         <div class="field"><div class="label">Contract</div><div class="value">${c.title}</div></div>
-        <div class="field"><div class="label">Signed By</div><div class="value">${c.signed_by_name ?? '—'}</div></div>
-        <div class="field"><div class="label">Date &amp; Time</div><div class="value">${c.signed_at ? new Date(c.signed_at).toLocaleString() : '—'}</div></div>
-        <div class="field"><div class="label">IP Address</div><div class="value">Verified</div></div>
         <div class="field"><div class="label">Reference</div><div class="value">${c.content_hash?.slice(-8).toUpperCase() ?? '—'}</div></div>
         <div class="contract-text">${c.content ?? ''}</div>
+        <div class="sig-grid">
+          <div class="sig-block">
+            <p style="font-weight:bold;margin-bottom:16px;">PHOTOGRAPHER</p>
+            <p>${c.photographer_signature ?? businessName}</p>
+            <div class="sig-line"></div>
+            <p style="font-size:12px;">Signature</p>
+            <div class="sig-line"></div>
+            <p style="font-size:12px;">Date: ${photographerDate || '_______________'}</p>
+          </div>
+          <div class="sig-block">
+            <p style="font-weight:bold;margin-bottom:16px;">CLIENT</p>
+            <p>${c.signed_by_name ?? '—'}</p>
+            <div class="sig-line"></div>
+            <p style="font-size:12px;">Signature: ${c.signed_by_name ? c.signed_by_name + ' (Electronic)' : '—'}</p>
+            <div class="sig-line"></div>
+            <p style="font-size:12px;">Date: ${clientDate || '_______________'}</p>
+          </div>
+        </div>
         <div class="footer">This record was generated by PortalKit. This constitutes a legally binding electronic signature under the ESIGN Act.</div>
       </body></html>
     `
@@ -362,16 +412,16 @@ export default function Contracts() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                   <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</p>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, flexShrink: 0, ...statusStyle(c.status) }}>{c.status}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, flexShrink: 0, ...statusStyle(c.status) }}>{statusLabel(c.status)}</span>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                   {c.client_name ?? 'No client'} · {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  {c.signed_by_name && ` · Signed by ${c.signed_by_name}`}
-                  {c.signed_at && !c.signed_by_name && ` · Signed ${new Date(c.signed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                  {c.signed_by_name && ` · Client: ${c.signed_by_name}`}
+                  {c.photographer_signature && ` · Photographer: ${c.photographer_signature}`}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {c.status === 'signed' && (
+                {(c.status === 'signed' || c.status === 'fully_signed') && (
                   <button
                     onClick={() => downloadSignatureRecord(c)}
                     title="Download signature record"
@@ -380,6 +430,14 @@ export default function Contracts() {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     ↓ Record
+                  </button>
+                )}
+                {c.status === 'signed' && !c.photographer_signed_at && (
+                  <button
+                    onClick={() => { setCounterSignContract(c); setCounterSignName('') }}
+                    style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--color-green-border)', background: 'var(--color-green-bg)', color: 'var(--color-green)', cursor: 'pointer' }}
+                  >
+                    Counter-sign ✍
                   </button>
                 )}
                 {c.status === 'draft' ? (
@@ -614,6 +672,45 @@ export default function Contracts() {
           </button>
         </div>
       </aside>
+
+      {/* Counter-sign modal */}
+      {counterSignContract && (
+        <>
+          <div onClick={() => setCounterSignContract(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299, backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 300, width: 'min(420px, 90vw)', background: 'var(--bg-elevated)', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', padding: 28 }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--green)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>Countersign Contract</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 4 }}>{counterSignContract.title}</p>
+            {counterSignContract.signed_by_name && (
+              <p style={{ fontSize: 12, color: 'var(--color-green)', marginBottom: 16 }}>✓ Signed by client: {counterSignContract.signed_by_name}</p>
+            )}
+            <label className="field-label">Type your full name to countersign</label>
+            <input
+              className="input"
+              type="text"
+              placeholder="Your full name"
+              value={counterSignName}
+              onChange={e => setCounterSignName(e.target.value)}
+              style={{ marginBottom: 12 }}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleCounterSign() }}
+            />
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 20, lineHeight: 1.5 }}>
+              By countersigning, you confirm your agreement to this contract as the photographer.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setCounterSignContract(null)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+              <button
+                onClick={handleCounterSign}
+                disabled={counterSigning || !counterSignName.trim()}
+                className="btn btn-primary"
+                style={{ flex: 2 }}
+              >
+                {counterSigning ? 'Signing…' : 'Countersign Contract ✍'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: 'var(--green)', color: '#FDFAF5', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.18)', animation: 'fadeInUp 0.2s ease' }}>

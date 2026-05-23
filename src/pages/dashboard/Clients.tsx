@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useApi, type Client, type CreateClientPayload } from '../../lib/api'
+import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
 
 function getInitials(name: string) {
@@ -35,6 +36,7 @@ const PANEL_W = 400
 
 export default function Clients() {
   const { authFetch } = useApi()
+  const { user } = usePortalAuth()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -152,6 +154,17 @@ export default function Clients() {
     } catch {
       showToast('Failed to delete client.')
     }
+  }
+
+  const handleSendToClient = (client: Client) => {
+    if (!client.email) { showToast('No email on file for this client.'); return }
+    const portalUrl = `${window.location.origin}/portal/${client.portal_token}`
+    const businessName = user?.business_name || user?.full_name || 'Your photographer'
+    const subject = encodeURIComponent(`Your wedding portal is ready — ${client.name}`)
+    const body = encodeURIComponent(
+      `Hi ${client.name},\n\nYour wedding portal is ready. You can access everything here:\n\n${portalUrl}\n\nYou'll find your contract, invoice, and any files we share with you.\n\nLooking forward to your wedding!\n\n${businessName}`
+    )
+    window.open(`mailto:${client.email}?subject=${subject}&body=${body}`)
   }
 
   const copyLink = (client: Client) => {
@@ -417,7 +430,9 @@ export default function Clients() {
                 <button onClick={() => copyLink(previewClient)} style={{ fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}>
                   {copied === previewClient.id ? '✓' : 'Copy'}
                 </button>
-                <a href={`${window.location.origin}/portal/${previewClient.portal_token}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', textDecoration: 'none' }}>Open ↗</a>
+                <button onClick={() => handleSendToClient(previewClient)} title={previewClient.email ? `Send to ${previewClient.email}` : 'No email on file'} style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--green-border)', background: 'var(--green-bg)', color: 'var(--green)', cursor: 'pointer' }}>
+                  Send to Client ✉
+                </button>
                 <button onClick={closePreview} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', padding: 4 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>

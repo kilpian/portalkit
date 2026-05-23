@@ -138,15 +138,16 @@ app.post('/api/stripe/webhook',
             const u = userResult.rows[0]
             if (u && resend) {
               try {
+                const firstName = u.full_name?.split(' ')[0] || 'there'
                 await resend.emails.send({
                   from: 'PortalKit <hello@mail.getportalkit.com>',
                   to: u.email,
-                  subject: 'Welcome to PortalKit!',
+                  subject: "Welcome to PortalKit — you're all set! 🎉",
                   html: emailTemplate({
-                    title: 'Welcome to PortalKit',
-                    preheader: 'Your subscription is now active — unlimited access awaits.',
-                    body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Welcome, ${u.full_name.split(' ')[0]}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your subscription is now active. You have unlimited access to create client portals, share contracts, and manage invoices.</p>`,
-                    ctaText: 'Go to Dashboard →',
+                    title: "Welcome to PortalKit",
+                    preheader: "You're all set — let's get your first client portal ready.",
+                    body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Welcome, ${firstName}! 🎉</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your account is ready. Here's how to get started:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin:0 0 16px;"><li><strong>Create your first client</strong> — Add a client and share their private portal link</li><li><strong>Send your contract</strong> — Use our templates or generate one with AI in seconds</li><li><strong>Stay organized</strong> — All your clients, contracts, and invoices in one place</li></ol><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You have 14 days to explore everything — no limits, no restrictions.</p><p style="color:#9C8E7A;font-size:13px;margin:0;">Questions? Reply to this email — we read every one.</p>`,
+                    ctaText: 'Go to your dashboard →',
                     ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
                     footerNote: 'PortalKit by Kilpian LLC',
                   }),
@@ -528,6 +529,8 @@ async function initDb() {
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_name TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_by_ip TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS content_hash TEXT;`).catch(() => {})
+      await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS photographer_signed_at TIMESTAMPTZ;`).catch(() => {})
+      await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS photographer_signature TEXT;`).catch(() => {})
 
       await pool.query(`
         CREATE TABLE IF NOT EXISTS reminders_sent (
@@ -1274,6 +1277,29 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/api/contracts/:id/photographer-sign', requireAuth, async (req, res) => {
+  const { signature_name } = req.body
+  if (!signature_name?.trim()) return res.status(400).json({ error: 'Signature name is required' })
+  try {
+    const contractResult = await pool.query(
+      'SELECT * FROM contracts WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.userId]
+    )
+    if (!contractResult.rows.length) return res.status(404).json({ error: 'Contract not found' })
+    const contract = contractResult.rows[0]
+    const newStatus = contract.signed_at ? 'fully_signed' : contract.status
+    const result = await pool.query(
+      `UPDATE contracts SET photographer_signed_at=NOW(), photographer_signature=$1, status=$2, updated_at=NOW()
+       WHERE id=$3 AND user_id=$4 RETURNING *`,
+      [sanitize(signature_name).slice(0, 200), newStatus, req.params.id, req.userId]
+    )
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Photographer sign error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── INVOICE SEND + DELETE ─────────────────────────────────────
 
 app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
@@ -1448,7 +1474,7 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
        FROM contracts c
        JOIN clients cl ON cl.id = c.client_id
        JOIN users u ON u.id = c.user_id
-       WHERE c.id=$1 AND cl.portal_token=$2 AND c.status != 'signed'`,
+       WHERE c.id=$1 AND cl.portal_token=$2 AND c.status NOT IN ('signed', 'fully_signed')`,
       [req.params.contractId, req.params.token]
     )
     if (!contractResult.rows.length) return res.status(404).json({ error: 'Contract not found or already signed' })
@@ -1457,10 +1483,11 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
     const signerIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown'
     const hash = crypto.createHash('sha256').update(contract.content || '').digest('hex')
 
+    const newStatus = contract.photographer_signed_at ? 'fully_signed' : 'signed'
     const updated = await pool.query(
-      `UPDATE contracts SET status='signed', signed_by_name=$1, signed_by_ip=$2, signed_at=NOW(), content_hash=$3
-       WHERE id=$4 RETURNING *`,
-      [sanitize(signer_name), signerIp, hash, contract.id]
+      `UPDATE contracts SET status=$1, signed_by_name=$2, signed_by_ip=$3, signed_at=NOW(), content_hash=$4
+       WHERE id=$5 RETURNING *`,
+      [newStatus, sanitize(signer_name), signerIp, hash, contract.id]
     )
     const signedContract = updated.rows[0]
 
@@ -1776,8 +1803,9 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
   const allowed = await checkAndIncrementAiCalls(req.userId)
   if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
   aiRateLimit.set(req.userId, [...timestamps, now])
-  const { client_id, template_type: rawTemplateType } = req.body
+  const { client_id, template_type: rawTemplateType, custom_instructions: rawCustomInstructions } = req.body
   const template_type = sanitizePrompt(rawTemplateType)
+  const custom_instructions = rawCustomInstructions ? sanitizePrompt(String(rawCustomInstructions)) : ''
   console.log('🤖 AI contract request:', { client_id, template_type, user: req.user.id })
   try {
     const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
@@ -1791,11 +1819,18 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
         clientContext = `Client: ${c.name}. Event: ${c.event_type || 'photography session'}. Date: ${c.event_date ? new Date(c.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD'}. Notes: ${c.notes || 'none'}`
       }
     }
+    const userPrompt = [
+      `Generate a ${template_type || 'photography services'} contract.`,
+      `Photographer/business: ${businessName}.`,
+      clientContext + '.',
+      custom_instructions ? `Additional requirements and context from the photographer: ${custom_instructions}` : '',
+      'Make the contract specific to these details, not generic.',
+    ].filter(Boolean).join(' ')
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       system: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract text — no preamble, no commentary, just the contract itself.',
-      messages: [{ role: 'user', content: `Generate a ${template_type || 'photography services'} contract. Photographer/business: ${businessName}. ${clientContext}.` }],
+      messages: [{ role: 'user', content: userPrompt }],
     })
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
     res.json({ content })

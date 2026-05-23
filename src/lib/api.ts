@@ -61,11 +61,13 @@ export interface Contract {
   client_name: string | null
   title: string
   content: string | null
-  status: 'draft' | 'sent' | 'signed'
+  status: 'draft' | 'sent' | 'signed' | 'fully_signed'
   signed_at: string | null
   signed_by_name: string | null
   signed_by_ip: string | null
   content_hash: string | null
+  photographer_signed_at: string | null
+  photographer_signature: string | null
   created_at: string
   updated_at: string
 }

@@ -12,6 +12,8 @@ interface Contract {
   signed_at: string | null
   signed_by_name: string | null
   content_hash: string | null
+  photographer_signed_at: string | null
+  photographer_signature: string | null
 }
 
 interface Invoice {
@@ -339,9 +341,10 @@ export function ClientPortalContent({ token }: { token: string }) {
               ? <EmptySection message="No contracts yet — your photographer will share them here." />
               : data.contracts.map(c => {
                 const justSigned = signedContracts[c.id]
-                const isSigned = c.status === 'signed' || !!justSigned
+                const isSigned = c.status === 'signed' || c.status === 'fully_signed' || !!justSigned
                 const signerName = justSigned?.name || c.signed_by_name
                 const signedDate = justSigned?.date || (c.signed_at ? formatDate(c.signed_at) : null)
+                const isFullyExecuted = c.status === 'fully_signed' || (!!justSigned && !!c.photographer_signed_at)
 
                 const contractContent = justSigned?.content ?? c.content
                 const contractHash = justSigned?.hash ?? c.content_hash
@@ -351,13 +354,22 @@ export function ClientPortalContent({ token }: { token: string }) {
                     <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.title}</p>
-                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)', flexShrink: 0, marginLeft: 8 }}>✓ Signed</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)', flexShrink: 0, marginLeft: 8 }}>
+                          {isFullyExecuted ? '✓ Fully Executed' : '✓ You Signed'}
+                        </span>
                       </div>
                       {(signerName || signedDate) && (
-                        <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 10 }}>
+                        <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>
                           {signerName && `Signed by ${signerName}`}{signerName && signedDate && ' · '}{signedDate}
                         </p>
                       )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-green)', fontWeight: 500 }}>✓ You have signed this contract</p>
+                        {isFullyExecuted
+                          ? <p style={{ fontSize: 12, color: 'var(--color-green)', fontWeight: 500 }}>✓ Contract fully executed by both parties</p>
+                          : <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>⏳ Awaiting photographer countersignature</p>
+                        }
+                      </div>
                       {contractContent && (
                         <div style={{ maxHeight: 240, overflowY: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 14px', fontSize: 13, lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', marginBottom: 10, fontFamily: 'monospace' }}>
                           {contractContent}
