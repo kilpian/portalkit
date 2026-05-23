@@ -233,31 +233,58 @@ export function ClientPortalContent({ token }: { token: string }) {
     }
   }
 
-  const downloadContract = (title: string, content: string | null, signerName: string, signedDate: string, hash: string | null) => {
-    const hashLine = hash ? `\nDIGITAL SIGNATURE REF: ...${hash.slice(-8)}` : ''
-    const text = [
-      `CONTRACT: ${title}`,
-      `SIGNED BY: ${signerName}`,
-      `DATE: ${signedDate}`,
-      ``,
-      `─────────────────────────────────────────`,
-      ``,
-      content ?? '',
-      ``,
-      `─────────────────────────────────────────`,
-      `ELECTRONIC SIGNATURE RECORD`,
-      `Signed by: ${signerName}`,
-      `Date: ${signedDate}`,
-      hashLine,
-      `Signed via PortalKit (ESIGN Act compliant)`,
-    ].join('\n')
-    const blob = new Blob([text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${title.replace(/[^a-z0-9]/gi, '_')}_signed.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+  const downloadContract = (c: Contract, opts: { signerName: string; signedDate: string; content: string | null; hash: string | null }) => {
+    const eventDate = data?.event_date
+      ? new Date(data.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : ''
+    const photographerName = data?.photographer_business || data?.photographer_name || 'PortalKit'
+
+    const html = `<html><head><title>${c.title}</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; color: #333; line-height: 1.6; }
+      h1 { color: #1B4332; border-bottom: 2px solid #1B4332; padding-bottom: 10px; font-size: 22px; }
+      .meta { background: #f5f5f5; padding: 16px; border-radius: 6px; margin-bottom: 24px; font-size: 13px; }
+      .contract-body { font-size: 14px; white-space: pre-wrap; }
+      .signatures { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+      .sig-block p { margin: 4px 0; font-size: 13px; }
+      .sig-line { border-bottom: 1px solid #333; margin: 24px 0 6px; }
+      .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 11px; color: #888; text-align: center; }
+      .badge { background: #EAF3DE; color: #1B4332; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; margin-bottom: 16px; }
+    </style></head>
+    <body>
+      <h1>${c.title}</h1>
+      <span class="badge">✓ Electronically Signed</span>
+      <div class="meta">
+        <strong>Client:</strong> ${data?.name ?? ''}<br>
+        <strong>Event:</strong> ${data?.event_type || 'Photography Session'} · ${eventDate}<br>
+        <strong>Photographer:</strong> ${photographerName}
+      </div>
+      <div class="contract-body">${opts.content ?? ''}</div>
+      <div class="signatures">
+        <div class="sig-block">
+          <p><strong>PHOTOGRAPHER</strong></p>
+          <p>${photographerName}</p>
+          <div class="sig-line"></div>
+          <p>Signature</p>
+          <div class="sig-line"></div>
+          <p>Date: ${c.photographer_signed_at ? new Date(c.photographer_signed_at).toLocaleDateString() : '________________'}</p>
+        </div>
+        <div class="sig-block">
+          <p><strong>CLIENT</strong></p>
+          <p>${opts.signerName}</p>
+          <div class="sig-line"></div>
+          <p>Signature: ${opts.signerName} (Electronic)</p>
+          <div class="sig-line"></div>
+          <p>Date: ${opts.signedDate}</p>
+        </div>
+      </div>
+      <div class="footer">
+        ${opts.hash ? `Reference: ${opts.hash.slice(-8).toUpperCase()} · ` : ''}Signed via PortalKit (ESIGN Act compliant) · ${photographerName}
+      </div>
+    </body></html>`
+
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close(); w.print() }
   }
 
   useEffect(() => {
@@ -376,10 +403,10 @@ export function ClientPortalContent({ token }: { token: string }) {
                         </div>
                       )}
                       <button
-                        onClick={() => downloadContract(c.title, contractContent, signerName ?? '', signedDate ?? '', contractHash)}
-                        style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--color-green-border)', background: 'var(--color-green-bg)', color: 'var(--color-green)', cursor: 'pointer' }}
+                        onClick={() => downloadContract(c, { signerName: signerName ?? '', signedDate: signedDate ?? '', content: contractContent, hash: contractHash })}
+                        style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, background: 'none', border: '1px solid var(--green)', padding: '6px 14px', borderRadius: 6, cursor: 'pointer' }}
                       >
-                        ↓ Download Contract
+                        Download PDF
                       </button>
                     </div>
                   )

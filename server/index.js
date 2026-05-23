@@ -1545,6 +1545,8 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
     const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
     const signedDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
+    const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${contract.portal_token}`
+
     if (contract.client_email && resend) {
       try {
         await resend.emails.send({
@@ -1553,8 +1555,10 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
           subject: `Contract signed — ${senderName}`,
           html: emailTemplate({
             title: 'Contract Signed',
-            preheader: `You signed ${contract.title}. Keep this email for your records.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You signed <strong>${contract.title}</strong> on ${signedDate}. Keep this email for your records.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}<br><strong>Reference:</strong> ${hash.slice(-8).toUpperCase()}</div>`,
+            preheader: `You signed ${contract.title}. You can view it anytime in your portal.`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You signed <strong>${contract.title}</strong>. You can view the signed contract anytime in your portal.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}<br><strong>Reference:</strong> ${hash.slice(-8).toUpperCase()}</div>`,
+            ctaText: 'View Your Portal →',
+            ctaUrl: portalLink,
             footerNote: `Signed on behalf of ${senderName} via PortalKit`,
           }),
         })
