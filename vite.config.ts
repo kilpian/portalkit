@@ -7,6 +7,7 @@ export default defineConfig({
   publicDir: 'public',
   server: {
     port: 5175,
+    open: '/app.html',
   },
   build: {
     rollupOptions: {
