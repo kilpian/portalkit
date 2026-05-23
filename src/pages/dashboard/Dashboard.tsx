@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
-import { useApi, type DashboardStats, type Client } from '../../lib/api'
+import { useApi, usePolling, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
 import Onboarding from './Onboarding'
 
@@ -72,7 +72,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentStatus])
 
-  useEffect(() => {
+  const fetchStats = () =>
     Promise.all([
       authFetch('/api/dashboard/stats', { method: 'get' }),
       authFetch('/api/clients', { method: 'get' }),
@@ -83,8 +83,13 @@ export default function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+
+  useEffect(() => {
+    fetchStats()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  usePolling(fetchStats, 60000)
 
   const greeting = () => {
     const h = new Date().getHours()

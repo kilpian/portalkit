@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useEffect } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
@@ -121,6 +122,14 @@ export interface PortalUser {
 }
 
 // ── Hook ──────────────────────────────────────────────────────
+
+export function usePolling(callback: () => void, intervalMs = 30000) {
+  useEffect(() => {
+    const id = setInterval(callback, intervalMs)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
 
 export function useApi() {
   const { getToken } = useAuth()

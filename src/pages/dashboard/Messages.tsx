@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useApi, type Client, type Message, type MessageSummary } from '../../lib/api'
+import { useApi, usePolling, type Client, type Message, type MessageSummary } from '../../lib/api'
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -67,6 +67,17 @@ export default function Messages() {
     fetchUnreadCount()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Poll for new messages / unread counts every 30s
+  usePolling(() => {
+    fetchClients()
+    fetchUnreadCount()
+    if (selectedId !== null) {
+      authFetch(`/api/messages?client_id=${selectedId}`, { method: 'get' })
+        .then(res => setMessages(Array.isArray(res.data) ? res.data : []))
+        .catch(() => {})
+    }
+  }, 30000)
 
   // Load messages when client selected
   useEffect(() => {

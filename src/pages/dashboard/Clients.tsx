@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useApi, type Client, type CreateClientPayload } from '../../lib/api'
+import { useApi, usePolling, type Client, type CreateClientPayload } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
 
@@ -54,13 +54,18 @@ export default function Clients() {
   const [copied, setCopied] = useState<number | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const fetchClients = () =>
     authFetch('/api/clients', { method: 'get' })
       .then(res => setClients(Array.isArray(res.data) ? res.data : []))
       .catch(console.error)
       .finally(() => setLoading(false))
+
+  useEffect(() => {
+    fetchClients()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  usePolling(fetchClients, 60000)
 
   // ESC to close panels
   useEffect(() => {

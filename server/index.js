@@ -11,6 +11,9 @@ import { Webhook } from 'svix'
 import multer from 'multer'
 import fs from 'fs'
 import crypto from 'crypto'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -34,6 +37,19 @@ const clerk = process.env.CLERK_SECRET_KEY
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null
+
+const r2 = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
+  ? new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    })
+  : null
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME || 'portalkit-files'
 
 const { Pool } = pkg
 const app = express()
@@ -531,6 +547,8 @@ async function initDb() {
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS content_hash TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS photographer_signed_at TIMESTAMPTZ;`).catch(() => {})
       await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS photographer_signature TEXT;`).catch(() => {})
+
+      await pool.query(`ALTER TABLE files ADD COLUMN IF NOT EXISTS storage_key TEXT;`).catch(() => {})
 
       await pool.query(`
         CREATE TABLE IF NOT EXISTS reminders_sent (
@@ -1366,27 +1384,49 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
 // ── FILES ─────────────────────────────────────────────────────
 
 const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 10 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'video/mp4', 'video/quicktime', 'application/zip']
     cb(null, allowed.includes(file.mimetype))
   },
 })
-app.use('/uploads', express.static('uploads'))
+
+async function generateDownloadUrl(storageKey) {
+  if (!r2 || !storageKey) return null
+  return getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: storageKey }), { expiresIn: 3600 })
+}
 
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' })
     const { client_id } = req.body
-    if (!client_id) return res.status(400).json({ error: 'client_id required' })
-    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
-    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
-    const storageUrl = `/uploads/${req.file.filename}`
+    if (client_id) {
+      const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+      if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    }
+
+    let storageKey = null
+    let storageUrl = null
+
+    if (r2) {
+      storageKey = `${req.userId}/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: storageKey,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+        ContentDisposition: `attachment; filename="${req.file.originalname}"`,
+      }))
+      storageUrl = await generateDownloadUrl(storageKey)
+    } else {
+      return res.status(503).json({ error: 'File storage not configured. Please set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME.' })
+    }
+
     const result = await pool.query(
-      `INSERT INTO files (user_id, client_id, original_name, storage_url, size_bytes)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.userId, client_id, req.file.originalname, storageUrl, req.file.size]
+      `INSERT INTO files (user_id, client_id, original_name, storage_url, storage_key, size_bytes)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.userId, client_id || null, req.file.originalname, storageUrl, storageKey, req.file.size]
     )
     res.json(result.rows[0])
   } catch (err) {
@@ -1403,7 +1443,14 @@ app.get('/api/files', requireAuth, async (req, res) => {
        WHERE f.user_id=$1 ORDER BY f.created_at DESC`,
       [req.userId]
     )
-    res.json(result.rows)
+    // Refresh presigned URLs for R2 files
+    const rows = await Promise.all(result.rows.map(async f => {
+      if (f.storage_key && r2) {
+        f.storage_url = await generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
+      }
+      return f
+    }))
+    res.json(rows)
   } catch (err) {
     console.error('Get files error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -1412,6 +1459,10 @@ app.get('/api/files', requireAuth, async (req, res) => {
 
 app.delete('/api/files/:id', requireAuth, async (req, res) => {
   try {
+    const fileResult = await pool.query('SELECT storage_key FROM files WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (fileResult.rows.length && fileResult.rows[0].storage_key && r2) {
+      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: fileResult.rows[0].storage_key })).catch(e => console.error('R2 delete failed:', e))
+    }
     await pool.query('DELETE FROM files WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     res.json({ success: true })
   } catch (err) {
@@ -1829,10 +1880,16 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
-      system: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract text — no preamble, no commentary, just the contract itself.',
+      system: 'You are a professional contract writer for photographers. Generate a complete, professional photography contract in clean plain text only. Do NOT use markdown formatting, asterisks, pound signs, or any special characters. Use ALL CAPS for section headers. Use plain dashes for lists. Write only the contract body — no preamble, no commentary, just the contract itself. Do NOT include any signature blocks, signature lines, acceptance sections, or "By signing below" language at the end — the platform handles signatures separately.',
       messages: [{ role: 'user', content: userPrompt }],
     })
-    const content = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const rawContent = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const content = rawContent
+      .replace(/ACCEPTANCE AND SIGNATURES[\s\S]*$/gi, '')
+      .replace(/By signing below[\s\S]*$/gi, '')
+      .replace(/SIGNATURE[\s\S]{0,20}BLOCK[\s\S]*$/gi, '')
+      .replace(/_{3,}[\s\S]{0,60}(Signature|Date|Name)[\s\S]{0,200}_{3,}/gi, '')
+      .trim()
     res.json({ content })
   } catch (err) {
     console.error('🤖 AI contract error:', err.message, err.stack)

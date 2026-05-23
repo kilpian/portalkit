@@ -13,7 +13,7 @@ interface OnboardingProps {
   onComplete: () => void
 }
 
-function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg: string) => void }) {
+function CardForm({ onSuccess, onError, bothAgreed }: { onSuccess: () => void; onError: (msg: string) => void; bothAgreed: boolean }) {
   const stripe = useStripe()
   const elements = useElements()
   const { authFetch } = useApi()
@@ -21,7 +21,7 @@ function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg
   const [cardError, setCardError] = useState('')
 
   const handleSubmit = async () => {
-    if (!stripe || !elements) return
+    if (!stripe || !elements || !bothAgreed) return
     setSaving(true)
     setCardError('')
 
@@ -51,6 +51,8 @@ function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg
     }
   }
 
+  const disabled = saving || !stripe || !bothAgreed
+
   return (
     <div>
       <div style={{ border: '1px solid #E8E0D0', borderRadius: 8, padding: '12px 14px', background: 'white', marginBottom: 8 }}>
@@ -72,7 +74,7 @@ function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg
       )}
       <button
         onClick={handleSubmit}
-        disabled={saving || !stripe}
+        disabled={disabled}
         style={{
           width: '100%',
           background: '#1B4332',
@@ -82,8 +84,8 @@ function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg
           borderRadius: 8,
           fontSize: 15,
           fontWeight: 600,
-          cursor: saving || !stripe ? 'not-allowed' : 'pointer',
-          opacity: saving || !stripe ? 0.7 : 1,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.7 : 1,
         }}
       >
         {saving ? 'Setting up your account…' : 'Start Free Trial →'}
@@ -102,7 +104,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
   const [clientSecret, setClientSecret] = useState('')
   const [stripeError, setStripeError] = useState('')
+  const [agreedTerms, setAgreedTerms] = useState(false)
+  const [agreedBilling, setAgreedBilling] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+
+  const bothAgreed = agreedTerms && agreedBilling
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -229,12 +235,20 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           {step === 2 && clientSecret && (
             <>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--green)', marginBottom: 6 }}>Secure your account</h1>
-              <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 4, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 16, lineHeight: 1.5 }}>
                 Add your card to activate your 14-day free trial.
               </p>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24, lineHeight: 1.5 }}>
-                🔒 You won't be charged until {trialEndDate}. Cancel anytime before then.
-              </p>
+
+              {/* $0 today callout */}
+              <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, padding: '12px 14px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>🎉</span>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#166534', margin: 0 }}>$0 due today</p>
+                  <p style={{ fontSize: 12, color: '#15803D', margin: '2px 0 0', lineHeight: 1.4 }}>
+                    Your 14-day free trial starts now. We'll charge $39/mo on {trialEndDate} — cancel anytime before then.
+                  </p>
+                </div>
+              </div>
 
               <Elements
                 stripe={stripePromise}
@@ -246,8 +260,34 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   },
                 }}
               >
-                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} />
+                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} bothAgreed={bothAgreed} />
               </Elements>
+
+              {/* Agreement checkboxes */}
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={agreedTerms}
+                    onChange={e => setAgreedTerms(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: '#1B4332', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                    I agree to the <a href="https://getportalkit.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Terms of Service</a> and <a href="https://getportalkit.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Privacy Policy</a>
+                  </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={agreedBilling}
+                    onChange={e => setAgreedBilling(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: '#1B4332', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                    I understand my card will be charged $39/mo after the free trial ends on {trialEndDate}
+                  </span>
+                </label>
+              </div>
 
               {stripeError && (
                 <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 8, textAlign: 'center' }}>{stripeError}</p>

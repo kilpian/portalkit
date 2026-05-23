@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useApi, type UploadedFile, API_BASE } from '../../lib/api'
+import { useEffect, useRef, useState } from 'react'
+import { useApi, type Client, type UploadedFile } from '../../lib/api'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -24,19 +24,58 @@ function fileIcon(name: string): string {
 export default function Files() {
   const { authFetch } = useApi()
   const [files, setFiles] = useState<UploadedFile[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [selectedClientId, setSelectedClientId] = useState<string>('')
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const fetchFiles = () =>
     authFetch('/api/files', { method: 'get' })
       .then(res => setFiles(Array.isArray(res.data) ? res.data : []))
       .catch(console.error)
       .finally(() => setLoading(false))
+
+  useEffect(() => {
+    fetchFiles()
+    authFetch('/api/clients', { method: 'get' })
+      .then(res => setClients(Array.isArray(res.data) ? res.data : []))
+      .catch(console.error)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  const uploadFile = async (file: File) => {
+    if (uploading) return
+    setUploading(true)
+    setUploadProgress(0)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (selectedClientId) fd.append('client_id', selectedClientId)
+      const resp = await authFetch('/api/files/upload', {
+        method: 'post',
+        data: fd,
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e: { loaded: number; total?: number }) => {
+          if (e.total) setUploadProgress(Math.round(e.loaded / e.total * 100))
+        },
+      })
+      setFiles(prev => [resp.data, ...prev])
+      showToast('File uploaded!')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      showToast(msg || 'Upload failed')
+    } finally {
+      setUploading(false)
+      setUploadProgress(0)
+    }
+  }
 
   const handleDelete = async (id: number) => {
     setDeleting(id)
@@ -53,7 +92,7 @@ export default function Files() {
 
   // Group by client
   const grouped = files.reduce<Record<string, UploadedFile[]>>((acc, f) => {
-    const key = f.client_name ?? 'No client'
+    const key = f.client_name ?? 'No client assigned'
     ;(acc[key] = acc[key] ?? []).push(f)
     return acc
   }, {})
@@ -68,20 +107,60 @@ export default function Files() {
         </div>
       </div>
 
-      {/* Upload area — temporarily disabled */}
-      <div style={{
-        background: 'var(--bg-secondary)',
-        border: '2px dashed var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '48px 24px',
-        textAlign: 'center',
-        marginBottom: 24,
-      }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
-        <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>File uploads coming soon</p>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Cloud file storage is being set up. Available within 48 hours.
-        </p>
+      {/* Client selector */}
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', flexShrink: 0 }}>Assign to client:</label>
+        <select
+          value={selectedClientId}
+          onChange={e => setSelectedClientId(e.target.value)}
+          style={{ flex: 1, maxWidth: 240, padding: '6px 10px', fontSize: 13, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--text-primary)', cursor: 'pointer' }}
+        >
+          <option value="">— No client —</option>
+          {clients.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+        </select>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) uploadFile(f) }}
+        style={{
+          background: dragOver ? '#F0FDF4' : 'var(--bg-secondary)',
+          border: `2px dashed ${dragOver ? '#86EFAC' : 'var(--border)'}`,
+          borderRadius: 'var(--radius-lg)',
+          padding: '40px 24px',
+          textAlign: 'center',
+          marginBottom: 24,
+          cursor: uploading ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s',
+        }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }}
+        />
+        {uploading ? (
+          <>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>⏫</div>
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Uploading…</p>
+            <div style={{ maxWidth: 200, margin: '0 auto', height: 6, background: 'var(--border)', borderRadius: 99 }}>
+              <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--green)', borderRadius: 99, transition: 'width 0.2s' }} />
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{uploadProgress}%</p>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>📁</div>
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+              {dragOver ? 'Drop to upload' : 'Click or drag a file to upload'}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Images, PDFs, videos, ZIP — up to 50 MB</p>
+          </>
+        )}
       </div>
 
       {/* File list */}
@@ -106,14 +185,16 @@ export default function Files() {
                     <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>{formatSize(f.size_bytes)} · {formatDate(f.created_at)}</p>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <a
-                      href={`${API_BASE}${f.storage_url}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', textDecoration: 'none' }}
-                    >
-                      Download
-                    </a>
+                    {f.storage_url && (
+                      <a
+                        href={f.storage_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', textDecoration: 'none' }}
+                      >
+                        Download
+                      </a>
+                    )}
                     <button
                       onClick={() => handleDelete(f.id)}
                       disabled={deleting === f.id}
