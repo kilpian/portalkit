@@ -101,6 +101,7 @@ export interface UploadedFile {
   client_id: number | null
   client_name: string | null
   original_name: string
+  mime_type: string | null
   storage_url: string
   size_bytes: number
   created_at: string

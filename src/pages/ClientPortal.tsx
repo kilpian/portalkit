@@ -27,6 +27,7 @@ interface Invoice {
 interface PortalFile {
   id: number
   original_name: string
+  mime_type: string | null
   size_bytes: number | null
   storage_url: string | null
   created_at: string
@@ -496,17 +497,39 @@ export function ClientPortalContent({ token }: { token: string }) {
           }>
             {data.files.length === 0
               ? <EmptySection message="No files shared yet — your photographer will upload them here." />
-              : data.files.map(f => (
-                <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', gap: 12 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.original_name}</p>
-                    {f.size_bytes && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{formatBytes(f.size_bytes)}</p>}
-                  </div>
-                  {f.storage_url && (
-                    <a href={f.storage_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>Download</a>
-                  )}
-                </div>
-              ))
+              : (() => {
+                  const imageFiles = data.files.filter(f => f.mime_type?.startsWith('image/'))
+                  const otherFiles = data.files.filter(f => !f.mime_type?.startsWith('image/'))
+                  return (
+                    <>
+                      {imageFiles.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: otherFiles.length > 0 ? 16 : 0 }}>
+                          {imageFiles.map(f => (
+                            <a key={f.id} href={f.storage_url ?? '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', textDecoration: 'none' }}>
+                              <img src={f.storage_url ?? ''} alt={f.original_name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {otherFiles.map(f => (
+                        <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                            <span style={{ fontSize: 20, flexShrink: 0 }}>
+                              {f.mime_type === 'application/pdf' ? '📄' : f.mime_type?.startsWith('video/') ? '🎬' : '📎'}
+                            </span>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.original_name}</p>
+                              {f.size_bytes && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{formatBytes(f.size_bytes)}</p>}
+                            </div>
+                          </div>
+                          {f.storage_url && (
+                            <a href={f.storage_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>Download</a>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )
+                })()
             }
           </SectionCard>
 

@@ -1400,7 +1400,7 @@ async function generateDownloadUrl(storageKey) {
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' })
-    const { client_id } = req.body
+    const client_id = req.body.client_id ? parseInt(req.body.client_id) : null
     if (client_id) {
       const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
       if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
@@ -1496,16 +1496,24 @@ app.get('/api/portals/:token', async (req, res) => {
         [client.id]
       ),
       pool.query(
-        `SELECT id, original_name, size_bytes, storage_url, created_at FROM files WHERE client_id=$1 ORDER BY created_at DESC`,
+        `SELECT id, original_name, mime_type, size_bytes, storage_url, storage_key, created_at FROM files WHERE client_id=$1 ORDER BY created_at DESC`,
         [client.id]
       ),
     ])
+
+    // Refresh presigned URLs for R2 files
+    const fileRows = await Promise.all(files.rows.map(async f => {
+      if (f.storage_key && r2) {
+        f.storage_url = await generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
+      }
+      return f
+    }))
 
     res.json({
       ...client,
       contracts: contracts.rows,
       invoices: invoices.rows,
-      files: files.rows,
+      files: fileRows,
     })
   } catch (err) {
     console.error('Portal error:', err)
