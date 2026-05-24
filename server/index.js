@@ -691,12 +691,9 @@ async function sendEventReminders() {
   }
 }
 
-setInterval(async () => {
-  const now = new Date()
-  if (now.getHours() === 9 && now.getMinutes() < 5) {
-    await sendEventReminders()
-  }
-}, 5 * 60 * 1000)
+// Run on startup and every 24 hours (Railway restarts daily, so this effectively fires once per day)
+sendEventReminders()
+setInterval(sendEventReminders, 24 * 60 * 60 * 1000)
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization
@@ -2137,6 +2134,20 @@ app.get('/api/test-email', async (req, res) => {
   } catch (err) {
     console.error('📧 Test email failed:', err)
     res.status(500).json({ error: String(err), configured: true })
+  }
+})
+
+app.post('/api/admin/test-reminders', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  try {
+    await sendEventReminders()
+    res.json({ success: true, message: 'Reminders triggered' })
+  } catch (err) {
+    console.error('Test reminders error:', err)
+    res.status(500).json({ error: String(err) })
   }
 })
 
