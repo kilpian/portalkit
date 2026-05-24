@@ -614,7 +614,9 @@ async function sendEventReminders() {
         )
       `, [reminder.type])
       for (const client of clients.rows) {
-        const [y, mo, d] = (client.event_date + '').split('T')[0].split('-').map(Number)
+        const rawDate = client.event_date
+        const dateStr = rawDate instanceof Date ? rawDate.toISOString().split('T')[0] : (rawDate + '').split('T')[0]
+        const [y, mo, d] = dateStr.split('-').map(Number)
         const eventDate = new Date(y, mo - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
         const biz = client.business_name || client.photographer_name
@@ -664,7 +666,9 @@ async function sendEventReminders() {
         )
       `, [reminder.type])
       for (const ev of events.rows) {
-        const [y, mo, d] = (ev.event_date + '').split('T')[0].split('-').map(Number)
+        const rawDate = ev.event_date
+        const dateStr = rawDate instanceof Date ? rawDate.toISOString().split('T')[0] : (rawDate + '').split('T')[0]
+        const [y, mo, d] = dateStr.split('-').map(Number)
         const eventDate = new Date(y, mo - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${ev.portal_token}`
         const biz = ev.business_name || ev.photographer_name
