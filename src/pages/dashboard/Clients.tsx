@@ -23,13 +23,13 @@ function getInitials(name: string) {
 
 function formatDate(d: string | null) {
   if (!d) return null
-  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+  try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   catch { return d }
 }
 
 function daysUntil(d: string | null): number | null {
   if (!d) return null
-  const diff = new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)
+  const diff = new Date(d + 'T12:00:00').setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)
   return Math.ceil(diff / 86_400_000)
 }
 

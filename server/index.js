@@ -94,17 +94,21 @@ app.post('/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const sig = req.headers['stripe-signature']
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
     let event
     try {
-      if (webhookSecret && webhookSecret !== 'whsec_placeholder' && stripe) {
-        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
-      } else {
-        event = JSON.parse(req.body.toString())
-      }
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
     } catch (err) {
-      console.error('Webhook error:', err.message)
-      return res.status(400).json({ error: 'Webhook error' })
+      if (process.env.STRIPE_WEBHOOK_SECRET_CLI) {
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET_CLI)
+        } catch (err2) {
+          console.error('Webhook error:', err2.message)
+          return res.status(400).send('Webhook Error')
+        }
+      } else {
+        console.error('Webhook error:', err.message)
+        return res.status(400).send('Webhook Error')
+      }
     }
 
     try {
@@ -601,7 +605,8 @@ async function sendEventReminders() {
         SELECT c.*, u.business_name, u.full_name as photographer_name
         FROM clients c
         JOIN users u ON c.user_id = u.id
-        WHERE c.event_date = CURRENT_DATE + INTERVAL '${reminder.days} days'
+        WHERE c.event_date >= CURRENT_DATE - INTERVAL '1 day'
+        AND c.event_date <= CURRENT_DATE + INTERVAL '${reminder.days} days' + INTERVAL '1 day'
         AND c.email IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM reminders_sent rs
@@ -650,7 +655,8 @@ async function sendEventReminders() {
         FROM client_events ce
         JOIN clients c ON ce.client_id = c.id
         JOIN users u ON c.user_id = u.id
-        WHERE ce.event_date = CURRENT_DATE + INTERVAL '${reminder.days} days'
+        WHERE ce.event_date >= CURRENT_DATE - INTERVAL '1 day'
+        AND ce.event_date <= CURRENT_DATE + INTERVAL '${reminder.days} days' + INTERVAL '1 day'
         AND c.email IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM reminders_sent rs
