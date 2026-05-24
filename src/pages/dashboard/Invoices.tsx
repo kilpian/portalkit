@@ -41,6 +41,7 @@ export default function Invoices() {
   const [sending, setSending] = useState<number | null>(null)
   const [markingPaid, setMarkingPaid] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [toast, setToast] = useState('')
   const [form, setForm] = useState({ client_id: '', invoice_number: '', amount: '', due_date: '', notes: '' })
   const [notifyClient, setNotifyClient] = useState(false)
@@ -152,11 +153,11 @@ export default function Invoices() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this invoice? This cannot be undone.')) return
     setDeleting(id)
     try {
       await authFetch(`/api/invoices/${id}`, { method: 'delete' })
       setInvoices(prev => prev.filter(i => i.id !== id))
+      setDeleteConfirmId(null)
       showToast('Invoice deleted.')
     } catch {
       showToast('Failed to delete.')
@@ -273,13 +274,20 @@ export default function Invoices() {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => handleDelete(inv.id)}
-                    disabled={deleting === inv.id}
-                    style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid #A32D2D', background: 'transparent', cursor: 'pointer', color: '#A32D2D' }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                  </button>
+                  {deleteConfirmId === inv.id ? (
+                    <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#A32D2D', whiteSpace: 'nowrap' }}>Delete?</span>
+                      <button onClick={() => handleDelete(inv.id)} disabled={deleting === inv.id} style={{ fontSize: 11, color: 'white', background: '#A32D2D', border: 'none', padding: '3px 8px', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                      <button onClick={() => setDeleteConfirmId(null)} style={{ fontSize: 11, color: '#6B7280', background: 'none', border: '1px solid #E5E7EB', padding: '3px 8px', borderRadius: 4, cursor: 'pointer' }}>No</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirmId(inv.id)}
+                      style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid #A32D2D', background: 'transparent', cursor: 'pointer', color: '#A32D2D' }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
+                  )}
                 </div>
               </div>
             )

@@ -1471,6 +1471,26 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
   }
 })
 
+app.patch('/api/files/:id/assign', requireAuth, async (req, res) => {
+  const { client_id } = req.body
+  try {
+    const fileResult = await pool.query('SELECT id FROM files WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!fileResult.rows.length) return res.status(404).json({ error: 'File not found' })
+    if (client_id) {
+      const clientResult = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+      if (!clientResult.rows.length) return res.status(403).json({ error: 'Client not found' })
+    }
+    const result = await pool.query(
+      'UPDATE files SET client_id=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      [client_id || null, req.params.id, req.userId]
+    )
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Assign file error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── CLIENT PORTAL (public) ────────────────────────────────────
 
 app.get('/api/portals/:token', async (req, res) => {

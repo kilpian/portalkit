@@ -26,7 +26,16 @@
       "Bash(kill %1)",
       "Bash(curl -s http://localhost:3001/api/test)",
       "Bash(pkill -f \"node.*server/index.js\")",
-      "Bash(npx playwright *)"
+      "Bash(npx playwright *)",
+      "Bash(git -C /Users/dera/projects/portalkit log --oneline -3)",
+      "Bash(git -C /Users/dera/projects/portalkit status)",
+      "Bash(git -C /Users/dera/projects/portalkit log --oneline -1)",
+      "Bash(git -C /Users/dera/projects/portalkit show HEAD~15:index.html)",
+      "Bash(git -C /Users/dera/projects/portalkit log --oneline)",
+      "Bash(git -C /Users/dera/projects/portalkit show c254a71:index.html)",
+      "Bash(curl *)",
+      "Bash(psql --version)",
+      "Bash(grep -o 'portalkit-production[^\"` ]*\\\\|localhost:3001' dist/assets/app-Cf0PoCAd.js)"
     ]
   }
 }

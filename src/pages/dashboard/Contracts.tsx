@@ -99,6 +99,8 @@ export default function Contracts() {
   const [templateName, setTemplateName] = useState('')
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [deletingTemplate, setDeletingTemplate] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [templateConfirmId, setTemplateConfirmId] = useState<number | null>(null)
   const [counterSignContract, setCounterSignContract] = useState<Contract | null>(null)
   const [counterSignName, setCounterSignName] = useState('')
   const [counterSigning, setCounterSigning] = useState(false)
@@ -231,12 +233,12 @@ export default function Contracts() {
     }
   }
 
-  const handleDelete = async (id: number, title: string) => {
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
+  const handleDelete = async (id: number) => {
     setDeleting(id)
     try {
       await authFetch(`/api/contracts/${id}`, { method: 'delete' })
       setContracts(prev => prev.filter(c => c.id !== id))
+      setDeleteConfirmId(null)
       showToast('Contract deleted.')
     } catch {
       showToast('Failed to delete.')
@@ -315,12 +317,12 @@ export default function Contracts() {
     }
   }
 
-  const handleDeleteTemplate = async (id: number, name: string) => {
-    if (!window.confirm(`Delete template "${name}"? This cannot be undone.`)) return
+  const handleDeleteTemplate = async (id: number) => {
     setDeletingTemplate(id)
     try {
       await authFetch(`/api/contract-templates/${id}`, { method: 'delete' })
       setCustomTemplates(prev => prev.filter(t => t.id !== id))
+      setTemplateConfirmId(null)
     } catch {
       showToast('Failed to delete template.')
     } finally {
@@ -470,13 +472,20 @@ export default function Contracts() {
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                <button
-                  onClick={() => handleDelete(c.id, c.title)}
-                  disabled={deleting === c.id}
-                  style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid #A32D2D', background: 'transparent', cursor: 'pointer', color: '#A32D2D' }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                </button>
+                {deleteConfirmId === c.id ? (
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#A32D2D', whiteSpace: 'nowrap' }}>Delete?</span>
+                    <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id} style={{ fontSize: 11, color: 'white', background: '#A32D2D', border: 'none', padding: '3px 8px', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                    <button onClick={() => setDeleteConfirmId(null)} style={{ fontSize: 11, color: '#6B7280', background: 'none', border: '1px solid #E5E7EB', padding: '3px 8px', borderRadius: 4, cursor: 'pointer' }}>No</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setDeleteConfirmId(c.id)}
+                    style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid #A32D2D', background: 'transparent', cursor: 'pointer', color: '#A32D2D' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -535,13 +544,14 @@ export default function Contracts() {
                           style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--green-border)', background: 'var(--green-bg)', color: 'var(--green)', cursor: 'pointer' }}>
                           {t.name}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTemplate(t.id, t.name)}
-                          disabled={deletingTemplate === t.id}
-                          style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}
-                          title="Delete template"
-                        >×</button>
+                        {templateConfirmId === t.id ? (
+                          <>
+                            <button type="button" onClick={() => handleDeleteTemplate(t.id)} disabled={deletingTemplate === t.id} style={{ fontSize: 10, padding: '2px 5px', borderRadius: 4, border: 'none', background: '#A32D2D', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>✓</button>
+                            <button type="button" onClick={() => setTemplateConfirmId(null)} style={{ fontSize: 10, padding: '2px 5px', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}>✕</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setTemplateConfirmId(t.id)} style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }} title="Delete template">×</button>
+                        )}
                       </span>
                     ))}
                   </>
