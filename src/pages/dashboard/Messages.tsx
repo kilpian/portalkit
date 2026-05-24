@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import posthog from 'posthog-js'
 import { useApi, usePolling, type Client, type Message, type MessageSummary } from '../../lib/api'
 
 function getInitials(name: string) {
@@ -133,6 +134,7 @@ export default function Messages() {
       const res = await authFetch('/api/messages', { method: 'post', data: { client_id: selectedId, content: content.trim() } })
       setMessages(prev => [...prev, res.data as Message])
       setSummaries(prev => prev.map(s => s.client_id === selectedId ? { ...s, last_message: content.trim(), last_sender: 'photographer', last_message_at: new Date().toISOString() } : s))
+      posthog.capture('message_sent_to_client')
       setContent('')
     } catch {
       // silent — user sees nothing sent

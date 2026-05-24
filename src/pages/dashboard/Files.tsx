@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import posthog from 'posthog-js'
 import { useApi, type Client, type UploadedFile } from '../../lib/api'
 
 function formatSize(bytes: number): string {
@@ -83,6 +84,7 @@ export default function Files() {
         },
       })
       setFiles(prev => [resp.data, ...prev])
+      posthog.capture('file_uploaded', { mime_type: file.type, has_client: !!uploadClientId })
       showToast('File uploaded!')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import posthog from 'posthog-js'
 import { useApi, type Client, type Invoice } from '../../lib/api'
 
 function formatMoney(cents: number) {
@@ -116,6 +117,7 @@ export default function Invoices() {
       } else {
         const res = await authFetch('/api/invoices', { method: 'post', data: payload })
         setInvoices(prev => [res.data as Invoice, ...prev])
+        posthog.capture('invoice_created', { amount: form.amount })
         closeDrawer()
         showToast('Invoice created.')
       }
@@ -131,6 +133,7 @@ export default function Invoices() {
     try {
       await authFetch(`/api/invoices/${id}/send`, { method: 'post' })
       setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'sent' } : i))
+      posthog.capture('invoice_sent')
       showToast('Invoice sent to client.')
     } catch {
       showToast('Failed to send invoice.')
@@ -144,6 +147,7 @@ export default function Invoices() {
     try {
       const res = await authFetch(`/api/invoices/${id}`, { method: 'put', data: { status: 'paid', paid_at: new Date().toISOString() } })
       setInvoices(prev => prev.map(i => i.id === id ? (res.data as Invoice) : i))
+      posthog.capture('invoice_marked_paid')
       showToast('Invoice marked as paid.')
     } catch {
       showToast('Failed to update invoice.')

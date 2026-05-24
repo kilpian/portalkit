@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
+import posthog from 'posthog-js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
@@ -132,6 +133,7 @@ function PortalMessages({ token }: { token: string }) {
         sender_name: senderName.trim() || undefined,
       })
       setMessages(prev => [...prev, res.data])
+      posthog.capture('client_sent_message')
       setContent('')
     } catch {
       setError('Failed to send message. Please try again.')
@@ -227,6 +229,7 @@ export function ClientPortalContent({ token }: { token: string }) {
       const res = await axios.post(`${API_URL}/api/portals/${token}/contracts/${contract.id}/sign`, { signer_name: name })
       const date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
       setSignedContracts(prev => ({ ...prev, [contract.id]: { name, date, hash: res.data.content_hash ?? null, content: contract.content } }))
+      posthog.capture('client_signed_contract')
     } catch {
       // silently fail — user can retry
     } finally {
@@ -291,7 +294,14 @@ export function ClientPortalContent({ token }: { token: string }) {
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
     axios.get<PortalData>(`${API_URL}/api/portals/${token}`)
-      .then(r => { setData(r.data); setLoading(false) })
+      .then(r => {
+        setData(r.data)
+        setLoading(false)
+        posthog.capture('client_portal_viewed', {
+          has_contract: r.data.contracts.length > 0,
+          has_invoice: r.data.invoices.length > 0,
+        })
+      })
       .catch(err => {
         setError(err?.response?.data?.error || 'This portal link is invalid or has expired.')
         setLoading(false)

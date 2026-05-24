@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react'
+import posthog from 'posthog-js'
 import API_BASE, { type PortalUser } from '../lib/api'
 
 interface PortalAuthContextType {
@@ -32,6 +33,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json()
         if (data.id) {
           setPortalUser(data)
+          posthog.identify(data.id.toString(), {
+            email: data.email,
+            name: data.full_name,
+            business_name: data.business_name,
+            plan: data.plan,
+            created_at: data.created_at,
+          })
         } else if (retries > 0) {
           setTimeout(() => fetchUser(retries - 1), 1000)
         }

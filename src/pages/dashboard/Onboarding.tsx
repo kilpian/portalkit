@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import posthog from 'posthog-js'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 
@@ -132,6 +133,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         },
       })
       setUser(profileRes.data)
+      posthog.capture('onboarding_step1_complete', { business_name: businessName.trim() })
 
       const setupRes = await authFetch('/api/stripe/create-setup-intent', { method: 'post' })
       setClientSecret(setupRes.data.clientSecret)
@@ -145,6 +147,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   }
 
   const handlePaymentSuccess = async () => {
+    posthog.capture('onboarding_payment_complete')
     try {
       const res = await authFetch('/api/users/me', {
         method: 'put',

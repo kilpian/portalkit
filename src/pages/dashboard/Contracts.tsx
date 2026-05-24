@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { marked } from 'marked'
+import posthog from 'posthog-js'
 import { useApi, type Client, type Contract, type ContractTemplate } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
 
@@ -177,6 +178,7 @@ export default function Contracts() {
           data: { client_id: form.client_id || null, title: form.title.trim(), content: form.content },
         })
         setContracts(prev => [res.data as Contract, ...prev])
+        posthog.capture('contract_created', { has_client: !!form.client_id })
         closeDrawer()
         showToast('Contract created.')
       }
@@ -225,6 +227,7 @@ export default function Contracts() {
     try {
       await authFetch(`/api/contracts/${id}/send`, { method: 'post' })
       setContracts(prev => prev.map(c => c.id === id ? { ...c, status: 'sent' as const } : c))
+      posthog.capture('contract_sent')
       showToast('Contract sent to client.')
     } catch {
       showToast('Failed to send contract.')
@@ -256,6 +259,7 @@ export default function Contracts() {
         data: { signature_name: counterSignName.trim() },
       })
       setContracts(prev => prev.map(c => c.id === counterSignContract.id ? res.data as Contract : c))
+      posthog.capture('contract_countersigned')
       setCounterSignContract(null)
       setCounterSignName('')
       showToast('Contract countersigned.')
@@ -287,7 +291,10 @@ export default function Contracts() {
         },
       })
       const { content } = res.data as { content: string }
-      if (content) setForm(f => ({ ...f, content }))
+      if (content) {
+        setForm(f => ({ ...f, content }))
+        posthog.capture('ai_contract_generated')
+      }
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string } }; message?: string }
       const msg = errObj.response?.data?.error || errObj.message || 'AI generation failed'
