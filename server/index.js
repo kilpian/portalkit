@@ -142,6 +142,7 @@ app.post('/api/stripe/webhook',
         }
         case 'invoice.payment_succeeded': {
           const inv = event.data.object
+          console.log('💳 Webhook: invoice.payment_succeeded for customer:', inv.customer)
           await pool.query(
             'UPDATE users SET plan=$1 WHERE stripe_customer_id=$2',
             ['active', inv.customer]
@@ -177,6 +178,7 @@ app.post('/api/stripe/webhook',
         }
         case 'invoice.payment_failed': {
           const inv = event.data.object
+          console.log('💳 Webhook: invoice.payment_failed for customer:', inv.customer)
           console.warn(`Payment failed for customer ${inv.customer}: ${inv.id}`)
           // Set grace period instead of immediately cancelling
           await pool.query(
@@ -222,6 +224,7 @@ app.post('/api/stripe/webhook',
         }
         case 'customer.subscription.deleted': {
           const sub = event.data.object
+          console.log('💳 Webhook: customer.subscription.deleted for subscription:', sub.id)
           const cancelResult = await pool.query(
             'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2 RETURNING email, full_name',
             ['cancelled', sub.id]
@@ -560,6 +563,18 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS client_events (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          event_name TEXT NOT NULL,
+          event_date DATE,
+          event_type TEXT,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -622,6 +637,56 @@ async function sendEventReminders() {
       }
     } catch (err) {
       console.error('📅 Reminder error:', err.message)
+    }
+  }
+
+  // Also send reminders for client_events table
+  for (const reminder of reminders) {
+    try {
+      const events = await pool.query(`
+        SELECT ce.id as event_id, ce.event_name, ce.event_date, ce.event_type,
+               c.id as client_id, c.email, c.name as client_name, c.portal_token,
+               u.business_name, u.full_name as photographer_name
+        FROM client_events ce
+        JOIN clients c ON ce.client_id = c.id
+        JOIN users u ON c.user_id = u.id
+        WHERE ce.event_date = CURRENT_DATE + INTERVAL '${reminder.days} days'
+        AND c.email IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM reminders_sent rs
+          WHERE rs.client_id = c.id AND rs.reminder_type = 'ce_' || ce.id || '_' || $1
+        )
+      `, [reminder.type])
+      for (const ev of events.rows) {
+        const eventDate = new Date(ev.event_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${ev.portal_token}`
+        const biz = ev.business_name || ev.photographer_name
+        const subject = `${reminder.days === 1 ? 'Tomorrow is' : reminder.days + ' days until'} ${ev.event_name}!`
+        try {
+          await resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            to: ev.email,
+            subject,
+            html: emailTemplate({
+              title: subject,
+              preheader: `${ev.event_name} with ${biz} is coming up!`,
+              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${subject}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${ev.client_name}! Your upcoming event — <strong>${ev.event_name}</strong> — is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your details and send any last-minute messages to ${biz}.</p>`,
+              ctaText: 'Visit Your Portal →',
+              ctaUrl: portalLink,
+              footerNote: `Reminder sent on behalf of ${biz} via PortalKit`,
+            }),
+          })
+          await pool.query(
+            'INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [ev.client_id, `ce_${ev.event_id}_${reminder.type}`]
+          )
+          console.log(`📅 Event reminder sent: ${reminder.type} to ${ev.email} for ${ev.event_name}`)
+        } catch (emailErr) {
+          console.error('📅 Event reminder email failed:', emailErr.message)
+        }
+      }
+    } catch (err) {
+      console.error('📅 Client events reminder error:', err.message)
     }
   }
 }
@@ -983,10 +1048,12 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
 
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   try {
-    const [clients, invoices, user] = await Promise.all([
+    const [clients, invoices, user, upcomingMain, upcomingEvents] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
       pool.query("SELECT COUNT(*) FROM invoices WHERE user_id=$1 AND status != 'paid'", [req.userId]),
       pool.query('SELECT plan, trial_ends_at FROM users WHERE id=$1', [req.userId]),
+      pool.query(`SELECT COUNT(*) FROM clients WHERE user_id=$1 AND event_date >= CURRENT_DATE AND event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
+      pool.query(`SELECT COUNT(*) FROM client_events ce JOIN clients c ON ce.client_id = c.id WHERE c.user_id=$1 AND ce.event_date >= CURRENT_DATE AND ce.event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
     ])
     const u = user.rows[0]
     let trial_days_remaining = null
@@ -999,6 +1066,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       total_clients: clientCount,
       active_portals: clientCount,
       pending_invoices: parseInt(invoices.rows[0].count, 10),
+      upcoming_events: parseInt(upcomingMain.rows[0].count, 10) + parseInt(upcomingEvents.rows[0].count, 10),
       trial_days_remaining,
     })
   } catch (err) {
@@ -1026,11 +1094,12 @@ app.post('/api/clients', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
   if (!name) return res.status(400).json({ error: 'Client name is required' })
   try {
+    const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
     const result = await pool.query(
-      `INSERT INTO clients (user_id, name, email, phone, event_date, event_type, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO clients (user_id, name, email, phone, event_date, event_type, notes, portal_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [req.userId, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null]
+      [req.userId, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, portalToken]
     )
     res.status(201).json(result.rows[0])
   } catch (err) {
@@ -1077,6 +1146,75 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     console.error('Delete client error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── CLIENT EVENTS ─────────────────────────────────────────────
+
+app.get('/api/clients/:id/events', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(
+      'SELECT * FROM client_events WHERE client_id=$1 ORDER BY event_date ASC NULLS LAST, created_at ASC',
+      [req.params.id]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get client events error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/clients/:id/events', requireAuth, async (req, res) => {
+  const { event_name, event_date, event_type, notes } = req.body
+  if (!event_name) return res.status(400).json({ error: 'event_name is required' })
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(
+      `INSERT INTO client_events (client_id, event_name, event_date, event_type, notes)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.params.id, sanitize(event_name), event_date || null, sanitize(event_type) || null, sanitize(notes) || null]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    console.error('Create client event error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.put('/api/clients/:id/events/:eventId', requireAuth, async (req, res) => {
+  const { event_name, event_date, event_type, notes } = req.body
+  try {
+    const result = await pool.query(
+      `UPDATE client_events SET event_name=$1, event_date=$2, event_type=$3, notes=$4
+       WHERE id=$5 AND client_id=$6
+         AND EXISTS (SELECT 1 FROM clients WHERE id=$6 AND user_id=$7)
+       RETURNING *`,
+      [sanitize(event_name), event_date || null, sanitize(event_type) || null, sanitize(notes) || null, req.params.eventId, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Event not found' })
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Update client event error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/clients/:id/events/:eventId', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM client_events WHERE id=$1 AND client_id=$2
+         AND EXISTS (SELECT 1 FROM clients WHERE id=$2 AND user_id=$3)
+       RETURNING id`,
+      [req.params.eventId, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Event not found' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete client event error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
@@ -1394,7 +1532,7 @@ const upload = multer({
 
 async function generateDownloadUrl(storageKey) {
   if (!r2 || !storageKey) return null
-  return getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: storageKey }), { expiresIn: 3600 })
+  return getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: storageKey }), { expiresIn: 7 * 24 * 60 * 60 })
 }
 
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {

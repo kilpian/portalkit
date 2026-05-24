@@ -3,6 +3,18 @@ import { useApi, usePolling, type Client, type CreateClientPayload } from '../..
 import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
 
+interface ClientEvent {
+  id: number
+  client_id: number
+  event_name: string
+  event_date: string | null
+  event_type: string | null
+  notes: string | null
+  created_at: string
+}
+
+const BLANK_EVENT = { event_name: '', event_date: '', event_type: '' }
+
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/)
   if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?'
@@ -54,6 +66,12 @@ export default function Clients() {
   const [copied, setCopied] = useState<number | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
 
+  const [clientEvents, setClientEvents] = useState<ClientEvent[]>([])
+  const [showAddEvent, setShowAddEvent] = useState(false)
+  const [eventForm, setEventForm] = useState(BLANK_EVENT)
+  const [savingEvent, setSavingEvent] = useState(false)
+  const [deleteEventConfirmId, setDeleteEventConfirmId] = useState<number | null>(null)
+
   const fetchClients = () =>
     authFetch('/api/clients', { method: 'get' })
       .then(res => setClients(Array.isArray(res.data) ? res.data : []))
@@ -66,6 +84,49 @@ export default function Clients() {
   }, [])
 
   usePolling(fetchClients, 60000)
+
+  useEffect(() => {
+    setShowAddEvent(false)
+    setDeleteEventConfirmId(null)
+    if (!editingClient?.id) { setClientEvents([]); return }
+    authFetch(`/api/clients/${editingClient.id}/events`, { method: 'get' })
+      .then(res => setClientEvents(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setClientEvents([]))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingClient?.id])
+
+  const handleAddEvent = async () => {
+    if (!editingClient?.id || !eventForm.event_name.trim()) return
+    setSavingEvent(true)
+    try {
+      const res = await authFetch(`/api/clients/${editingClient.id}/events`, {
+        method: 'post',
+        data: {
+          event_name: eventForm.event_name.trim(),
+          event_date: eventForm.event_date || undefined,
+          event_type: eventForm.event_type.trim() || undefined,
+        },
+      })
+      setClientEvents(prev => [...prev, res.data as ClientEvent])
+      setShowAddEvent(false)
+      setEventForm(BLANK_EVENT)
+    } catch {
+      // silent
+    } finally {
+      setSavingEvent(false)
+    }
+  }
+
+  const handleDeleteEvent = async (id: number) => {
+    if (!editingClient?.id) return
+    try {
+      await authFetch(`/api/clients/${editingClient.id}/events/${id}`, { method: 'delete' })
+      setClientEvents(prev => prev.filter(e => e.id !== id))
+      setDeleteEventConfirmId(null)
+    } catch {
+      // silent
+    }
+  }
 
   // ESC to close panels
   useEffect(() => {
@@ -378,6 +439,53 @@ export default function Clients() {
               style={{ resize: 'vertical', minHeight: 80 }}
             />
           </div>
+          {editingClient?.id && (
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label className="field-label" style={{ margin: 0 }}>Events</label>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddEvent(true); setEventForm(BLANK_EVENT) }}
+                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                >+ Add</button>
+              </div>
+              {clientEvents.length === 0 && !showAddEvent && (
+                <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 4 }}>No extra events yet.</p>
+              )}
+              {clientEvents.map(ev => (
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{ev.event_name}</p>
+                    {ev.event_date && <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>{formatDate(ev.event_date)}{ev.event_type ? ` · ${ev.event_type}` : ''}</p>}
+                  </div>
+                  {deleteEventConfirmId === ev.id ? (
+                    <>
+                      <button type="button" onClick={() => handleDeleteEvent(ev.id)} style={{ fontSize: 11, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Confirm</button>
+                      <button type="button" onClick={() => setDeleteEventConfirmId(null)} className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Cancel</button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setDeleteEventConfirmId(ev.id)} style={{ color: 'var(--text-dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {showAddEvent && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, padding: 10, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <input className="input" placeholder="Event name *" value={eventForm.event_name} onChange={e => setEventForm(f => ({ ...f, event_name: e.target.value }))} style={{ fontSize: 13 }} autoFocus />
+                  <input className="input" type="date" value={eventForm.event_date} onChange={e => setEventForm(f => ({ ...f, event_date: e.target.value }))} style={{ fontSize: 13 }} />
+                  <input className="input" placeholder="Event type (optional)" value={eventForm.event_type} onChange={e => setEventForm(f => ({ ...f, event_type: e.target.value }))} style={{ fontSize: 13 }} />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" onClick={() => setShowAddEvent(false)} className="btn btn-ghost btn-sm" style={{ flex: 1 }}>Cancel</button>
+                    <button type="button" onClick={handleAddEvent} disabled={savingEvent || !eventForm.event_name.trim()} className="btn btn-primary btn-sm" style={{ flex: 2 }}>
+                      {savingEvent ? 'Saving…' : 'Add Event'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {editingClient?.id && (
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
               <label className="field-label">Portal link</label>

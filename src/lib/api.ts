@@ -11,6 +11,7 @@ export interface DashboardStats {
   total_clients: number
   active_portals: number
   pending_invoices: number
+  upcoming_events: number
   trial_days_remaining: number | null
 }
 

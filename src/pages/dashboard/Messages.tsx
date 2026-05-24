@@ -228,7 +228,10 @@ export default function Messages() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => {
+                    setSelectedId(c.id)
+                    setSummaries(prev => prev.map(s => s.client_id === c.id ? { ...s, unread_count: 0 } : s))
+                  }}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
                     background: isSelected ? 'var(--green-bg)' : 'transparent',

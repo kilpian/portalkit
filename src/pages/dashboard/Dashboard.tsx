@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, usePolling, type DashboardStats, type Client } from '../../lib/api'
@@ -12,9 +12,16 @@ function formatDate(d: string | null) {
   catch { return d }
 }
 
-function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
+function StatCard({ label, value, sub, accent, to }: { label: string; value: string | number; sub?: string; accent?: boolean; to?: string }) {
+  const navigate = useNavigate()
   return (
-    <div className="card" style={{ padding: '20px 24px' }}>
+    <div
+      className="card"
+      style={{ padding: '20px 24px', cursor: to ? 'pointer' : 'default', transition: 'transform 0.12s, box-shadow 0.12s' }}
+      onClick={() => to && navigate(to)}
+      onMouseEnter={to ? e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)' } : undefined}
+      onMouseLeave={to ? e => { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = '' } : undefined}
+    >
       <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
         {label}
       </p>
@@ -210,7 +217,7 @@ export default function Dashboard() {
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-          {[0,1,2].map(i => (
+          {[0,1,2,3].map(i => (
             <div key={i} className="card" style={{ padding: '20px 24px' }}>
               <div className="skeleton" style={{ height: 12, width: '60%', marginBottom: 12 }} />
               <div className="skeleton" style={{ height: 28, width: '40%' }} />
@@ -219,9 +226,10 @@ export default function Dashboard() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-          <StatCard label="Total Clients" value={stats?.total_clients ?? 0} />
-          <StatCard label="Active Portals" value={stats?.active_portals ?? 0} />
-          <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} />
+          <StatCard label="Total Clients" value={stats?.total_clients ?? 0} to="/dashboard/clients" />
+          <StatCard label="Active Portals" value={stats?.active_portals ?? 0} to="/dashboard/clients" />
+          <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} to="/dashboard/invoices" />
+          <StatCard label="Upcoming Events" value={stats?.upcoming_events ?? 0} to="/dashboard/clients" />
         </div>
       )}
 
