@@ -120,6 +120,8 @@ export interface PortalUser {
   logo_url?: string | null
   brand_color?: string | null
   onboarding_completed?: boolean
+  stripe_connect_id?: string | null
+  stripe_connect_enabled?: boolean
   created_at: string
 }
 

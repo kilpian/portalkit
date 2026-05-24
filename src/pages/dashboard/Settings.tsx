@@ -46,14 +46,37 @@ export default function Settings() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
 
+  // Stripe Connect
+  const [connectLoading, setConnectLoading] = useState(false)
+  const [connectErr, setConnectErr] = useState('')
+  const [connectMsg, setConnectMsg] = useState('')
+
   const days = trialDaysLeft(user)
   const isActive = user?.plan === 'active'
+  const isConnected = !!(user?.stripe_connect_enabled && user?.stripe_connect_id)
 
   useEffect(() => {
     if (searchParams.get('upgraded') === 'true') {
       setProfileMsg('Subscription activated! Welcome to PortalKit.')
     }
   }, [searchParams])
+
+  // Handle Stripe Connect OAuth callback (?code=xxx&state=xxx)
+  useEffect(() => {
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
+    if (code && state) {
+      authFetch('/api/stripe/connect/callback', { method: 'post', data: { code, state } })
+        .then(() => {
+          setConnectMsg('Stripe account connected! Clients can now pay invoices from their portal.')
+          window.history.replaceState({}, '', '/dashboard/settings')
+          // Refresh user data to pick up stripe_connect_id + stripe_connect_enabled
+          return authFetch('/api/auth/me', { method: 'get' }).then(r => setUser(r.data))
+        })
+        .catch(() => setConnectErr('Failed to connect Stripe account. Please try again.'))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Keep form in sync with user data once it loads
   useEffect(() => {
@@ -124,6 +147,32 @@ export default function Settings() {
       window.location.href = res.data.url
     } catch {
       setBillingLoading(false)
+    }
+  }
+
+  const handleConnectStripe = async () => {
+    setConnectLoading(true)
+    setConnectErr('')
+    try {
+      const res = await authFetch('/api/stripe/connect/authorize', { method: 'get' })
+      window.location.href = res.data.url
+    } catch {
+      setConnectErr('Failed to start Stripe Connect. Please try again.')
+      setConnectLoading(false)
+    }
+  }
+
+  const handleDisconnectStripe = async () => {
+    setConnectLoading(true)
+    setConnectErr('')
+    try {
+      await authFetch('/api/stripe/connect/disconnect', { method: 'post' })
+      setUser({ ...user!, stripe_connect_id: null, stripe_connect_enabled: false })
+      setConnectMsg('Stripe account disconnected.')
+    } catch {
+      setConnectErr('Failed to disconnect. Please try again.')
+    } finally {
+      setConnectLoading(false)
     }
   }
 
@@ -264,6 +313,48 @@ export default function Settings() {
                   }}
                 >
                   {upgradeLoading ? 'Loading…' : 'Upgrade to All-In — $39/mo'}
+                </button>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* ── Payments ─────────────────────────────────────────── */}
+        <SectionCard title="Accept Client Payments">
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {connectMsg && <div className="alert alert-success" style={{ marginBottom: 12 }}>{connectMsg}</div>}
+              {connectErr && <div className="alert alert-error" style={{ marginBottom: 12 }}>{connectErr}</div>}
+              {isConnected ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }}>
+                      Connected
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    Clients can pay invoices directly from their portal. Funds go to your Stripe account minus a 2% platform fee.
+                  </p>
+                </>
+              ) : (
+                <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  Accept credit card payments from clients directly through their portal. Connect your Stripe account to get started.
+                </p>
+              )}
+            </div>
+            <div style={{ flexShrink: 0 }}>
+              {isConnected ? (
+                <button onClick={handleDisconnectStripe} disabled={connectLoading} className="btn btn-ghost btn-sm">
+                  {connectLoading ? 'Disconnecting…' : 'Disconnect Stripe'}
+                </button>
+              ) : (
+                <button onClick={handleConnectStripe} disabled={connectLoading} className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {connectLoading ? 'Loading…' : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                      Connect with Stripe
+                    </>
+                  )}
                 </button>
               )}
             </div>

@@ -17,7 +17,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
-;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL'].forEach(v => {
+;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL', 'STRIPE_CONNECT_CLIENT_ID', 'STRIPE_PUBLISHABLE_KEY'].forEach(v => {
   if (!process.env[v]) console.error(`❌ Missing env var: ${v}`)
   else console.log(`✅ ${v}: set`)
 })
@@ -262,6 +262,18 @@ app.post('/api/stripe/webhook',
               'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2',
               ['active', sub.id]
             )
+          }
+          break
+        }
+        case 'payment_intent.succeeded': {
+          const pi = event.data.object
+          const invoiceId = pi.metadata?.invoice_id
+          if (invoiceId) {
+            await pool.query(
+              "UPDATE invoices SET status='paid', paid_at=NOW() WHERE id=$1",
+              [invoiceId]
+            ).catch(e => console.error('Invoice paid update failed:', e))
+            console.log(`💳 Invoice ${invoiceId} marked as paid via Stripe Connect`)
           }
           break
         }
@@ -579,6 +591,9 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_connect_id TEXT;`).catch(() => {})
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_connect_enabled BOOLEAN DEFAULT FALSE;`).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -823,7 +838,7 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
          brand_color=COALESCE($5, brand_color),
          onboarding_completed=CASE WHEN $7 THEN $8 ELSE onboarding_completed END
        WHERE id=$6
-       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, created_at`,
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, stripe_connect_id, stripe_connect_enabled, created_at`,
       [
         full_name ? sanitize(full_name) : null,
         business_name !== undefined ? (sanitize(business_name) || null) : null,
@@ -939,6 +954,50 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Portal error:', err)
     res.status(500).json({ error: 'Failed to create portal session' })
+  }
+})
+
+// ── STRIPE CONNECT ────────────────────────────────────────────
+
+app.get('/api/stripe/connect/authorize', requireAuth, async (req, res) => {
+  const clientId = process.env.STRIPE_CONNECT_CLIENT_ID
+  if (!clientId) return res.status(503).json({ error: 'Stripe Connect not configured' })
+  const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+  const redirectUri = `${frontendUrl}/dashboard/settings`
+  const url = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&state=${req.userId}&redirect_uri=${encodeURIComponent(redirectUri)}`
+  res.json({ url })
+})
+
+app.post('/api/stripe/connect/callback', requireAuth, async (req, res) => {
+  const { code } = req.body
+  if (!code) return res.status(400).json({ error: 'code required' })
+  if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+  try {
+    const response = await stripe.oauth.token({ grant_type: 'authorization_code', code })
+    const stripeConnectId = response.stripe_user_id
+    await pool.query(
+      'UPDATE users SET stripe_connect_id=$1, stripe_connect_enabled=true WHERE id=$2',
+      [stripeConnectId, req.userId]
+    )
+    res.json({ success: true, stripe_connect_id: stripeConnectId })
+  } catch (err) {
+    console.error('Connect callback error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/stripe/connect/disconnect', requireAuth, async (req, res) => {
+  try {
+    const userResult = await pool.query('SELECT stripe_connect_id FROM users WHERE id=$1', [req.userId])
+    const stripeConnectId = userResult.rows[0]?.stripe_connect_id
+    if (stripeConnectId && stripe && process.env.STRIPE_CONNECT_CLIENT_ID) {
+      await stripe.oauth.deauthorize({ client_id: process.env.STRIPE_CONNECT_CLIENT_ID, stripe_user_id: stripeConnectId }).catch(() => {})
+    }
+    await pool.query('UPDATE users SET stripe_connect_id=NULL, stripe_connect_enabled=false WHERE id=$1', [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Connect disconnect error:', err)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 
@@ -1648,7 +1707,8 @@ app.get('/api/portals/:token', async (req, res) => {
     const clientResult = await pool.query(
       `SELECT c.id, c.name, c.event_date, c.event_type,
               u.full_name as photographer_name, u.business_name as photographer_business,
-              u.logo_url as photographer_logo, u.brand_color as photographer_brand_color
+              u.logo_url as photographer_logo, u.brand_color as photographer_brand_color,
+              u.stripe_connect_enabled as payments_enabled
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
@@ -1912,7 +1972,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
       [client.id, client.user_id, sanitize(content)]
     )
     if (client.photographer_email && resend) {
-      const displaySender = sender_name ? sanitize(sender_name) : client.name
+      const displaySender = client.name
       const dashUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/messages`
       console.log('📧 Sending client message notification to photographer:', client.photographer_email)
       try {
@@ -1938,6 +1998,46 @@ app.post('/api/portals/:token/messages', async (req, res) => {
   } catch (err) {
     console.error('Client message error:', err)
     res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
+  try {
+    const clientResult = await pool.query(
+      `SELECT c.*, u.stripe_connect_id, u.stripe_connect_enabled
+       FROM clients c JOIN users u ON u.id = c.user_id
+       WHERE c.portal_token=$1`,
+      [req.params.token]
+    )
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client = clientResult.rows[0]
+
+    if (!client.stripe_connect_id || !client.stripe_connect_enabled) {
+      return res.status(400).json({ error: 'Photographer has not set up payments yet' })
+    }
+
+    const invoiceResult = await pool.query(
+      "SELECT * FROM invoices WHERE id=$1 AND client_id=$2 AND status != 'paid'",
+      [req.params.invoiceId, client.id]
+    )
+    if (!invoiceResult.rows.length) return res.status(404).json({ error: 'Invoice not found' })
+    const invoice = invoiceResult.rows[0]
+
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+
+    const applicationFeeAmount = Math.round(invoice.amount_cents * 0.02)
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: invoice.amount_cents,
+      currency: 'usd',
+      application_fee_amount: applicationFeeAmount,
+      transfer_data: { destination: client.stripe_connect_id },
+      metadata: { invoice_id: String(invoice.id), client_id: String(client.id) },
+    })
+
+    res.json({ clientSecret: paymentIntent.client_secret })
+  } catch (err) {
+    console.error('Portal payment intent error:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 

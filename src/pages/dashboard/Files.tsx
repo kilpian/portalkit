@@ -43,6 +43,8 @@ export default function Files() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadQueue, setUploadQueue] = useState(0)
+  const [uploadDone, setUploadDone] = useState(0)
   const [uploadClientId, setUploadClientId] = useState<string>('')
   const [dragOver, setDragOver] = useState(false)
   const [sidebarKey, setSidebarKey] = useState<SidebarKey>('all')
@@ -67,32 +69,40 @@ export default function Files() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
-  const uploadFile = async (file: File) => {
-    if (uploading) return
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (files.length === 0 || uploading) return
     setUploading(true)
-    setUploadProgress(0)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      if (uploadClientId) fd.append('client_id', uploadClientId.toString())
-      const resp = await authFetch('/api/files/upload', {
-        method: 'post',
-        data: fd,
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e: { loaded: number; total?: number }) => {
-          if (e.total) setUploadProgress(Math.round(e.loaded / e.total * 100))
-        },
-      })
-      setFiles(prev => [resp.data, ...prev])
-      posthog.capture('file_uploaded', { mime_type: file.type, has_client: !!uploadClientId })
-      showToast('File uploaded!')
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-      showToast(msg || 'Upload failed')
-    } finally {
-      setUploading(false)
+    setUploadQueue(files.length)
+    setUploadDone(0)
+    let succeeded = 0
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
       setUploadProgress(0)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        if (uploadClientId) fd.append('client_id', uploadClientId.toString())
+        const resp = await authFetch('/api/files/upload', {
+          method: 'post',
+          data: fd,
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e: { loaded: number; total?: number }) => {
+            if (e.total) setUploadProgress(Math.round(e.loaded / e.total * 100))
+          },
+        })
+        setFiles(prev => [resp.data, ...prev])
+        posthog.capture('file_uploaded', { mime_type: file.type, has_client: !!uploadClientId })
+        succeeded++
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        showToast(msg || `Failed to upload ${file.name}`)
+      }
+      setUploadDone(i + 1)
     }
+    setUploading(false)
+    setUploadProgress(0)
+    if (succeeded > 0) showToast(succeeded === 1 ? 'File uploaded!' : `${succeeded} files uploaded!`)
   }
 
   const confirmDelete = async (id: number) => {
@@ -147,6 +157,21 @@ export default function Files() {
   const nonPhotoFiles = visibleFiles.filter(f => getCategory(f.mime_type) !== 'Photos')
   const sidebarLabel = sidebarKey === 'all' ? 'All Files' : sidebarKey === 'unassigned' ? 'Unassigned' : (clients.find(c => c.id === sidebarKey)?.name ?? 'Client')
 
+  const previewIndex = previewFile ? photoFiles.findIndex(f => f.id === previewFile.id) : -1
+  const canPrev = previewIndex > 0
+  const canNext = previewIndex < photoFiles.length - 1
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!previewFile) return
+      if (e.key === 'ArrowLeft' && canPrev) setPreviewFile(photoFiles[previewIndex - 1])
+      if (e.key === 'ArrowRight' && canNext) setPreviewFile(photoFiles[previewIndex + 1])
+      if (e.key === 'Escape') setPreviewFile(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [previewFile, photoFiles, previewIndex, canPrev, canNext])
+
   const InlineConfirm = ({ id, onConfirm, onCancel }: { id: number; onConfirm: () => void; onCancel: () => void }) => (
     <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
       <span style={{ fontSize: 11, color: '#A32D2D', whiteSpace: 'nowrap' }}>Delete?</span>
@@ -175,7 +200,7 @@ export default function Files() {
             onClick={() => !uploading && fileInputRef.current?.click()}
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) uploadFile(f) }}
+            onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files) }}
             style={{
               flex: 1, minWidth: 220,
               background: dragOver ? '#F0FDF4' : 'var(--bg-secondary)',
@@ -185,18 +210,20 @@ export default function Files() {
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}
           >
-            <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+            <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) uploadFiles(e.target.files); e.target.value = '' }} />
             {uploading ? (
               <div style={{ width: '100%' }}>
                 <div style={{ height: 6, background: 'var(--border)', borderRadius: 99 }}>
                   <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--green)', borderRadius: 99, transition: 'width 0.2s' }} />
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Uploading {uploadProgress}%…</p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {uploadQueue > 1 ? `Uploading ${uploadDone + 1} of ${uploadQueue}…` : `Uploading ${uploadProgress}%…`}
+                </p>
               </div>
             ) : (
               <>
                 <span style={{ fontSize: 16 }}>📁</span>
-                <span style={{ fontSize: 13, color: 'var(--text-dim)', fontWeight: 500 }}>{dragOver ? 'Drop to upload' : 'Click or drag a file to upload'}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-dim)', fontWeight: 500 }}>{dragOver ? 'Drop to upload' : 'Click or drag files to upload'}</span>
               </>
             )}
           </div>
@@ -362,12 +389,29 @@ export default function Files() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setPreviewFile(null)}>
           <div onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', position: 'relative' }}>
             <button onClick={() => setPreviewFile(null)} style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: 'white', fontSize: 28, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            {canPrev && (
+              <button
+                onClick={() => setPreviewFile(photoFiles[previewIndex - 1])}
+                style={{ position: 'absolute', left: -52, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 22, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >‹</button>
+            )}
+            {canNext && (
+              <button
+                onClick={() => setPreviewFile(photoFiles[previewIndex + 1])}
+                style={{ position: 'absolute', right: -52, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 22, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >›</button>
+            )}
             {previewFile.mime_type?.startsWith('image/') && (
-              <img src={previewFile.storage_url} alt={previewFile.original_name} style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 8, display: 'block' }} />
+              <img src={previewFile.storage_url} alt={previewFile.original_name} style={{ maxWidth: '90vw', maxHeight: '82vh', borderRadius: 8, display: 'block' }} />
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 16 }}>
               <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>{previewFile.original_name}</p>
-              <a href={previewFile.storage_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}>Download</a>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {photoFiles.length > 1 && (
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', alignSelf: 'center' }}>{previewIndex + 1} / {photoFiles.length}</span>
+                )}
+                <a href={previewFile.storage_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontWeight: 600 }}>Download</a>
+              </div>
             </div>
           </div>
         </div>

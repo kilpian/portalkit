@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import posthog from 'posthog-js'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string)
+  : null
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
@@ -43,6 +49,7 @@ interface PortalData {
   photographer_business: string | null
   photographer_logo: string | null
   photographer_brand_color: string | null
+  payments_enabled?: boolean
   contracts: Contract[]
   invoices: Invoice[]
   files: PortalFile[]
@@ -108,7 +115,6 @@ function EmptySection({ message }: { message: string }) {
 function PortalMessages({ token }: { token: string }) {
   const [messages, setMessages] = useState<PortalMessage[]>([])
   const [content, setContent] = useState('')
-  const [senderName, setSenderName] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -130,7 +136,6 @@ function PortalMessages({ token }: { token: string }) {
     try {
       const res = await axios.post<PortalMessage>(`${API_URL}/api/portals/${token}/messages`, {
         content: content.trim(),
-        sender_name: senderName.trim() || undefined,
       })
       setMessages(prev => [...prev, res.data])
       posthog.capture('client_sent_message')
@@ -175,14 +180,6 @@ function PortalMessages({ token }: { token: string }) {
 
       {/* Composer */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input
-          className="input"
-          type="text"
-          placeholder="Your name (optional)"
-          value={senderName}
-          onChange={e => setSenderName(e.target.value)}
-          style={{ fontSize: 13 }}
-        />
         <div style={{ display: 'flex', gap: 8 }}>
           <textarea
             className="input"
@@ -211,6 +208,83 @@ function PortalMessages({ token }: { token: string }) {
   )
 }
 
+// ── Invoice Payment ───────────────────────────────────────────
+function PaymentForm({ invoiceId, token, amount, onPaid, onCancel }: {
+  invoiceId: number; token: string; amount: number; onPaid: () => void; onCancel: () => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [processing, setProcessing] = useState(false)
+  const [error, setError] = useState('')
+
+  const handlePay = async () => {
+    if (!stripe || !elements) return
+    const card = elements.getElement(CardElement)
+    if (!card) return
+    setProcessing(true)
+    setError('')
+    try {
+      const res = await axios.post(`${API_URL}/api/portals/${token}/invoices/${invoiceId}/pay`)
+      const { error: confirmError } = await stripe.confirmCardPayment(res.data.clientSecret, {
+        payment_method: { card },
+      })
+      if (confirmError) {
+        setError(confirmError.message || 'Payment failed')
+      } else {
+        onPaid()
+      }
+    } catch {
+      setError('Payment failed. Please try again.')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginTop: 10, background: 'var(--bg-secondary)' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>Enter card details</p>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', background: '#fff', marginBottom: 10 }}>
+        <CardElement options={{ style: { base: { fontSize: '14px', color: '#2D2416', '::placeholder': { color: '#9CA3AF' } } } }} />
+      </div>
+      {error && <p style={{ fontSize: 12, color: '#DC2626', marginBottom: 8 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onCancel} style={{ flex: 1, fontSize: 13, fontWeight: 500, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}>Cancel</button>
+        <button
+          onClick={handlePay}
+          disabled={processing || !stripe}
+          className="btn btn-primary btn-sm"
+          style={{ flex: 2 }}
+        >
+          {processing ? 'Processing…' : `Pay ${formatCents(amount)}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function InvoicePayment({ invoiceId, token, amount, onPaid }: {
+  invoiceId: number; token: string; amount: number; onPaid: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  if (!stripePromise) return null
+  if (!open) {
+    return (
+      <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>Pay Now</button>
+    )
+  }
+  return (
+    <Elements stripe={stripePromise}>
+      <PaymentForm
+        invoiceId={invoiceId}
+        token={token}
+        amount={amount}
+        onPaid={() => { setOpen(false); onPaid() }}
+        onCancel={() => setOpen(false)}
+      />
+    </Elements>
+  )
+}
+
 // ── ClientPortalContent (exported for preview modal) ──────────
 export function ClientPortalContent({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null>(null)
@@ -220,6 +294,8 @@ export function ClientPortalContent({ token }: { token: string }) {
   const [signerNames, setSignerNames] = useState<Record<number, string>>({})
   const [signing, setSigning] = useState<number | null>(null)
   const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string; hash: string | null; content: string | null }>>({})
+  const [lightboxFile, setLightboxFile] = useState<PortalFile | null>(null)
+  const [paidInvoices, setPaidInvoices] = useState<Record<number, boolean>>({})
 
   const handleSign = async (contract: Contract) => {
     const name = signerNames[contract.id]?.trim()
@@ -488,11 +564,18 @@ export function ClientPortalContent({ token }: { token: string }) {
                     <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)', marginTop: 2 }}>{formatCents(inv.amount_cents)}</p>
                     {inv.due_date && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Due {formatDate(inv.due_date)}</p>}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: inv.status === 'paid' ? 'var(--color-green-bg)' : 'var(--color-yellow-bg)', color: inv.status === 'paid' ? 'var(--color-green)' : 'var(--color-yellow)', border: `1px solid ${inv.status === 'paid' ? 'var(--color-green-border)' : 'var(--color-yellow-border)'}` }}>
-                      {inv.status === 'paid' ? 'Paid' : 'Unpaid'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: (inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green-bg)' : 'var(--color-yellow-bg)', color: (inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green)' : 'var(--color-yellow)', border: `1px solid ${(inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green-border)' : 'var(--color-yellow-border)'}` }}>
+                      {(inv.status === 'paid' || paidInvoices[inv.id]) ? 'Paid' : 'Unpaid'}
                     </span>
-                    {inv.status !== 'paid' && <button className="btn btn-primary btn-sm">Pay Now</button>}
+                    {inv.status !== 'paid' && !paidInvoices[inv.id] && data?.payments_enabled && (
+                      <InvoicePayment
+                        invoiceId={inv.id}
+                        token={token}
+                        amount={inv.amount_cents}
+                        onPaid={() => setPaidInvoices(prev => ({ ...prev, [inv.id]: true }))}
+                      />
+                    )}
                   </div>
                 </div>
               ))
@@ -515,9 +598,9 @@ export function ClientPortalContent({ token }: { token: string }) {
                       {imageFiles.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: otherFiles.length > 0 ? 16 : 0 }}>
                           {imageFiles.map(f => (
-                            <a key={f.id} href={f.storage_url ?? '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', textDecoration: 'none' }}>
+                            <div key={f.id} onClick={() => setLightboxFile(f)} style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', cursor: 'pointer' }}>
                               <img src={f.storage_url ?? ''} alt={f.original_name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
-                            </a>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -552,6 +635,37 @@ export function ClientPortalContent({ token }: { token: string }) {
             <PortalMessages token={token} />
           </SectionCard>
         </div>
+
+        {/* Lightbox */}
+        {lightboxFile && (
+          <div
+            onClick={() => setLightboxFile(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          >
+            <div onClick={e => e.stopPropagation()} style={{ maxWidth: '92vw', maxHeight: '92vh', position: 'relative' }}>
+              <button
+                onClick={() => setLightboxFile(null)}
+                style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}
+              >✕</button>
+              <img
+                src={lightboxFile.storage_url ?? ''}
+                alt={lightboxFile.original_name}
+                style={{ maxWidth: '92vw', maxHeight: '82vh', borderRadius: 8, display: 'block', objectFit: 'contain' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 16 }}>
+                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, margin: 0 }}>{lightboxFile.original_name}</p>
+                <a
+                  href={lightboxFile.storage_url ?? ''}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 12, padding: '5px 14px', borderRadius: 6, background: 'rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}
+                >
+                  Download
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid #E8E0D0' }}>
           <div style={{ marginBottom: 12 }}>
