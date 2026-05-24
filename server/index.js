@@ -17,7 +17,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
-;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL', 'STRIPE_CONNECT_CLIENT_ID', 'STRIPE_PUBLISHABLE_KEY'].forEach(v => {
+;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL', 'STRIPE_PUBLISHABLE_KEY'].forEach(v => {
   if (!process.env[v]) console.error(`❌ Missing env var: ${v}`)
   else console.log(`✅ ${v}: set`)
 })
@@ -274,6 +274,18 @@ app.post('/api/stripe/webhook',
               [invoiceId]
             ).catch(e => console.error('Invoice paid update failed:', e))
             console.log(`💳 Invoice ${invoiceId} marked as paid via Stripe Connect`)
+          }
+          break
+        }
+        // NOTE: Add "account.updated" to your Stripe webhook destination events list
+        case 'account.updated': {
+          const account = event.data.object
+          if (account.charges_enabled) {
+            await pool.query(
+              'UPDATE users SET stripe_connect_enabled=TRUE WHERE stripe_connect_id=$1',
+              [account.id]
+            ).catch(() => {})
+            console.log('✅ Stripe Connect enabled for account:', account.id)
           }
           break
         }
@@ -957,42 +969,76 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   }
 })
 
-// ── STRIPE CONNECT ────────────────────────────────────────────
+// ── STRIPE CONNECT (Account Sessions approach — no OAuth client ID needed) ──
 
-app.get('/api/stripe/connect/authorize', requireAuth, async (req, res) => {
-  const clientId = process.env.STRIPE_CONNECT_CLIENT_ID
-  if (!clientId) return res.status(503).json({ error: 'Stripe Connect not configured' })
-  const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
-  const redirectUri = `${frontendUrl}/dashboard/settings`
-  const url = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&state=${req.userId}&redirect_uri=${encodeURIComponent(redirectUri)}`
-  res.json({ url })
+app.post('/api/stripe/connect/onboard', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    let connectId = req.user.stripe_connect_id
+
+    if (!connectId) {
+      const account = await stripe.accounts.create({
+        type: 'express',
+        email: req.user.email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        business_type: 'individual',
+        metadata: { user_id: String(req.user.id) },
+      })
+      connectId = account.id
+      await pool.query(
+        'UPDATE users SET stripe_connect_id=$1 WHERE id=$2',
+        [connectId, req.user.id]
+      )
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+    const accountLink = await stripe.accountLinks.create({
+      account: connectId,
+      refresh_url: `${frontendUrl}/dashboard/settings?stripe_connect=refresh`,
+      return_url: `${frontendUrl}/dashboard/settings?stripe_connect=complete`,
+      type: 'account_onboarding',
+    })
+
+    res.json({ url: accountLink.url })
+  } catch (err) {
+    console.error('Stripe Connect onboard error:', err)
+    res.status(500).json({ error: err.message })
+  }
 })
 
-app.post('/api/stripe/connect/callback', requireAuth, async (req, res) => {
-  const { code } = req.body
-  if (!code) return res.status(400).json({ error: 'code required' })
-  if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+app.get('/api/stripe/connect/status', requireAuth, async (req, res) => {
   try {
-    const response = await stripe.oauth.token({ grant_type: 'authorization_code', code })
-    const stripeConnectId = response.stripe_user_id
-    await pool.query(
-      'UPDATE users SET stripe_connect_id=$1, stripe_connect_enabled=true WHERE id=$2',
-      [stripeConnectId, req.userId]
-    )
-    res.json({ success: true, stripe_connect_id: stripeConnectId })
+    if (!stripe) return res.json({ connected: false, enabled: false })
+    if (!req.user.stripe_connect_id) return res.json({ connected: false, enabled: false })
+
+    const account = await stripe.accounts.retrieve(req.user.stripe_connect_id)
+    const enabled = !!(account.charges_enabled && account.payouts_enabled)
+
+    if (enabled !== req.user.stripe_connect_enabled) {
+      await pool.query(
+        'UPDATE users SET stripe_connect_enabled=$1 WHERE id=$2',
+        [enabled, req.user.id]
+      ).catch(() => {})
+    }
+
+    res.json({
+      connected: true,
+      enabled,
+      charges_enabled: account.charges_enabled,
+      payouts_enabled: account.payouts_enabled,
+      account_id: account.id,
+    })
   } catch (err) {
-    console.error('Connect callback error:', err)
-    res.status(500).json({ error: err.message })
+    console.error('Stripe Connect status error:', err)
+    res.json({ connected: false, enabled: false })
   }
 })
 
 app.post('/api/stripe/connect/disconnect', requireAuth, async (req, res) => {
   try {
-    const userResult = await pool.query('SELECT stripe_connect_id FROM users WHERE id=$1', [req.userId])
-    const stripeConnectId = userResult.rows[0]?.stripe_connect_id
-    if (stripeConnectId && stripe && process.env.STRIPE_CONNECT_CLIENT_ID) {
-      await stripe.oauth.deauthorize({ client_id: process.env.STRIPE_CONNECT_CLIENT_ID, stripe_user_id: stripeConnectId }).catch(() => {})
-    }
     await pool.query('UPDATE users SET stripe_connect_id=NULL, stripe_connect_enabled=false WHERE id=$1', [req.userId])
     res.json({ success: true })
   } catch (err) {
