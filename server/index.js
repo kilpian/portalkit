@@ -593,11 +593,12 @@ async function initDb() {
 async function sendEventReminders() {
   if (!resend) return
   const reminders = [
-    { days: 30, type: '30_day', subject: '30 days until your wedding! 🎉' },
-    { days: 14, type: '14_day', subject: '2 weeks until your big day! 💍' },
+    { days: 0,  type: '0_day',  subject: 'Your event is today! 🎉' },
+    { days: 1,  type: '1_day',  subject: 'Tomorrow is your big day! 🥂' },
+    { days: 3,  type: '3_day',  subject: '3 days until your event! ✨' },
     { days: 7,  type: '7_day',  subject: 'One week to go! 📸' },
-    { days: 3,  type: '3_day',  subject: '3 days until your wedding! ✨' },
-    { days: 1,  type: '1_day',  subject: 'Tomorrow is your wedding day! 🥂' },
+    { days: 14, type: '14_day', subject: '2 weeks until your big day! 💍' },
+    { days: 30, type: '30_day', subject: '30 days until your event! 🎉' },
   ]
   for (const reminder of reminders) {
     try {
@@ -605,8 +606,7 @@ async function sendEventReminders() {
         SELECT c.*, u.business_name, u.full_name as photographer_name
         FROM clients c
         JOIN users u ON c.user_id = u.id
-        WHERE c.event_date >= CURRENT_DATE - INTERVAL '1 day'
-        AND c.event_date <= CURRENT_DATE + INTERVAL '${reminder.days} days' + INTERVAL '1 day'
+        WHERE DATE(c.event_date) = CURRENT_DATE + ${reminder.days}
         AND c.email IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM reminders_sent rs
@@ -614,7 +614,8 @@ async function sendEventReminders() {
         )
       `, [reminder.type])
       for (const client of clients.rows) {
-        const eventDate = new Date(client.event_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        const [y, mo, d] = (client.event_date + '').split('T')[0].split('-').map(Number)
+        const eventDate = new Date(y, mo - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
         const biz = client.business_name || client.photographer_name
         try {
@@ -655,8 +656,7 @@ async function sendEventReminders() {
         FROM client_events ce
         JOIN clients c ON ce.client_id = c.id
         JOIN users u ON c.user_id = u.id
-        WHERE ce.event_date >= CURRENT_DATE - INTERVAL '1 day'
-        AND ce.event_date <= CURRENT_DATE + INTERVAL '${reminder.days} days' + INTERVAL '1 day'
+        WHERE DATE(ce.event_date) = CURRENT_DATE + ${reminder.days}
         AND c.email IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM reminders_sent rs
@@ -664,10 +664,15 @@ async function sendEventReminders() {
         )
       `, [reminder.type])
       for (const ev of events.rows) {
-        const eventDate = new Date(ev.event_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        const [y, mo, d] = (ev.event_date + '').split('T')[0].split('-').map(Number)
+        const eventDate = new Date(y, mo - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${ev.portal_token}`
         const biz = ev.business_name || ev.photographer_name
-        const subject = `${reminder.days === 1 ? 'Tomorrow is' : reminder.days + ' days until'} ${ev.event_name}!`
+        const subject = reminder.days === 0
+          ? `Today is ${ev.event_name}!`
+          : reminder.days === 1
+            ? `Tomorrow is ${ev.event_name}!`
+            : `${reminder.days} days until ${ev.event_name}!`
         try {
           await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',

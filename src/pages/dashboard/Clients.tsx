@@ -21,15 +21,20 @@ function getInitials(name: string) {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
-function formatDate(d: string | null) {
-  if (!d) return null
-  try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
-  catch { return d }
+function formatEventDate(dateStr: string | null | undefined) {
+  if (!dateStr) return ''
+  const clean = dateStr.split('T')[0]
+  const [year, month, day] = clean.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  if (isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 function daysUntil(d: string | null): number | null {
   if (!d) return null
-  const diff = new Date(d + 'T12:00:00').setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)
+  const clean = d.split('T')[0]
+  const [year, month, day] = clean.split('-').map(Number)
+  const diff = new Date(year, month - 1, day).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)
   return Math.ceil(diff / 86_400_000)
 }
 
@@ -150,7 +155,7 @@ export default function Clients() {
     console.log('Client info:', client)
     setPreviewClient(null)
     setEditingClient(client)
-    setForm({ name: client.name, email: client.email ?? '', phone: client.phone ?? '', event_type: client.event_type ?? '', event_date: client.event_date ? client.event_date.slice(0, 10) : '', notes: client.notes ?? '' })
+    setForm({ name: client.name, email: client.email ?? '', phone: client.phone ?? '', event_type: client.event_type ?? '', event_date: client.event_date ? client.event_date.split('T')[0] : '', notes: client.notes ?? '' })
     setFormError('')
     setInfoClient(client)
   }
@@ -325,7 +330,7 @@ export default function Clients() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{c.name}</p>
                     <p style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {[c.event_type, formatDate(c.event_date)].filter(Boolean).join(' · ') || c.email || 'No event details'}
+                      {[c.event_type, formatEventDate(c.event_date)].filter(Boolean).join(' · ') || c.email || 'No event details'}
                     </p>
                   </div>
 
@@ -456,7 +461,7 @@ export default function Clients() {
                 <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{ev.event_name}</p>
-                    {ev.event_date && <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>{formatDate(ev.event_date)}{ev.event_type ? ` · ${ev.event_type}` : ''}</p>}
+                    {ev.event_date && <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>{formatEventDate(ev.event_date)}{ev.event_type ? ` · ${ev.event_type}` : ''}</p>}
                   </div>
                   {deleteEventConfirmId === ev.id ? (
                     <>
