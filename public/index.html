@@ -6,31 +6,30 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PortalKit — Client Portals for Wedding Photographers</title>
+  <title>PortalKit — Client Portal for Wedding Photographers</title>
 
   <!-- Primary Meta Tags -->
-  <meta name="title" content="PortalKit — Client Portals for Wedding Photographers">
-  <meta name="description" content="Give your wedding clients a branded portal for contracts, invoices, file sharing, and messaging. One link. No more email chaos. Start free for 14 days.">
-  <meta name="keywords" content="wedding photographer client portal, photography client management, send contracts to wedding clients, wedding photography software, client portal for photographers">
+  <meta name="title" content="PortalKit — Client Portal for Wedding Photographers">
+  <meta name="description" content="Give every wedding client their own private portal. Send contracts, invoices, and photos in one link. 14-day free trial.">
+  <meta name="keywords" content="wedding photographer client portal, photography contract software, photographer invoice tool, client gallery sharing">
   <meta name="robots" content="index, follow">
   <meta name="language" content="English">
   <meta name="author" content="PortalKit">
 
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://getportalkit.com/">
-  <meta property="og:title" content="PortalKit — Client Portals for Wedding Photographers">
-  <meta property="og:description" content="Give your wedding clients a branded portal for contracts, invoices, file sharing, and messaging. One link. No more email chaos.">
+  <meta property="og:url" content="https://getportalkit.com">
+  <meta property="og:title" content="PortalKit — Client Portal for Wedding Photographers">
+  <meta property="og:description" content="Give every wedding client their own private portal. Contracts, invoices, file sharing and messaging in one link.">
   <meta property="og:image" content="https://getportalkit.com/og-image.png">
 
-  <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="https://getportalkit.com/">
-  <meta property="twitter:title" content="PortalKit — Client Portals for Wedding Photographers">
-  <meta property="twitter:description" content="Give your wedding clients a branded portal for contracts, invoices, file sharing, and messaging. One link. No more email chaos.">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PortalKit — Client Portal for Wedding Photographers">
+  <meta name="twitter:description" content="Give every wedding client their own private portal. 14-day free trial.">
 
   <!-- Canonical -->
-  <link rel="canonical" href="https://getportalkit.com/">
+  <link rel="canonical" href="https://getportalkit.com">
 
   <!-- Schema.org structured data -->
   <script type="application/ld+json">
@@ -38,30 +37,31 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "PortalKit",
-    "applicationCategory": "BusinessApplication",
-    "description": "Client portal software for wedding photographers. Manage contracts, invoices, file sharing, and client messaging in one branded space.",
+    "description": "Client portal software for wedding photographers. Send contracts, invoices, and photos in one private link.",
     "url": "https://getportalkit.com",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
     "offers": {
       "@type": "Offer",
-      "price": "39",
+      "price": "39.00",
       "priceCurrency": "USD",
       "priceSpecification": {
-        "@type": "RecurringCharge",
-        "billingPeriod": "Month"
-      }
+        "@type": "RecurringChargeSpecification",
+        "billingDuration": "P1M",
+        "price": "39.00",
+        "priceCurrency": "USD"
+      },
+      "trialPeriodDays": 14
     },
+    "targetDemo": "Wedding photographers",
     "featureList": [
-      "Branded client portals",
-      "Contract management with e-signatures",
-      "Invoice and payment collection",
-      "File and document sharing",
+      "Client portal with unique link per client",
+      "Electronic contract signing",
+      "Invoice management",
+      "File and photo sharing",
       "Client messaging",
-      "Custom branding"
-    ],
-    "audience": {
-      "@type": "Audience",
-      "audienceType": "Wedding Photographers"
-    }
+      "Automated event reminders"
+    ]
   }
   </script>
 
@@ -70,15 +70,11 @@
   <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="PortalKit — Client Portal for Wedding Photographers">
-  <meta property="og:description" content="PortalKit gives wedding photographers a branded client portal — contracts, galleries, invoices, and messaging. One link. Zero chaos.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://getportalkit.com">
-
-  <!-- Fonts -->
+  <!-- Fonts & preconnect -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://clerk.getportalkit.com">
+  <link rel="dns-prefetch" href="https://portalkit-production.up.railway.app">
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1009,8 +1005,8 @@
 
     <div class="hero__text">
       <span class="hero__badge">Now in beta &middot; 200+ photographers</span>
-      <h1 class="hero__headline">Your clients deserve better than a Gmail thread</h1>
-      <p class="hero__sub">PortalKit gives wedding photographers a branded client portal — contracts, galleries, invoices, and messaging. One link. Zero chaos.</p>
+      <h1 class="hero__headline">The Client Portal Built for Wedding Photographers</h1>
+      <p class="hero__sub">Give every wedding client their own private portal. Send contracts, invoices, and photos in one link. No more email chaos.</p>
       <div class="hero__cta">
         <a href="/signup" class="btn btn--gold btn--lg">Start Your Free 14-Day Trial</a>
         <p class="hero__note">Your card won't be charged for 14 days &middot; Cancel anytime</p>
@@ -1394,7 +1390,7 @@
           </li>
         </ul>
         <a href="/signup" class="btn btn--gold btn--lg btn--full">Start Free 14-Day Trial</a>
-        <p class="pricing-card__note">Start free for 14 days. Cancel anytime before day 15 and pay nothing.</p>
+        <p class="pricing-card__note">$39/month after your 14-day free trial. Cancel anytime before day 15 and pay nothing.</p>
       </div>
     </div>
   </div>
