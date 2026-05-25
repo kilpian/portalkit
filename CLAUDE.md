@@ -35,23 +35,29 @@
 - CRM Pipeline: stage column on clients, Kanban board at /dashboard/pipeline, PATCH /api/clients/:id/stage
 - Questionnaires: templates + responses. Dashboard at /dashboard/questionnaires. Client portal section. Emails on send/complete.
 - Booking/Scheduling: session types, weekly availability, public booking page at /book/:username. Dashboard at /dashboard/booking.
-- Automated Workflows: 5 toggles (welcome, contract reminder, balance reminder, questionnaire on booking, thank-you on delivery). Dashboard at /dashboard/workflows.
-- Free Tier: plan='free', 1 client limit enforced at POST /api/clients. Choose via onboarding or POST /api/users/choose-free-plan.
+- Automated Workflows: 5 toggles + review request toggle. Dashboard at /dashboard/workflows.
+- Free Tier: plan='free', 1 client limit enforced at POST /api/clients.
+- Lead Capture: embeddable form via /public/embed.js, public page at /inquire/:username, dashboard at /dashboard/leads. GET/POST /api/lead/:username (publicCors).
+- Payment Links: shareable pages at /pay/:linkId (Stripe Connect), dashboard at /dashboard/payment-links. GET/POST /api/payment-links.
+- Gallery URL: clients.gallery_url → prominent "📸 View Your Photo Gallery →" button in portal.
+- Secondary Contact: clients.secondary_name/email/phone → "Welcome X & Y!" greeting, CC on emails.
+- Shot List Builder: shot_lists table. Routes /api/clients/:id/shot-list (auth) + /api/portals/:token/shot-list (public).
+- Vendor Contact Sheet: vendors table. Routes /api/clients/:id/vendors (auth) + /api/portals/:token/vendors (public).
+- Day-of Timeline: timelines table. Routes /api/clients/:id/timeline (auth) + /api/portals/:token/timeline (public). Client approves via portal.
+- Review Request: 5 new columns on workflow_settings (google/weddingwire/theknot/facebook URLs + send_review_request_on_delivery). Buttons included in delivery email.
+- Package/Proposal Builder: packages + proposals tables. Dashboard at /dashboard/proposals, public at /proposal/:id.
 
 ## Active Bugs
-- Notes not persisting (logging added, check Railway logs)
 - Signin box left-aligned on production
 
-## New DB Tables (need Railway redeploy to create)
-- reminders_sent (client_id, reminder_type UNIQUE) — tracks sent event reminders
-- questionnaire_templates (id, user_id, name, questions JSONB, created_at)
-- questionnaire_responses (id, template_id, client_id, user_id, title, questions JSONB, responses JSONB, status, sent_at, completed_at, created_at)
-- session_types (id, user_id, name, duration_minutes, price_cents, description, active, color, created_at)
-- availability_slots (id, user_id, day_of_week, start_time, end_time, active)
-- bookings (id, user_id, client_id, session_type_id, booking_date, start_time, end_time, client_name, client_email, client_phone, notes, status, created_at)
-- workflow_settings (id, user_id, send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message)
-- clients.stage TEXT — added via ALTER TABLE (inquiry/consultation/booked/in_progress/delivered/archived)
-- users.booking_username TEXT UNIQUE — generated from email prefix + 4 random digits on user creation
+## DB Tables
+- reminders_sent, questionnaire_templates, questionnaire_responses, session_types, availability_slots, bookings, workflow_settings
+- clients.stage, clients.gallery_url, clients.secondary_name/email/phone (ALTER TABLE)
+- lead_forms, lead_submissions, payment_links, payment_link_transactions
+- shot_lists, vendors, timelines
+- workflow_settings.google_review_url/wedding_wire_url/the_knot_url/facebook_review_url/send_review_request_on_delivery (ALTER TABLE)
+- packages, proposals
+- users.booking_username TEXT UNIQUE
 
 ## Rules
 - Always read this file first
