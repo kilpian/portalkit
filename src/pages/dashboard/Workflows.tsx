@@ -52,6 +52,11 @@ const defaults: WorkflowSettings = {
   send_thank_you_on_delivery: false,
   welcome_message: null,
   thank_you_message: null,
+  send_review_request_on_delivery: true,
+  google_review_url: null,
+  wedding_wire_url: null,
+  the_knot_url: null,
+  facebook_review_url: null,
 }
 
 export default function Workflows() {
@@ -193,6 +198,53 @@ export default function Workflows() {
             </div>
           )
         })}
+      </div>
+
+      <div style={{ marginTop: 20, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <span style={{ fontSize: 24, flexShrink: 0 }}>⭐</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Review request on delivery</div>
+              <button
+                onClick={() => setSettings(prev => ({ ...prev, send_review_request_on_delivery: !prev.send_review_request_on_delivery }))}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none',
+                  background: settings.send_review_request_on_delivery ? '#6366F1' : '#D1D5DB',
+                  cursor: 'pointer', position: 'relative', flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 3,
+                  left: settings.send_review_request_on_delivery ? 23 : 3,
+                  transition: 'left 0.15s',
+                }} />
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Include review platform buttons in your thank-you delivery email.</div>
+
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { key: 'google_review_url' as const, label: '⭐ Google Review URL', placeholder: 'https://g.page/r/...' },
+                { key: 'wedding_wire_url' as const, label: '💍 WeddingWire URL', placeholder: 'https://www.weddingwire.com/...' },
+                { key: 'the_knot_url' as const, label: '💐 The Knot URL', placeholder: 'https://www.theknot.com/...' },
+                { key: 'facebook_review_url' as const, label: '👍 Facebook Review URL', placeholder: 'https://www.facebook.com/...' },
+              ].map(({ key, label, placeholder }) => (
+                <div key={key}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
+                  <input
+                    type="url"
+                    value={settings[key] || ''}
+                    onChange={e => setSettings(prev => ({ ...prev, [key]: e.target.value || null }))}
+                    placeholder={placeholder}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ marginTop: 24, background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, padding: '14px 16px' }}>

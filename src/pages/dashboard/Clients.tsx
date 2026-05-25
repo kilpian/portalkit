@@ -133,7 +133,7 @@ function formatDaysLabel(n: number): string {
   return `${months}mo`
 }
 
-const BLANK: CreateClientPayload = { name: '', email: '', phone: '', event_type: '', event_date: '', notes: '' }
+const BLANK: CreateClientPayload = { name: '', email: '', phone: '', event_type: '', event_date: '', notes: '', gallery_url: '', secondary_name: '', secondary_email: '', secondary_phone: '' }
 
 const PANEL_W = 400
 
@@ -247,7 +247,7 @@ export default function Clients() {
     console.log('Client info:', client)
     setPreviewClient(null)
     setEditingClient(client)
-    setForm({ name: client.name, email: client.email ?? '', phone: client.phone ?? '', event_type: client.event_type ?? '', event_date: client.event_date ? client.event_date.split('T')[0] : '', notes: client.notes ?? '' })
+    setForm({ name: client.name, email: client.email ?? '', phone: client.phone ?? '', event_type: client.event_type ?? '', event_date: client.event_date ? client.event_date.split('T')[0] : '', notes: client.notes ?? '', gallery_url: client.gallery_url ?? '', secondary_name: client.secondary_name ?? '', secondary_email: client.secondary_email ?? '', secondary_phone: client.secondary_phone ?? '' })
     setFormError('')
     setInfoClient(client)
   }
@@ -281,10 +281,12 @@ export default function Clients() {
         event_type: form.event_type?.trim() || undefined,
         event_date: form.event_date || undefined,
         notes: form.notes?.trim() || undefined,
+        gallery_url: form.gallery_url?.trim() || undefined,
+        secondary_name: form.secondary_name?.trim() || undefined,
+        secondary_email: form.secondary_email?.trim() || undefined,
+        secondary_phone: form.secondary_phone?.trim() || undefined,
       }
       if (editingClient?.id) {
-        console.log('📝 Submitting client update:', JSON.stringify(payload))
-        console.log('📝 Notes in payload:', payload.notes)
         const res = await authFetch(`/api/clients/${editingClient.id}`, { method: 'put', data: payload })
         const updated: Client = res.data
         setClients(prev => prev.map(c => c.id === updated.id ? updated : c))
@@ -558,6 +560,27 @@ export default function Clients() {
               value={form.notes ?? ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               style={{ resize: 'vertical', minHeight: 80 }}
             />
+          </div>
+          <div>
+            <label className="field-label">Gallery URL</label>
+            <input className="input" type="url" placeholder="https://gallery.example.com/..." value={form.gallery_url ?? ''} onChange={e => setForm(f => ({ ...f, gallery_url: e.target.value }))} />
+          </div>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Secondary Contact</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <label className="field-label">Name</label>
+                <input className="input" type="text" placeholder="Partner or secondary contact" value={form.secondary_name ?? ''} onChange={e => setForm(f => ({ ...f, secondary_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="field-label">Email</label>
+                <input className="input" type="email" placeholder="partner@example.com" value={form.secondary_email ?? ''} onChange={e => setForm(f => ({ ...f, secondary_email: e.target.value }))} />
+              </div>
+              <div>
+                <label className="field-label">Phone</label>
+                <input className="input" type="tel" placeholder="+1 (555) 000-0001" value={form.secondary_phone ?? ''} onChange={e => setForm(f => ({ ...f, secondary_phone: e.target.value }))} />
+              </div>
+            </div>
           </div>
           {editingClient?.id && (
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>

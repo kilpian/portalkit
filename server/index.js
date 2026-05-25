@@ -709,6 +709,160 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      // ── Feature: Gallery URL on clients ───────────────────────
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS gallery_url TEXT`).catch(() => {})
+
+      // ── Feature: Secondary contact on clients ─────────────────
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS secondary_name TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS secondary_email TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS secondary_phone TEXT`).catch(() => {})
+
+      // ── Feature: Lead Capture Forms ───────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lead_forms (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+          headline TEXT DEFAULT 'Book a Session',
+          subheadline TEXT DEFAULT 'Fill out the form below and I''ll be in touch soon.',
+          fields JSONB DEFAULT '["name","email","phone","event_type","event_date","message"]',
+          brand_color TEXT DEFAULT '#1B4332',
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lead_submissions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          email TEXT,
+          phone TEXT,
+          event_type TEXT,
+          event_date DATE,
+          message TEXT,
+          source TEXT DEFAULT 'embed',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Payment Links ────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS payment_links (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          description TEXT,
+          amount_cents INTEGER,
+          allow_custom_amount BOOLEAN DEFAULT FALSE,
+          min_amount_cents INTEGER DEFAULT 100,
+          link_type TEXT DEFAULT 'fixed' CHECK (link_type IN ('fixed','tip','custom')),
+          active BOOLEAN DEFAULT TRUE,
+          total_collected_cents INTEGER DEFAULT 0,
+          transaction_count INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS payment_link_transactions (
+          id SERIAL PRIMARY KEY,
+          payment_link_id INTEGER NOT NULL REFERENCES payment_links(id) ON DELETE CASCADE,
+          payer_name TEXT,
+          payer_email TEXT,
+          amount_cents INTEGER NOT NULL,
+          stripe_payment_intent_id TEXT,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','succeeded','failed')),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Shot Lists ───────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS shot_lists (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE UNIQUE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          shots JSONB DEFAULT '[]',
+          client_notes TEXT,
+          photographer_notes TEXT,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','submitted','confirmed')),
+          submitted_at TIMESTAMPTZ,
+          confirmed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Vendors ──────────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS vendors (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          category TEXT NOT NULL,
+          name TEXT NOT NULL,
+          contact_name TEXT,
+          phone TEXT,
+          email TEXT,
+          website TEXT,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Day-of Timelines ─────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS timelines (
+          id SERIAL PRIMARY KEY,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE UNIQUE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT DEFAULT 'Day-of Timeline',
+          items JSONB DEFAULT '[]',
+          status TEXT DEFAULT 'draft' CHECK (status IN ('draft','sent','approved')),
+          client_approved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Review Request (workflow_settings columns) ────
+      await pool.query(`ALTER TABLE workflow_settings ADD COLUMN IF NOT EXISTS google_review_url TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE workflow_settings ADD COLUMN IF NOT EXISTS wedding_wire_url TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE workflow_settings ADD COLUMN IF NOT EXISTS the_knot_url TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE workflow_settings ADD COLUMN IF NOT EXISTS facebook_review_url TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE workflow_settings ADD COLUMN IF NOT EXISTS send_review_request_on_delivery BOOLEAN DEFAULT TRUE`).catch(() => {})
+
+      // ── Feature: Packages & Proposals ────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS packages (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          price_cents INTEGER NOT NULL DEFAULT 0,
+          deposit_cents INTEGER DEFAULT 0,
+          features JSONB DEFAULT '[]',
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS proposals (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          title TEXT NOT NULL,
+          message TEXT,
+          packages JSONB DEFAULT '[]',
+          selected_package_id INTEGER,
+          status TEXT DEFAULT 'draft' CHECK (status IN ('draft','sent','viewed','accepted','expired')),
+          expires_at TIMESTAMPTZ,
+          viewed_at TIMESTAMPTZ,
+          accepted_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1397,7 +1551,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 app.get('/api/clients', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
       [req.userId]
     )
     res.json(result.rows)
@@ -1467,17 +1621,15 @@ app.get('/api/clients/:id', requireAuth, async (req, res) => {
 })
 
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
-  const { name, email, phone, event_date, event_type, notes } = req.body
-  console.log('📝 PUT client body:', JSON.stringify(req.body))
-  console.log('📝 Notes value:', req.body.notes)
-  console.log('📝 Notes type:', typeof req.body.notes)
+  const { name, email, phone, event_date, event_type, notes, gallery_url, secondary_name, secondary_email, secondary_phone } = req.body
   try {
-    const sqlParams = [sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, req.params.id, req.userId]
-    console.log('📝 SQL params:', sqlParams)
     const result = await pool.query(
-      `UPDATE clients SET name=$1, email=$2, phone=$3, event_date=$4, event_type=$5, notes=$6, updated_at=NOW()
-       WHERE id=$7 AND user_id=$8 RETURNING *`,
-      sqlParams
+      `UPDATE clients SET name=$1, email=$2, phone=$3, event_date=$4, event_type=$5, notes=$6,
+       gallery_url=$7, secondary_name=$8, secondary_email=$9, secondary_phone=$10, updated_at=NOW()
+       WHERE id=$11 AND user_id=$12 RETURNING *`,
+      [sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null,
+       gallery_url || null, sanitize(secondary_name) || null, secondary_email || null, sanitize(secondary_phone) || null,
+       req.params.id, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
     res.json(result.rows[0])
@@ -1981,7 +2133,8 @@ app.patch('/api/files/:id/assign', requireAuth, async (req, res) => {
 app.get('/api/portals/:token', async (req, res) => {
   try {
     const clientResult = await pool.query(
-      `SELECT c.id, c.name, c.event_date, c.event_type,
+      `SELECT c.id, c.name, c.event_date, c.event_type, c.portal_token,
+              c.gallery_url, c.secondary_name,
               u.full_name as photographer_name, u.business_name as photographer_business,
               u.logo_url as photographer_logo, u.brand_color as photographer_brand_color,
               u.stripe_connect_enabled as payments_enabled
@@ -2575,14 +2728,24 @@ app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
       if (ws?.send_thank_you_on_delivery) {
         const biz = req.user.business_name || req.user.full_name || 'Your photographer'
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+        const reviewLinks = [
+          ws?.google_review_url && `<a href="${ws.google_review_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#4285F4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">⭐ Google Review</a>`,
+          ws?.wedding_wire_url && `<a href="${ws.wedding_wire_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#AE0C00;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💍 WeddingWire</a>`,
+          ws?.the_knot_url && `<a href="${ws.the_knot_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#FF69B4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💐 The Knot</a>`,
+          ws?.facebook_review_url && `<a href="${ws.facebook_review_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#1877F2;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">👍 Facebook</a>`,
+        ].filter(Boolean)
+        const reviewSection = (ws?.send_review_request_on_delivery !== false && reviewLinks.length)
+          ? `<p style="color:#6B5E4A;line-height:1.6;margin:16px 0 8px;">If you loved your experience, I'd be so grateful for a review:</p><div style="margin:8px 0 16px;">${reviewLinks.join('')}</div>`
+          : `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">If you loved your experience, I'd be so grateful for a referral or review.</p>`
+        const toList = [client.email, client.secondary_email].filter(Boolean)
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          to: client.email,
+          to: toList,
           subject: `Thank you, ${client.name}! — ${biz}`,
           html: emailTemplate({
             title: 'Thank you!',
             preheader: 'It was a pleasure working with you',
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Thank you, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.thank_you_message || `It was an absolute pleasure working with you. Your photos are ready in your client portal!`}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">If you loved your experience, we'd be so grateful for a referral or review.</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Thank you, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.thank_you_message || `It was an absolute pleasure working with you. Your photos are ready in your client portal!`}</p>${reviewSection}`,
             ctaText: 'View Your Portal →',
             ctaUrl: portalLink,
             footerNote: `Sent by ${biz}`,
@@ -2774,17 +2937,28 @@ app.get('/api/workflow-settings', requireAuth, async (req, res) => {
 })
 
 app.put('/api/workflow-settings', requireAuth, async (req, res) => {
-  const { send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message } = req.body
+  const {
+    send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days,
+    send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message,
+    send_review_request_on_delivery, google_review_url, wedding_wire_url, the_knot_url, facebook_review_url,
+  } = req.body
   try {
     const result = await pool.query(`
-      INSERT INTO workflow_settings (user_id, send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      INSERT INTO workflow_settings (user_id, send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message, send_review_request_on_delivery, google_review_url, wedding_wire_url, the_knot_url, facebook_review_url)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (user_id) DO UPDATE SET
         send_welcome_on_client_create=$2, send_contract_reminder_3_days=$3,
         send_balance_reminder_7_days=$4, send_questionnaire_on_booking=$5,
-        send_thank_you_on_delivery=$6, welcome_message=$7, thank_you_message=$8
+        send_thank_you_on_delivery=$6, welcome_message=$7, thank_you_message=$8,
+        send_review_request_on_delivery=$9, google_review_url=$10, wedding_wire_url=$11,
+        the_knot_url=$12, facebook_review_url=$13
       RETURNING *
-    `, [req.userId, send_welcome_on_client_create ?? false, send_contract_reminder_3_days ?? true, send_balance_reminder_7_days ?? true, send_questionnaire_on_booking ?? false, send_thank_you_on_delivery ?? true, welcome_message || null, thank_you_message || null])
+    `, [req.userId,
+        send_welcome_on_client_create ?? false, send_contract_reminder_3_days ?? true,
+        send_balance_reminder_7_days ?? true, send_questionnaire_on_booking ?? false,
+        send_thank_you_on_delivery ?? true, welcome_message || null, thank_you_message || null,
+        send_review_request_on_delivery ?? true, google_review_url || null, wedding_wire_url || null,
+        the_knot_url || null, facebook_review_url || null])
     res.json(result.rows[0])
   } catch (err) {
     console.error('Workflow settings error:', err)
@@ -3029,6 +3203,637 @@ app.post('/api/book/:username/book', async (req, res) => {
     console.error('Booking error:', err)
     res.status(500).json({ error: 'Server error' })
   }
+})
+
+// ── LEAD CAPTURE FORMS ────────────────────────────────────────
+const publicCors = cors({ origin: '*' })
+
+app.get('/api/lead-form', requireAuth, async (req, res) => {
+  try {
+    let result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [req.userId])
+    if (!result.rows.length) {
+      result = await pool.query('INSERT INTO lead_forms (user_id) VALUES ($1) RETURNING *', [req.userId])
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/lead-form', requireAuth, async (req, res) => {
+  const { headline, subheadline, fields, brand_color, active } = req.body
+  try {
+    const result = await pool.query(`
+      INSERT INTO lead_forms (user_id, headline, subheadline, fields, brand_color, active)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (user_id) DO UPDATE SET
+        headline=$2, subheadline=$3, fields=$4, brand_color=$5, active=$6
+      RETURNING *
+    `, [req.userId, sanitize(headline) || 'Book a Session', sanitize(subheadline) || null, JSON.stringify(fields || []), brand_color || '#1B4332', active !== false])
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/lead-submissions', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM lead_submissions WHERE user_id=$1 ORDER BY created_at DESC', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.options('/api/lead/:username', publicCors)
+app.get('/api/lead/:username', publicCors, async (req, res) => {
+  try {
+    const userRes = await pool.query('SELECT id FROM users WHERE booking_username=$1', [req.params.username])
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Not found' })
+    const result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [userRes.rows[0].id])
+    if (!result.rows.length || !result.rows[0].active) return res.status(404).json({ error: 'Form not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.options('/api/lead/:username/submit', publicCors)
+app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
+  const { name, email, phone, event_type, event_date, message } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  try {
+    const userRes = await pool.query('SELECT id, email, full_name, business_name FROM users WHERE booking_username=$1', [req.params.username])
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Not found' })
+    const photographer = userRes.rows[0]
+
+    await pool.query(
+      'INSERT INTO lead_submissions (user_id, name, email, phone, event_type, event_date, message) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [photographer.id, sanitize(name), email || null, sanitize(phone) || null, sanitize(event_type) || null, event_date || null, sanitize(message) || null]
+    )
+
+    if (photographer.email && resend) {
+      const biz = photographer.business_name || photographer.full_name || 'You'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: photographer.email,
+        subject: `New lead from ${sanitize(name)}`,
+        html: emailTemplate({
+          title: 'New Lead Inquiry',
+          preheader: `${name} submitted your lead form`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New inquiry from ${sanitize(name)}</h2>
+            ${email ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Email:</strong> ${email}</p>` : ''}
+            ${phone ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Phone:</strong> ${sanitize(phone)}</p>` : ''}
+            ${event_type ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event type:</strong> ${sanitize(event_type)}</p>` : ''}
+            ${event_date ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event date:</strong> ${event_date}</p>` : ''}
+            ${message ? `<p style="color:#6B5E4A;margin:8px 0 0;"><strong>Message:</strong><br>${sanitize(message)}</p>` : ''}`,
+          ctaText: 'View Leads →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/leads`,
+          footerNote: 'Sent by PortalKit',
+        }),
+      }).catch(() => {})
+    }
+
+    res.status(201).json({ success: true })
+  } catch (err) {
+    console.error('Lead submit error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── PAYMENT LINKS ─────────────────────────────────────────────
+
+app.get('/api/payment-links', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM payment_links WHERE user_id=$1 ORDER BY created_at DESC', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/payment-links', requireAuth, async (req, res) => {
+  const { title, description, amount_cents, allow_custom_amount, min_amount_cents, link_type } = req.body
+  if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO payment_links (user_id, title, description, amount_cents, allow_custom_amount, min_amount_cents, link_type) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [req.userId, sanitize(title), sanitize(description) || null, amount_cents || null, allow_custom_amount || false, min_amount_cents || 100, link_type || 'fixed']
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/payment-links/:id', requireAuth, async (req, res) => {
+  const { title, description, amount_cents, allow_custom_amount, min_amount_cents, link_type, active } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE payment_links SET title=$1, description=$2, amount_cents=$3, allow_custom_amount=$4, min_amount_cents=$5, link_type=$6, active=$7 WHERE id=$8 AND user_id=$9 RETURNING *',
+      [sanitize(title), sanitize(description) || null, amount_cents || null, allow_custom_amount || false, min_amount_cents || 100, link_type || 'fixed', active !== false, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/payment-links/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM payment_links WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.options('/api/pay/:linkId', publicCors)
+app.get('/api/pay/:linkId', publicCors, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT pl.*, u.full_name, u.business_name, u.stripe_connect_enabled, u.stripe_connect_account_id
+       FROM payment_links pl JOIN users u ON u.id = pl.user_id
+       WHERE pl.id=$1 AND pl.active=true`, [req.params.linkId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Payment link not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.options('/api/pay/:linkId/charge', publicCors)
+app.post('/api/pay/:linkId/charge', publicCors, async (req, res) => {
+  const { amount_cents, payer_name, payer_email } = req.body
+  if (!amount_cents || amount_cents < 50) return res.status(400).json({ error: 'Invalid amount' })
+  try {
+    const linkRes = await pool.query(
+      `SELECT pl.*, u.stripe_connect_enabled, u.stripe_connect_account_id
+       FROM payment_links pl JOIN users u ON u.id = pl.user_id
+       WHERE pl.id=$1 AND pl.active=true`, [req.params.linkId]
+    )
+    if (!linkRes.rows.length) return res.status(404).json({ error: 'Not found' })
+    const link = linkRes.rows[0]
+    if (!link.stripe_connect_enabled || !link.stripe_connect_account_id || !stripe) {
+      return res.status(400).json({ error: 'Payments not configured' })
+    }
+    const pi = await stripe.paymentIntents.create({
+      amount: amount_cents,
+      currency: 'usd',
+      automatic_payment_methods: { enabled: true },
+      transfer_data: { destination: link.stripe_connect_account_id },
+      metadata: { payment_link_id: link.id, payer_name: payer_name || '', payer_email: payer_email || '' },
+    })
+    await pool.query(
+      'INSERT INTO payment_link_transactions (payment_link_id, payer_name, payer_email, amount_cents, stripe_payment_intent_id) VALUES ($1,$2,$3,$4,$5)',
+      [link.id, sanitize(payer_name) || null, payer_email || null, amount_cents, pi.id]
+    )
+    res.json({ client_secret: pi.client_secret, publishable_key: process.env.STRIPE_PUBLISHABLE_KEY })
+  } catch (err) {
+    console.error('Payment link charge error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.options('/api/pay/:linkId/confirm', publicCors)
+app.post('/api/pay/:linkId/confirm', publicCors, async (req, res) => {
+  const { payment_intent_id } = req.body
+  try {
+    const txRes = await pool.query(
+      'UPDATE payment_link_transactions SET status=$1 WHERE stripe_payment_intent_id=$2 RETURNING *',
+      ['succeeded', payment_intent_id]
+    )
+    if (txRes.rows.length) {
+      const tx = txRes.rows[0]
+      await pool.query(
+        'UPDATE payment_links SET total_collected_cents = total_collected_cents + $1, transaction_count = transaction_count + 1 WHERE id=$2',
+        [tx.amount_cents, tx.payment_link_id]
+      )
+    }
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── SHOT LISTS ────────────────────────────────────────────────
+
+app.get('/api/clients/:id/shot-list', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query('SELECT * FROM shot_lists WHERE client_id=$1', [req.params.id])
+    if (!result.rows.length) {
+      const newList = await pool.query(
+        'INSERT INTO shot_lists (client_id, user_id) VALUES ($1,$2) RETURNING *',
+        [req.params.id, req.userId]
+      )
+      return res.json(newList.rows[0])
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/clients/:id/shot-list', requireAuth, async (req, res) => {
+  const { shots, photographer_notes } = req.body
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(`
+      INSERT INTO shot_lists (client_id, user_id, shots, photographer_notes)
+      VALUES ($1,$2,$3,$4)
+      ON CONFLICT (client_id) DO UPDATE SET shots=$3, photographer_notes=$4
+      RETURNING *
+    `, [req.params.id, req.userId, JSON.stringify(shots || []), sanitize(photographer_notes) || null])
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/clients/:id/shot-list/confirm', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id, email, name, portal_token FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const client = clientCheck.rows[0]
+    const result = await pool.query(
+      "UPDATE shot_lists SET status='confirmed', confirmed_at=NOW() WHERE client_id=$1 RETURNING *",
+      [req.params.id]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Shot list not found' })
+    if (client.email && resend) {
+      const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client.email,
+        subject: `Your shot list has been confirmed! — ${biz}`,
+        html: emailTemplate({
+          title: 'Shot List Confirmed!',
+          preheader: 'Your shot list has been reviewed and confirmed',
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Shot list confirmed, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your shot list has been reviewed and confirmed. You can view it any time in your portal.</p>`,
+          ctaText: 'View Your Portal →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`,
+          footerNote: `Sent by ${biz}`,
+        }),
+      }).catch(() => {})
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/portals/:token/shot-list', async (req, res) => {
+  try {
+    const clientRes = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const result = await pool.query('SELECT * FROM shot_lists WHERE client_id=$1', [clientRes.rows[0].id])
+    res.json(result.rows[0] || null)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/portals/:token/shot-list', async (req, res) => {
+  const { shots, client_notes } = req.body
+  try {
+    const clientRes = await pool.query(
+      'SELECT c.id, c.name, c.email, c.portal_token, u.id as user_id, u.email as photographer_email, u.full_name as photographer_name, u.business_name FROM clients c JOIN users u ON u.id=c.user_id WHERE c.portal_token=$1',
+      [req.params.token]
+    )
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client = clientRes.rows[0]
+    const result = await pool.query(`
+      INSERT INTO shot_lists (client_id, user_id, shots, client_notes, status, submitted_at)
+      VALUES ($1,$2,$3,$4,'submitted',NOW())
+      ON CONFLICT (client_id) DO UPDATE SET shots=$3, client_notes=$4, status='submitted', submitted_at=NOW()
+      RETURNING *
+    `, [client.id, client.user_id, JSON.stringify(shots || []), sanitize(client_notes) || null])
+    if (client.photographer_email && resend) {
+      const biz = client.business_name || client.photographer_name || 'Your client'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client.photographer_email,
+        subject: `${client.name} submitted their shot list`,
+        html: emailTemplate({
+          title: 'Shot List Submitted',
+          preheader: `${client.name} has submitted their shot list`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${client.name} submitted a shot list</h2><p style="color:#6B5E4A;line-height:1.6;">Log in to review and confirm their shot list.</p>`,
+          ctaText: 'Review Shot List →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/clients`,
+          footerNote: 'Sent by PortalKit',
+        }),
+      }).catch(() => {})
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── VENDORS ───────────────────────────────────────────────────
+
+app.get('/api/clients/:id/vendors', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query('SELECT * FROM vendors WHERE client_id=$1 ORDER BY category, name', [req.params.id])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/clients/:id/vendors', requireAuth, async (req, res) => {
+  const { category, name, contact_name, phone, email, website, notes } = req.body
+  if (!category?.trim() || !name?.trim()) return res.status(400).json({ error: 'category and name are required' })
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(
+      'INSERT INTO vendors (client_id, user_id, category, name, contact_name, phone, email, website, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+      [req.params.id, req.userId, sanitize(category), sanitize(name), sanitize(contact_name) || null, sanitize(phone) || null, email || null, website || null, sanitize(notes) || null]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/clients/:id/vendors/:vendorId', requireAuth, async (req, res) => {
+  const { category, name, contact_name, phone, email, website, notes } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE vendors SET category=$1, name=$2, contact_name=$3, phone=$4, email=$5, website=$6, notes=$7 WHERE id=$8 AND user_id=$9 RETURNING *',
+      [sanitize(category), sanitize(name), sanitize(contact_name) || null, sanitize(phone) || null, email || null, website || null, sanitize(notes) || null, req.params.vendorId, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Vendor not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/clients/:id/vendors/:vendorId', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM vendors WHERE id=$1 AND user_id=$2', [req.params.vendorId, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/portals/:token/vendors', async (req, res) => {
+  try {
+    const clientRes = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const result = await pool.query('SELECT * FROM vendors WHERE client_id=$1 ORDER BY category, name', [clientRes.rows[0].id])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── DAY-OF TIMELINES ──────────────────────────────────────────
+
+app.get('/api/clients/:id/timeline', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query('SELECT * FROM timelines WHERE client_id=$1', [req.params.id])
+    if (!result.rows.length) {
+      const newTl = await pool.query(
+        'INSERT INTO timelines (client_id, user_id) VALUES ($1,$2) RETURNING *',
+        [req.params.id, req.userId]
+      )
+      return res.json(newTl.rows[0])
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/clients/:id/timeline', requireAuth, async (req, res) => {
+  const { title, items } = req.body
+  try {
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(`
+      INSERT INTO timelines (client_id, user_id, title, items)
+      VALUES ($1,$2,$3,$4)
+      ON CONFLICT (client_id) DO UPDATE SET title=$3, items=$4
+      RETURNING *
+    `, [req.params.id, req.userId, sanitize(title) || 'Day-of Timeline', JSON.stringify(items || [])])
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/clients/:id/timeline/send', requireAuth, async (req, res) => {
+  try {
+    const clientCheck = await pool.query('SELECT id, email, name, portal_token FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const client = clientCheck.rows[0]
+    const result = await pool.query(
+      "UPDATE timelines SET status='sent' WHERE client_id=$1 RETURNING *",
+      [req.params.id]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Timeline not found' })
+    if (client.email && resend) {
+      const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client.email,
+        subject: `Your day-of timeline is ready — ${biz}`,
+        html: emailTemplate({
+          title: 'Your Timeline is Ready',
+          preheader: 'Your day-of timeline has been shared',
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your day-of timeline is ready, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your photographer has shared a day-of timeline with you. View it in your portal and approve when you're ready.</p>`,
+          ctaText: 'View Timeline →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`,
+          footerNote: `Sent by ${biz}`,
+        }),
+      }).catch(() => {})
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/portals/:token/timeline', async (req, res) => {
+  try {
+    const clientRes = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const result = await pool.query("SELECT * FROM timelines WHERE client_id=$1 AND status != 'draft'", [clientRes.rows[0].id])
+    res.json(result.rows[0] || null)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/portals/:token/timeline/approve', async (req, res) => {
+  try {
+    const clientRes = await pool.query(
+      'SELECT c.id, c.name, c.portal_token, u.email as photographer_email, u.full_name as photographer_name, u.business_name FROM clients c JOIN users u ON u.id=c.user_id WHERE c.portal_token=$1',
+      [req.params.token]
+    )
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client = clientRes.rows[0]
+    const result = await pool.query(
+      "UPDATE timelines SET status='approved', client_approved_at=NOW() WHERE client_id=$1 RETURNING *",
+      [client.id]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Timeline not found' })
+    if (client.photographer_email && resend) {
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client.photographer_email,
+        subject: `${client.name} approved the day-of timeline`,
+        html: emailTemplate({
+          title: 'Timeline Approved',
+          preheader: `${client.name} approved their timeline`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${client.name} approved the timeline!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client has reviewed and approved the day-of timeline.</p>`,
+          ctaText: 'View in Dashboard →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/clients`,
+          footerNote: 'Sent by PortalKit',
+        }),
+      }).catch(() => {})
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── PACKAGES ──────────────────────────────────────────────────
+
+app.get('/api/packages', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM packages WHERE user_id=$1 AND active=true ORDER BY price_cents ASC', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/packages', requireAuth, async (req, res) => {
+  const { name, description, price_cents, deposit_cents, features } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO packages (user_id, name, description, price_cents, deposit_cents, features) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.userId, sanitize(name), sanitize(description) || null, price_cents || 0, deposit_cents || 0, JSON.stringify(features || [])]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/packages/:id', requireAuth, async (req, res) => {
+  const { name, description, price_cents, deposit_cents, features } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE packages SET name=$1, description=$2, price_cents=$3, deposit_cents=$4, features=$5 WHERE id=$6 AND user_id=$7 RETURNING *',
+      [sanitize(name), sanitize(description) || null, price_cents || 0, deposit_cents || 0, JSON.stringify(features || []), req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Package not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/packages/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE packages SET active=false WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── PROPOSALS ─────────────────────────────────────────────────
+
+app.get('/api/proposals', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, c.name as client_name FROM proposals p
+      LEFT JOIN clients c ON c.id = p.client_id
+      WHERE p.user_id=$1 ORDER BY p.created_at DESC
+    `, [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/proposals', requireAuth, async (req, res) => {
+  const { client_id, title, message, packages, expires_at } = req.body
+  if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO proposals (user_id, client_id, title, message, packages, expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.userId, client_id || null, sanitize(title), sanitize(message) || null, JSON.stringify(packages || []), expires_at || null]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/proposals/:id', requireAuth, async (req, res) => {
+  const { title, message, packages, expires_at } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE proposals SET title=$1, message=$2, packages=$3, expires_at=$4 WHERE id=$5 AND user_id=$6 RETURNING *',
+      [sanitize(title), sanitize(message) || null, JSON.stringify(packages || []), expires_at || null, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/proposals/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM proposals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "UPDATE proposals SET status='sent' WHERE id=$1 AND user_id=$2 RETURNING *",
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    const proposal = result.rows[0]
+    if (proposal.client_id) {
+      const clientRes = await pool.query('SELECT email, name FROM clients WHERE id=$1', [proposal.client_id])
+      const client = clientRes.rows[0]
+      if (client?.email && resend) {
+        const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+        const proposalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/proposal/${proposal.id}`
+        resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: client.email,
+          subject: `${proposal.title} — from ${biz}`,
+          html: emailTemplate({
+            title: 'Your Proposal is Ready',
+            preheader: `${biz} has sent you a proposal`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">${biz} has sent you a proposal. Review the packages and accept when you're ready.</p>`,
+            ctaText: 'View Proposal →',
+            ctaUrl: proposalUrl,
+            footerNote: `Sent by ${biz}`,
+          }),
+        }).catch(() => {})
+      }
+    }
+    res.json(proposal)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/proposals/:id/public', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT p.*, u.full_name as photographer_name, u.business_name as photographer_business,
+              u.logo_url as photographer_logo, u.brand_color as photographer_brand_color,
+              c.name as client_name
+       FROM proposals p
+       JOIN users u ON u.id = p.user_id
+       LEFT JOIN clients c ON c.id = p.client_id
+       WHERE p.id=$1 AND p.status IN ('sent','viewed','accepted')`,
+      [req.params.id]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    await pool.query(
+      'UPDATE proposals SET status=CASE WHEN status=\'sent\' THEN \'viewed\' ELSE status END, viewed_at=COALESCE(viewed_at,NOW()) WHERE id=$1',
+      [req.params.id]
+    )
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/proposals/:id/accept', async (req, res) => {
+  const { selected_package_id } = req.body
+  try {
+    const proposalRes = await pool.query(
+      "SELECT * FROM proposals WHERE id=$1 AND status IN ('sent','viewed')",
+      [req.params.id]
+    )
+    if (!proposalRes.rows.length) return res.status(404).json({ error: 'Proposal not found or already processed' })
+    const proposal = proposalRes.rows[0]
+    await pool.query(
+      "UPDATE proposals SET status='accepted', accepted_at=NOW(), selected_package_id=$1 WHERE id=$2",
+      [selected_package_id || null, proposal.id]
+    )
+    if (proposal.user_id) {
+      const photographerRes = await pool.query('SELECT email, full_name, business_name FROM users WHERE id=$1', [proposal.user_id])
+      const photographer = photographerRes.rows[0]
+      if (photographer?.email && resend) {
+        resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: photographer.email,
+          subject: `Proposal accepted: ${proposal.title}`,
+          html: emailTemplate({
+            title: 'Proposal Accepted!',
+            preheader: 'A client accepted your proposal',
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your proposal was accepted!</h2><p style="color:#6B5E4A;line-height:1.6;">A client has accepted your proposal "<strong>${proposal.title}</strong>".</p>`,
+            ctaText: 'View Proposals →',
+            ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/proposals`,
+            footerNote: 'Sent by PortalKit',
+          }),
+        }).catch(() => {})
+      }
+    }
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
 async function startServer() {

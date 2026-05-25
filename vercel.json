@@ -15,7 +15,10 @@
     {"source": "/dashboard", "destination": "/app.html"},
     {"source": "/dashboard/(.*)", "destination": "/app.html"},
     {"source": "/portal/(.*)", "destination": "/app.html"},
-    {"source": "/book/:username", "destination": "/app.html"}
+    {"source": "/book/:username", "destination": "/app.html"},
+    {"source": "/inquire/:username", "destination": "/app.html"},
+    {"source": "/pay/:linkId", "destination": "/app.html"},
+    {"source": "/proposal/:id", "destination": "/app.html"}
   ],
   "headers": [
     {

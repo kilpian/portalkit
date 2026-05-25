@@ -27,6 +27,10 @@ export interface Client {
   notes: string | null
   portal_token: string
   stage: string
+  gallery_url: string | null
+  secondary_name: string | null
+  secondary_email: string | null
+  secondary_phone: string | null
   created_at: string
   updated_at: string
 }
@@ -110,6 +114,145 @@ export interface WorkflowSettings {
   send_thank_you_on_delivery: boolean
   welcome_message: string | null
   thank_you_message: string | null
+  send_review_request_on_delivery: boolean
+  google_review_url: string | null
+  wedding_wire_url: string | null
+  the_knot_url: string | null
+  facebook_review_url: string | null
+}
+
+export interface LeadForm {
+  id: number
+  user_id: number
+  headline: string
+  subheadline: string | null
+  fields: string[]
+  brand_color: string
+  active: boolean
+  created_at: string
+}
+
+export interface LeadSubmission {
+  id: number
+  user_id: number
+  name: string
+  email: string | null
+  phone: string | null
+  event_type: string | null
+  event_date: string | null
+  message: string | null
+  source: string
+  created_at: string
+}
+
+export interface PaymentLink {
+  id: number
+  user_id: number
+  title: string
+  description: string | null
+  amount_cents: number | null
+  allow_custom_amount: boolean
+  min_amount_cents: number
+  link_type: 'fixed' | 'tip' | 'custom'
+  active: boolean
+  total_collected_cents: number
+  transaction_count: number
+  created_at: string
+}
+
+export interface PaymentLinkTransaction {
+  id: number
+  payment_link_id: number
+  payer_name: string | null
+  payer_email: string | null
+  amount_cents: number
+  stripe_payment_intent_id: string | null
+  status: 'pending' | 'succeeded' | 'failed'
+  created_at: string
+}
+
+export interface ShotItem {
+  id: string
+  category: string
+  description: string
+  priority: 'must_have' | 'if_possible' | 'skip'
+  confirmed: boolean
+}
+
+export interface ShotList {
+  id: number
+  client_id: number
+  user_id: number
+  shots: ShotItem[]
+  client_notes: string | null
+  photographer_notes: string | null
+  status: 'pending' | 'submitted' | 'confirmed'
+  submitted_at: string | null
+  confirmed_at: string | null
+  created_at: string
+}
+
+export interface Vendor {
+  id: number
+  client_id: number
+  user_id: number
+  category: string
+  name: string
+  contact_name: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface TimelineItem {
+  id: string
+  time: string
+  duration_minutes: number
+  title: string
+  location: string | null
+  notes: string | null
+  category: string
+}
+
+export interface Timeline {
+  id: number
+  client_id: number
+  user_id: number
+  title: string
+  items: TimelineItem[]
+  status: 'draft' | 'sent' | 'approved'
+  client_approved_at: string | null
+  created_at: string
+}
+
+export interface Package {
+  id: number
+  user_id: number
+  name: string
+  description: string | null
+  price_cents: number
+  deposit_cents: number
+  features: string[]
+  active: boolean
+  created_at: string
+}
+
+export interface Proposal {
+  id: number
+  user_id: number
+  client_id: number | null
+  client_name?: string | null
+  title: string
+  message: string | null
+  packages: Package[]
+  selected_package_id: number | null
+  status: 'draft' | 'sent' | 'viewed' | 'accepted' | 'expired'
+  expires_at: string | null
+  viewed_at: string | null
+  accepted_at: string | null
+  created_at: string
 }
 
 export interface CreateClientPayload {
@@ -119,6 +262,10 @@ export interface CreateClientPayload {
   event_date?: string
   event_type?: string
   notes?: string
+  gallery_url?: string
+  secondary_name?: string
+  secondary_email?: string
+  secondary_phone?: string
 }
 
 export interface Message {

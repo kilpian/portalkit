@@ -43,8 +43,11 @@ interface PortalFile {
 interface PortalData {
   id: number
   name: string
+  secondary_name: string | null
   event_date: string | null
   event_type: string | null
+  portal_token: string
+  gallery_url: string | null
   photographer_name: string
   photographer_business: string | null
   photographer_logo: string | null
@@ -434,6 +437,207 @@ function PortalQuestionnaires({ token }: { token: string }) {
   )
 }
 
+// ── Shot List ─────────────────────────────────────────────────
+interface ShotItemPortal { id: string; category: string; description: string; priority: string; confirmed: boolean }
+interface ShotListPortal { id: number; shots: ShotItemPortal[]; client_notes: string | null; photographer_notes: string | null; status: string }
+
+function PortalShotList({ token }: { token: string }) {
+  const [shotList, setShotList] = useState<ShotListPortal | null>(null)
+  const [clientNotes, setClientNotes] = useState('')
+  const [customShots, setCustomShots] = useState<ShotItemPortal[]>([])
+  const [newShot, setNewShot] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    axios.get<ShotListPortal>(`${API_URL}/api/portals/${token}/shot-list`)
+      .then(r => { if (r.data) setShotList(r.data) })
+      .catch(() => {})
+  }, [token])
+
+  if (!shotList) return null
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    try {
+      const allShots = [...(shotList.shots || []), ...customShots]
+      await axios.post(`${API_URL}/api/portals/${token}/shot-list`, { shots: allShots, client_notes: clientNotes })
+      setSubmitted(true)
+    } catch {} finally { setSubmitting(false) }
+  }
+
+  const addCustomShot = () => {
+    if (!newShot.trim()) return
+    setCustomShots(prev => [...prev, { id: crypto.randomUUID(), category: 'Custom', description: newShot.trim(), priority: 'must_have', confirmed: false }])
+    setNewShot('')
+  }
+
+  if (shotList.status === 'confirmed') {
+    return (
+      <SectionCard title="Shot List" icon={<span>📷</span>}>
+        <div style={{ background: '#EAF3DE', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#1B4332', margin: 0 }}>✓ Shot list confirmed by your photographer!</p>
+        </div>
+        {shotList.shots.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Object.entries(shotList.shots.reduce<Record<string, ShotItemPortal[]>>((acc, s) => { (acc[s.category] = acc[s.category] || []).push(s); return acc }, {})).map(([cat, shots]) => (
+              <div key={cat}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>{cat}</p>
+                {shots.map(s => <p key={s.id} style={{ fontSize: 13, color: 'var(--text-primary)', padding: '4px 0' }}>• {s.description}</p>)}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    )
+  }
+
+  if (submitted || shotList.status === 'submitted') {
+    return (
+      <SectionCard title="Shot List" icon={<span>📷</span>}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Your shot list has been submitted and is awaiting confirmation from your photographer.</p>
+      </SectionCard>
+    )
+  }
+
+  const grouped = (shotList.shots || []).reduce<Record<string, ShotItemPortal[]>>((acc, s) => {
+    (acc[s.category] = acc[s.category] || []).push(s); return acc
+  }, {})
+
+  return (
+    <SectionCard title="Shot List" icon={<span>📷</span>}>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Review and customize your shot list, then add any special requests.</p>
+      {Object.entries(grouped).map(([cat, shots]) => (
+        <div key={cat} style={{ marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>{cat}</p>
+          {shots.map(s => (
+            <div key={s.id} style={{ display: 'flex', gap: 8, padding: '4px 0', fontSize: 13, color: 'var(--text-primary)', alignItems: 'flex-start' }}>
+              <span>{s.priority === 'must_have' ? '★' : '☆'}</span>
+              <span>{s.description}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+      <div style={{ marginTop: 14, borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Add a special shot request</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <input className="input" placeholder="Describe your shot..." value={newShot} onChange={e => setNewShot(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCustomShot()} style={{ flex: 1 }} />
+          <button onClick={addCustomShot} className="btn btn-ghost btn-sm">Add</button>
+        </div>
+        {customShots.map(s => <p key={s.id} style={{ fontSize: 13, color: 'var(--text-primary)', padding: '3px 0' }}>+ {s.description}</p>)}
+        <div style={{ marginTop: 10 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Any notes for your photographer?</label>
+          <textarea className="input" rows={3} value={clientNotes} onChange={e => setClientNotes(e.target.value)} placeholder="Special requests, family groupings, important moments..." style={{ resize: 'vertical' }} />
+        </div>
+        <button onClick={handleSubmit} disabled={submitting} className="btn btn-primary" style={{ marginTop: 12, width: '100%' }}>
+          {submitting ? 'Submitting…' : 'Submit Shot List'}
+        </button>
+      </div>
+    </SectionCard>
+  )
+}
+
+// ── Vendors ───────────────────────────────────────────────────
+interface VendorPortal { id: number; category: string; name: string; contact_name: string | null; phone: string | null; email: string | null; website: string | null; notes: string | null }
+
+const VENDOR_ICONS: Record<string, string> = { venue: '🏛️', florist: '💐', caterer: '🍽️', dj: '🎧', band: '🎸', officiant: '💍', videographer: '🎬', hair: '💇', makeup: '💄', planner: '📋', transportation: '🚗', cake: '🎂', photo: '📸' }
+
+function PortalVendors({ token }: { token: string }) {
+  const [vendors, setVendors] = useState<VendorPortal[]>([])
+
+  useEffect(() => {
+    axios.get<VendorPortal[]>(`${API_URL}/api/portals/${token}/vendors`)
+      .then(r => setVendors(r.data))
+      .catch(() => {})
+  }, [token])
+
+  if (!vendors.length) return null
+
+  const grouped = vendors.reduce<Record<string, VendorPortal[]>>((acc, v) => {
+    (acc[v.category] = acc[v.category] || []).push(v); return acc
+  }, {})
+
+  return (
+    <SectionCard title="Vendor Contact Sheet" icon={<span>📇</span>}>
+      {Object.entries(grouped).map(([cat, vends]) => (
+        <div key={cat} style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+            {VENDOR_ICONS[cat.toLowerCase()] || '📌'} {cat}
+          </p>
+          {vends.map(v => (
+            <div key={v.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 8, marginBottom: 8 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>{v.name}</p>
+              {v.contact_name && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0' }}>Contact: {v.contact_name}</p>}
+              {v.phone && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0' }}><a href={`tel:${v.phone}`} style={{ color: 'var(--green)' }}>{v.phone}</a></p>}
+              {v.email && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0' }}><a href={`mailto:${v.email}`} style={{ color: 'var(--green)' }}>{v.email}</a></p>}
+              {v.website && <p style={{ fontSize: 13, margin: '2px 0' }}><a href={v.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Website →</a></p>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </SectionCard>
+  )
+}
+
+// ── Timeline ──────────────────────────────────────────────────
+interface TimelineItemPortal { id: string; time: string; duration_minutes: number; title: string; location: string | null; notes: string | null; category: string }
+interface TimelinePortal { id: number; title: string; items: TimelineItemPortal[]; status: string; client_approved_at: string | null }
+
+function PortalTimeline({ token }: { token: string }) {
+  const [timeline, setTimeline] = useState<TimelinePortal | null>(null)
+  const [approving, setApproving] = useState(false)
+  const [approved, setApproved] = useState(false)
+
+  useEffect(() => {
+    axios.get<TimelinePortal>(`${API_URL}/api/portals/${token}/timeline`)
+      .then(r => { if (r.data) setTimeline(r.data) })
+      .catch(() => {})
+  }, [token])
+
+  if (!timeline) return null
+
+  const handleApprove = async () => {
+    setApproving(true)
+    try {
+      await axios.post(`${API_URL}/api/portals/${token}/timeline/approve`)
+      setApproved(true)
+      setTimeline(prev => prev ? { ...prev, status: 'approved' } : prev)
+    } catch {} finally { setApproving(false) }
+  }
+
+  const isApproved = approved || timeline.status === 'approved'
+
+  return (
+    <SectionCard title={timeline.title || 'Day-of Timeline'} icon={<span>🗓️</span>}>
+      {isApproved && (
+        <div style={{ background: '#EAF3DE', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#1B4332', margin: 0 }}>✓ You approved this timeline</p>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {timeline.items.map(item => (
+          <div key={item.id} style={{ display: 'flex', gap: 14, padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ minWidth: 70, textAlign: 'right' }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', margin: 0 }}>{item.time}</p>
+              {item.duration_minutes > 0 && <p style={{ fontSize: 11, color: 'var(--text-dim)', margin: 0 }}>{item.duration_minutes}m</p>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>{item.title}</p>
+              {item.location && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0' }}>📍 {item.location}</p>}
+              {item.notes && <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: '4px 0 0' }}>{item.notes}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {!isApproved && (
+        <button onClick={handleApprove} disabled={approving} className="btn btn-primary" style={{ marginTop: 16, width: '100%' }}>
+          {approving ? 'Approving…' : 'Approve Timeline'}
+        </button>
+      )}
+    </SectionCard>
+  )
+}
+
 // ── ClientPortalContent (exported for preview modal) ──────────
 export function ClientPortalContent({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null>(null)
@@ -580,7 +784,7 @@ export function ClientPortalContent({ token }: { token: string }) {
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '36px 20px 60px' }}>
         <div style={{ marginBottom: 32 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(26px, 5vw, 34px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 6 }}>
-            Welcome, {data.name}!
+            Welcome, {data.name}{data.secondary_name ? ` & ${data.secondary_name}` : ''}!
           </h1>
           {(data.event_type || data.event_date) && (
             <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>
@@ -588,6 +792,22 @@ export function ClientPortalContent({ token }: { token: string }) {
               {data.event_type && data.event_date && <span> · </span>}
               {data.event_date && <span>{formatDate(data.event_date)}</span>}
             </p>
+          )}
+          {data.gallery_url && (
+            <a
+              href={data.gallery_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14,
+                padding: '12px 22px', borderRadius: 10,
+                background: data.photographer_brand_color || '#1B4332',
+                color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: 15,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              }}
+            >
+              📸 View Your Photo Gallery →
+            </a>
           )}
         </div>
 
@@ -777,6 +997,15 @@ export function ClientPortalContent({ token }: { token: string }) {
 
           {/* Questionnaires */}
           <PortalQuestionnaires token={token} />
+
+          {/* Shot List */}
+          <PortalShotList token={token} />
+
+          {/* Vendors */}
+          <PortalVendors token={token} />
+
+          {/* Timeline */}
+          <PortalTimeline token={token} />
 
           {/* Messages */}
           <SectionCard title="Messages" icon={

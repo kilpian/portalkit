@@ -21,6 +21,12 @@ import Setup from './pages/dashboard/Setup'
 import Questionnaires from './pages/dashboard/Questionnaires'
 import Booking from './pages/dashboard/Booking'
 import Workflows from './pages/dashboard/Workflows'
+import LeadForm from './pages/dashboard/LeadForm'
+import PaymentLinks from './pages/dashboard/PaymentLinks'
+import Proposals from './pages/dashboard/Proposals'
+import InquiryPage from './pages/InquiryPage'
+import PaymentLinkPage from './pages/PaymentLinkPage'
+import ProposalPage from './pages/ProposalPage'
 
 export default function App() {
   return (
@@ -33,6 +39,9 @@ export default function App() {
           <Route path="/signup/*" element={<SignUp />} />
           <Route path="/portal/:token" element={<ClientPortal />} />
           <Route path="/book/:username" element={<BookingPage />} />
+          <Route path="/inquire/:username" element={<InquiryPage />} />
+          <Route path="/pay/:linkId" element={<PaymentLinkPage />} />
+          <Route path="/proposal/:id" element={<ProposalPage />} />
 
           {/* Protected dashboard */}
           <Route
@@ -53,6 +62,9 @@ export default function App() {
             <Route path="booking" element={<Booking />} />
             <Route path="files" element={<Files />} />
             <Route path="workflows" element={<Workflows />} />
+            <Route path="leads" element={<LeadForm />} />
+            <Route path="payment-links" element={<PaymentLinks />} />
+            <Route path="proposals" element={<Proposals />} />
             <Route path="messages" element={<Messages />} />
             <Route path="settings" element={<Settings />} />
             <Route path="setup" element={<Setup />} />
