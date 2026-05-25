@@ -85,7 +85,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
@@ -606,6 +606,109 @@ async function initDb() {
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_connect_id TEXT;`).catch(() => {})
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_connect_enabled BOOLEAN DEFAULT FALSE;`).catch(() => {})
 
+      // ── Feature: CRM Pipeline ─────────────────────────────────
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'inquiry';`).catch(() => {})
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE clients ADD CONSTRAINT clients_stage_check
+            CHECK (stage IN ('inquiry','consultation','booked','in_progress','delivered','archived'));
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+      `).catch(() => {})
+
+      // ── Feature: Questionnaires ───────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS questionnaire_templates (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          questions JSONB NOT NULL DEFAULT '[]',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS questionnaire_responses (
+          id SERIAL PRIMARY KEY,
+          template_id INTEGER REFERENCES questionnaire_templates(id) ON DELETE SET NULL,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          questions JSONB NOT NULL DEFAULT '[]',
+          responses JSONB NOT NULL DEFAULT '{}',
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','completed')),
+          sent_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Booking/Scheduling ───────────────────────────
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS booking_username TEXT;`).catch(() => {})
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_booking_username_unique ON users (booking_username) WHERE booking_username IS NOT NULL;`).catch(() => {})
+      await pool.query(`
+        UPDATE users SET booking_username = LOWER(REGEXP_REPLACE(COALESCE(business_name, SPLIT_PART(email, '@', 1)), '[^a-zA-Z0-9]', '', 'g')) || id::text
+        WHERE booking_username IS NULL;
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS session_types (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL DEFAULT 60,
+          price_cents INTEGER DEFAULT 0,
+          description TEXT,
+          active BOOLEAN DEFAULT TRUE,
+          color TEXT DEFAULT '#1B4332'
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS availability_slots (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+          start_time TIME NOT NULL,
+          end_time TIME NOT NULL,
+          active BOOLEAN DEFAULT TRUE
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bookings (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          session_type_id INTEGER REFERENCES session_types(id) ON DELETE SET NULL,
+          booking_date DATE NOT NULL,
+          start_time TIME NOT NULL,
+          end_time TIME NOT NULL,
+          client_name TEXT NOT NULL,
+          client_email TEXT NOT NULL,
+          client_phone TEXT,
+          notes TEXT,
+          status TEXT DEFAULT 'confirmed' CHECK (status IN ('pending','confirmed','cancelled')),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      // ── Feature: Automated Workflows ──────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS workflow_settings (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+          send_welcome_on_client_create BOOLEAN DEFAULT FALSE,
+          send_contract_reminder_3_days BOOLEAN DEFAULT TRUE,
+          send_balance_reminder_7_days BOOLEAN DEFAULT TRUE,
+          send_questionnaire_on_booking BOOLEAN DEFAULT FALSE,
+          send_thank_you_on_delivery BOOLEAN DEFAULT TRUE,
+          welcome_message TEXT,
+          thank_you_message TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -731,6 +834,95 @@ async function sendEventReminders() {
       console.error('📅 Client events reminder error:', err.message)
     }
   }
+
+  // ── Contract unsigned reminder (3 days after sending) ────────
+  try {
+    const unsignedContracts = await pool.query(`
+      SELECT ct.id, ct.client_id, ct.user_id, ct.title,
+             c.email, c.name as client_name, c.portal_token,
+             u.business_name, u.full_name as photographer_name
+      FROM contracts ct
+      JOIN clients c ON ct.client_id = c.id
+      JOIN users u ON ct.user_id = u.id
+      LEFT JOIN workflow_settings ws ON ws.user_id = ct.user_id
+      WHERE ct.status = 'sent'
+        AND ct.created_at < NOW() - INTERVAL '3 days'
+        AND c.email IS NOT NULL
+        AND COALESCE(ws.send_contract_reminder_3_days, TRUE)
+        AND NOT EXISTS (
+          SELECT 1 FROM reminders_sent rs
+          WHERE rs.client_id = c.id AND rs.reminder_type = 'contract_3day_' || ct.id
+        )
+    `)
+    for (const row of unsignedContracts.rows) {
+      try {
+        const biz = row.business_name || row.photographer_name
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${row.portal_token}`
+        if (resend) {
+          await resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            to: row.email,
+            subject: `Reminder: Please sign your contract — ${biz}`,
+            html: emailTemplate({
+              title: 'Please sign your contract',
+              preheader: 'Your contract is waiting for your signature',
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Reminder: Your contract needs your signature</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${row.client_name}, ${biz} sent you a contract titled "<strong>${row.title}</strong>" that still needs your signature. Please review and sign it at your earliest convenience.</p>`,
+              ctaText: 'Sign Your Contract →',
+              ctaUrl: portalLink,
+              footerNote: `Sent by ${biz} via PortalKit`,
+            }),
+          })
+        }
+        await pool.query('INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING', [row.client_id, `contract_3day_${row.id}`])
+        console.log(`📋 Contract reminder sent to ${row.email}`)
+      } catch (e) { console.error('Contract reminder email failed:', e.message) }
+    }
+  } catch (err) { console.error('Contract reminder error:', err.message) }
+
+  // ── Balance due reminder (7 days before event) ────────────────
+  try {
+    const balanceDue = await pool.query(`
+      SELECT inv.id, inv.client_id, inv.amount_cents,
+             c.email, c.name as client_name, c.portal_token, c.event_date,
+             u.business_name, u.full_name as photographer_name
+      FROM invoices inv
+      JOIN clients c ON inv.client_id = c.id
+      JOIN users u ON inv.user_id = u.id
+      LEFT JOIN workflow_settings ws ON ws.user_id = inv.user_id
+      WHERE inv.status = 'sent'
+        AND c.event_date = CURRENT_DATE + 7
+        AND c.email IS NOT NULL
+        AND COALESCE(ws.send_balance_reminder_7_days, TRUE)
+        AND NOT EXISTS (
+          SELECT 1 FROM reminders_sent rs
+          WHERE rs.client_id = c.id AND rs.reminder_type = 'balance_7day_' || inv.id
+        )
+    `)
+    for (const row of balanceDue.rows) {
+      try {
+        const biz = row.business_name || row.photographer_name
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${row.portal_token}`
+        const amount = `$${(row.amount_cents / 100).toFixed(2)}`
+        if (resend) {
+          await resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            to: row.email,
+            subject: `Balance due reminder — ${biz}`,
+            html: emailTemplate({
+              title: 'Your balance is due soon',
+              preheader: 'Your event is 7 days away — please settle your balance',
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your balance is due soon</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${row.client_name}, your event with ${biz} is 7 days away. You have an outstanding balance of <strong>${amount}</strong>. Please visit your portal to pay your invoice before the event.</p>`,
+              ctaText: 'View Your Invoice →',
+              ctaUrl: portalLink,
+              footerNote: `Sent by ${biz} via PortalKit`,
+            }),
+          })
+        }
+        await pool.query('INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING', [row.client_id, `balance_7day_${row.id}`])
+        console.log(`💰 Balance reminder sent to ${row.email}`)
+      } catch (e) { console.error('Balance reminder email failed:', e.message) }
+    }
+  } catch (err) { console.error('Balance reminder error:', err.message) }
 }
 
 // Run on startup and every 24 hours (Railway restarts daily, so this effectively fires once per day)
@@ -775,11 +967,13 @@ async function requireAuth(req, res, next) {
           await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
         }
 
+        const rawUsername = (email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 28) || 'photographer'
+        const bookingUsername = rawUsername + Math.floor(Math.random() * 9000 + 1000)
         const newUser = await pool.query(
-          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, booking_username)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING *`,
-          [payload.sub, email, fullName, plan, trialEndsAt]
+          [payload.sub, email, fullName, plan, trialEndsAt, bookingUsername]
         )
         req.user = newUser.rows[0]
         console.log(`${plan === 'expired' ? '🚫 Repeat trial blocked' : '🆕 New user created'}: ${req.user.id}`)
@@ -850,7 +1044,7 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
          brand_color=COALESCE($5, brand_color),
          onboarding_completed=CASE WHEN $7 THEN $8 ELSE onboarding_completed END
        WHERE id=$6
-       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, stripe_connect_id, stripe_connect_enabled, created_at`,
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, stripe_connect_id, stripe_connect_enabled, booking_username, created_at`,
       [
         full_name ? sanitize(full_name) : null,
         business_name !== undefined ? (sanitize(business_name) || null) : null,
@@ -1165,12 +1359,13 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
 
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   try {
-    const [clients, invoices, user, upcomingMain, upcomingEvents] = await Promise.all([
+    const [clients, invoices, user, upcomingMain, upcomingEvents, stageCounts] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
       pool.query("SELECT COUNT(*) FROM invoices WHERE user_id=$1 AND status != 'paid'", [req.userId]),
       pool.query('SELECT plan, trial_ends_at FROM users WHERE id=$1', [req.userId]),
       pool.query(`SELECT COUNT(*) FROM clients WHERE user_id=$1 AND event_date >= CURRENT_DATE AND event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
       pool.query(`SELECT COUNT(*) FROM client_events ce JOIN clients c ON ce.client_id = c.id WHERE c.user_id=$1 AND ce.event_date >= CURRENT_DATE AND ce.event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
+      pool.query(`SELECT COALESCE(stage,'inquiry') as stage, COUNT(*) FROM clients WHERE user_id=$1 GROUP BY stage`, [req.userId]),
     ])
     const u = user.rows[0]
     let trial_days_remaining = null
@@ -1179,12 +1374,17 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       trial_days_remaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
     }
     const clientCount = parseInt(clients.rows[0].count, 10)
+    const pipeline_counts = { inquiry: 0, consultation: 0, booked: 0, in_progress: 0, delivered: 0, archived: 0 }
+    for (const row of stageCounts.rows) {
+      if (row.stage in pipeline_counts) pipeline_counts[row.stage] = parseInt(row.count, 10)
+    }
     res.json({
       total_clients: clientCount,
       active_portals: clientCount,
       pending_invoices: parseInt(invoices.rows[0].count, 10),
       upcoming_events: parseInt(upcomingMain.rows[0].count, 10) + parseInt(upcomingEvents.rows[0].count, 10),
       trial_days_remaining,
+      pipeline_counts,
     })
   } catch (err) {
     console.error('Dashboard stats error:', err)
@@ -1197,7 +1397,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 app.get('/api/clients', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
       [req.userId]
     )
     res.json(result.rows)
@@ -1211,6 +1411,12 @@ app.post('/api/clients', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
   if (!name) return res.status(400).json({ error: 'Client name is required' })
   try {
+    if (req.user.plan === 'free') {
+      const count = await pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId])
+      if (parseInt(count.rows[0].count, 10) >= 1) {
+        return res.status(402).json({ error: 'Free plan is limited to 1 client. Upgrade to add more.', upgradeRequired: true })
+      }
+    }
     const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
     const result = await pool.query(
       `INSERT INTO clients (user_id, name, email, phone, event_date, event_type, notes, portal_token)
@@ -1218,7 +1424,31 @@ app.post('/api/clients', requireAuth, async (req, res) => {
        RETURNING *`,
       [req.userId, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, portalToken]
     )
-    res.status(201).json(result.rows[0])
+    const client = result.rows[0]
+
+    if (email && resend) {
+      const wsRes = await pool.query('SELECT * FROM workflow_settings WHERE user_id=$1', [req.userId])
+      const ws = wsRes.rows[0]
+      if (ws?.send_welcome_on_client_create) {
+        const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+        resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: email,
+          subject: `Welcome to ${biz}'s client portal`,
+          html: emailTemplate({
+            title: 'Welcome!',
+            preheader: 'Your client portal is ready',
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${sanitize(name)}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You've been added to ${biz}'s client portal.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.welcome_message || 'Looking forward to working with you!'}</p>`,
+            ctaText: 'View Your Portal →',
+            ctaUrl: portalLink,
+            footerNote: `Sent by ${biz}`,
+          }),
+        }).catch(err => console.error('Welcome email failed:', err))
+      }
+    }
+
+    res.status(201).json(client)
   } catch (err) {
     console.error('Create client error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -2309,6 +2539,495 @@ app.post('/api/admin/test-reminders', async (req, res) => {
   } catch (err) {
     console.error('Test reminders error:', err)
     res.status(500).json({ error: String(err) })
+  }
+})
+
+// ── FREE PLAN ─────────────────────────────────────────────────
+
+app.post('/api/users/choose-free-plan', requireAuth, async (req, res) => {
+  try {
+    await pool.query("UPDATE users SET plan='free' WHERE id=$1 AND plan='trial'", [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Choose free plan error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── CRM PIPELINE ──────────────────────────────────────────────
+
+const VALID_STAGES = ['inquiry','consultation','booked','in_progress','delivered','archived']
+
+app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
+  const { stage } = req.body
+  if (!VALID_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage' })
+  try {
+    const result = await pool.query(
+      'UPDATE clients SET stage=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING *',
+      [stage, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const client = result.rows[0]
+
+    if (stage === 'delivered' && client.email && resend) {
+      const wsRes = await pool.query('SELECT * FROM workflow_settings WHERE user_id=$1', [req.userId])
+      const ws = wsRes.rows[0]
+      if (ws?.send_thank_you_on_delivery) {
+        const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+        resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: client.email,
+          subject: `Thank you, ${client.name}! — ${biz}`,
+          html: emailTemplate({
+            title: 'Thank you!',
+            preheader: 'It was a pleasure working with you',
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Thank you, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.thank_you_message || `It was an absolute pleasure working with you. Your photos are ready in your client portal!`}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">If you loved your experience, we'd be so grateful for a referral or review.</p>`,
+            ctaText: 'View Your Portal →',
+            ctaUrl: portalLink,
+            footerNote: `Sent by ${biz}`,
+          }),
+        }).catch(err => console.error('Thank you email failed:', err))
+      }
+    }
+
+    res.json(client)
+  } catch (err) {
+    console.error('Stage update error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── QUESTIONNAIRE TEMPLATES ────────────────────────────────────
+
+app.get('/api/questionnaire-templates', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM questionnaire_templates WHERE user_id=$1 ORDER BY created_at DESC', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/questionnaire-templates', requireAuth, async (req, res) => {
+  const { name, questions } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Template name is required' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO questionnaire_templates (user_id, name, questions) VALUES ($1,$2,$3) RETURNING *',
+      [req.userId, sanitize(name), JSON.stringify(questions || [])]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/questionnaire-templates/:id', requireAuth, async (req, res) => {
+  const { name, questions } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE questionnaire_templates SET name=$1, questions=$2 WHERE id=$3 AND user_id=$4 RETURNING *',
+      [sanitize(name), JSON.stringify(questions || []), req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Template not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/questionnaire-templates/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM questionnaire_templates WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── QUESTIONNAIRE RESPONSES ────────────────────────────────────
+
+app.get('/api/questionnaires', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT qr.*, c.name as client_name, c.email as client_email
+      FROM questionnaire_responses qr
+      LEFT JOIN clients c ON qr.client_id = c.id
+      WHERE qr.user_id=$1
+      ORDER BY qr.created_at DESC
+    `, [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/questionnaires', requireAuth, async (req, res) => {
+  const { template_id, client_id, title } = req.body
+  if (!client_id || !title?.trim()) return res.status(400).json({ error: 'client_id and title are required' })
+  try {
+    let questions = []
+    if (template_id) {
+      const tpl = await pool.query('SELECT questions FROM questionnaire_templates WHERE id=$1 AND user_id=$2', [template_id, req.userId])
+      if (tpl.rows.length) questions = tpl.rows[0].questions
+    }
+    const result = await pool.query(
+      `INSERT INTO questionnaire_responses (template_id, client_id, user_id, title, questions, sent_at)
+       VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING *`,
+      [template_id || null, client_id, req.userId, sanitize(title), JSON.stringify(questions)]
+    )
+    const qr = result.rows[0]
+
+    const clientRes = await pool.query('SELECT email, name, portal_token FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+    const client = clientRes.rows[0]
+    if (client?.email && resend) {
+      const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+      const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client.email,
+        subject: `Please fill out your questionnaire — ${biz}`,
+        html: emailTemplate({
+          title: 'Questionnaire ready for you',
+          preheader: `${biz} sent you a questionnaire to fill out`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${biz} has sent you a questionnaire: <strong>${sanitize(title)}</strong>. It only takes a few minutes to fill out and helps them prepare for your session.</p>`,
+          ctaText: 'Fill Out Questionnaire →',
+          ctaUrl: portalLink,
+          footerNote: `Sent by ${biz} via PortalKit`,
+        }),
+      }).catch(err => console.error('Questionnaire email failed:', err))
+    }
+
+    res.status(201).json(qr)
+  } catch (err) {
+    console.error('Send questionnaire error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/questionnaires/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT qr.*, c.name as client_name FROM questionnaire_responses qr LEFT JOIN clients c ON qr.client_id = c.id WHERE qr.id=$1 AND qr.user_id=$2',
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Questionnaire not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── PORTAL: QUESTIONNAIRES ─────────────────────────────────────
+
+app.get('/api/portals/:token/questionnaires', async (req, res) => {
+  try {
+    const clientRes = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const clientId = clientRes.rows[0].id
+    const result = await pool.query(
+      'SELECT * FROM questionnaire_responses WHERE client_id=$1 AND sent_at IS NOT NULL ORDER BY created_at DESC',
+      [clientId]
+    )
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/portals/:token/questionnaires/:id/respond', async (req, res) => {
+  const { responses } = req.body
+  try {
+    const clientRes = await pool.query('SELECT id FROM clients WHERE portal_token=$1', [req.params.token])
+    if (!clientRes.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const clientId = clientRes.rows[0].id
+
+    const qrRes = await pool.query(
+      "UPDATE questionnaire_responses SET responses=$1, status='completed', completed_at=NOW() WHERE id=$2 AND client_id=$3 RETURNING *, (SELECT u.email FROM users u WHERE u.id = questionnaire_responses.user_id) as photographer_email",
+      [JSON.stringify(responses || {}), req.params.id, clientId]
+    )
+    if (!qrRes.rows.length) return res.status(404).json({ error: 'Questionnaire not found' })
+    const qr = qrRes.rows[0]
+
+    if (qr.photographer_email && resend) {
+      const clientInfo = await pool.query('SELECT name, portal_token FROM clients WHERE id=$1', [clientId])
+      const c = clientInfo.rows[0]
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: qr.photographer_email,
+        subject: `${c?.name || 'Your client'} filled out their questionnaire`,
+        html: emailTemplate({
+          title: 'Questionnaire completed',
+          preheader: 'A client just submitted their questionnaire',
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Questionnaire completed!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${c?.name || 'Your client'}</strong> has filled out their questionnaire: <strong>${qr.title}</strong>.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Log in to view their responses.</p>`,
+          ctaText: 'View Responses →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/questionnaires`,
+          footerNote: 'Sent by PortalKit',
+        }),
+      }).catch(() => {})
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Questionnaire respond error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── WORKFLOW SETTINGS ──────────────────────────────────────────
+
+app.get('/api/workflow-settings', requireAuth, async (req, res) => {
+  try {
+    let result = await pool.query('SELECT * FROM workflow_settings WHERE user_id=$1', [req.userId])
+    if (!result.rows.length) {
+      result = await pool.query('INSERT INTO workflow_settings (user_id) VALUES ($1) RETURNING *', [req.userId])
+    }
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/workflow-settings', requireAuth, async (req, res) => {
+  const { send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message } = req.body
+  try {
+    const result = await pool.query(`
+      INSERT INTO workflow_settings (user_id, send_welcome_on_client_create, send_contract_reminder_3_days, send_balance_reminder_7_days, send_questionnaire_on_booking, send_thank_you_on_delivery, welcome_message, thank_you_message)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      ON CONFLICT (user_id) DO UPDATE SET
+        send_welcome_on_client_create=$2, send_contract_reminder_3_days=$3,
+        send_balance_reminder_7_days=$4, send_questionnaire_on_booking=$5,
+        send_thank_you_on_delivery=$6, welcome_message=$7, thank_you_message=$8
+      RETURNING *
+    `, [req.userId, send_welcome_on_client_create ?? false, send_contract_reminder_3_days ?? true, send_balance_reminder_7_days ?? true, send_questionnaire_on_booking ?? false, send_thank_you_on_delivery ?? true, welcome_message || null, thank_you_message || null])
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Workflow settings error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── SESSION TYPES ──────────────────────────────────────────────
+
+app.get('/api/session-types', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM session_types WHERE user_id=$1 ORDER BY name', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/session-types', requireAuth, async (req, res) => {
+  const { name, duration_minutes, price_cents, description, color } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Session type name is required' })
+  try {
+    const result = await pool.query(
+      'INSERT INTO session_types (user_id, name, duration_minutes, price_cents, description, color) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.userId, sanitize(name), duration_minutes || 60, price_cents || 0, sanitize(description) || null, color || '#1B4332']
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/session-types/:id', requireAuth, async (req, res) => {
+  const { name, duration_minutes, price_cents, description, color, active } = req.body
+  try {
+    const result = await pool.query(
+      'UPDATE session_types SET name=$1, duration_minutes=$2, price_cents=$3, description=$4, color=$5, active=$6 WHERE id=$7 AND user_id=$8 RETURNING *',
+      [sanitize(name), duration_minutes || 60, price_cents || 0, sanitize(description) || null, color || '#1B4332', active !== false, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Session type not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.delete('/api/session-types/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE session_types SET active=FALSE WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── AVAILABILITY ──────────────────────────────────────────────
+
+app.get('/api/availability', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM availability_slots WHERE user_id=$1 ORDER BY day_of_week', [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.put('/api/availability', requireAuth, async (req, res) => {
+  const { slots } = req.body
+  if (!Array.isArray(slots)) return res.status(400).json({ error: 'slots array required' })
+  try {
+    await pool.query('DELETE FROM availability_slots WHERE user_id=$1', [req.userId])
+    for (const slot of slots) {
+      if (slot.active && slot.start_time && slot.end_time) {
+        await pool.query(
+          'INSERT INTO availability_slots (user_id, day_of_week, start_time, end_time, active) VALUES ($1,$2,$3,$4,$5)',
+          [req.userId, slot.day_of_week, slot.start_time, slot.end_time, true]
+        )
+      }
+    }
+    const result = await pool.query('SELECT * FROM availability_slots WHERE user_id=$1 ORDER BY day_of_week', [req.userId])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Availability save error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── BOOKINGS ─────────────────────────────────────────────────
+
+app.get('/api/bookings', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT b.*, st.name as session_type_name, st.color as session_color
+      FROM bookings b
+      LEFT JOIN session_types st ON b.session_type_id = st.id
+      WHERE b.user_id=$1
+      ORDER BY b.booking_date DESC, b.start_time DESC
+    `, [req.userId])
+    res.json(result.rows)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.patch('/api/bookings/:id/status', requireAuth, async (req, res) => {
+  const { status } = req.body
+  if (!['pending','confirmed','cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid status' })
+  try {
+    const result = await pool.query(
+      'UPDATE bookings SET status=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      [status, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Booking not found' })
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── PUBLIC BOOKING ROUTES ─────────────────────────────────────
+
+app.get('/api/book/:username', async (req, res) => {
+  try {
+    const userRes = await pool.query('SELECT id, full_name, business_name, logo_url, brand_color FROM users WHERE booking_username=$1', [req.params.username])
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Photographer not found' })
+    const photographer = userRes.rows[0]
+    const sessionTypes = await pool.query('SELECT id, name, duration_minutes, price_cents, description, color FROM session_types WHERE user_id=$1 AND active=TRUE ORDER BY name', [photographer.id])
+    res.json({ photographer, session_types: sessionTypes.rows })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.get('/api/book/:username/availability', async (req, res) => {
+  const { date, session_type_id } = req.query
+  if (!date) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' })
+  try {
+    const userRes = await pool.query('SELECT id FROM users WHERE booking_username=$1', [req.params.username])
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Photographer not found' })
+    const userId = userRes.rows[0].id
+
+    const dateObj = new Date(date + 'T00:00:00')
+    const dayOfWeek = dateObj.getDay()
+
+    const slotRes = await pool.query('SELECT * FROM availability_slots WHERE user_id=$1 AND day_of_week=$2 AND active=TRUE', [userId, dayOfWeek])
+    if (!slotRes.rows.length) return res.json({ available: false, slots: [] })
+    const avail = slotRes.rows[0]
+
+    let durationMins = 60
+    if (session_type_id) {
+      const stRes = await pool.query('SELECT duration_minutes FROM session_types WHERE id=$1 AND user_id=$2', [session_type_id, userId])
+      if (stRes.rows.length) durationMins = stRes.rows[0].duration_minutes
+    }
+
+    const existingBookings = await pool.query(
+      "SELECT start_time, end_time FROM bookings WHERE user_id=$1 AND booking_date=$2 AND status != 'cancelled'",
+      [userId, date]
+    )
+
+    const [startH, startM] = avail.start_time.split(':').map(Number)
+    const [endH, endM] = avail.end_time.split(':').map(Number)
+    const startMins = startH * 60 + startM
+    const endMins = endH * 60 + endM
+
+    const slots = []
+    for (let m = startMins; m + durationMins <= endMins; m += durationMins) {
+      const slotEnd = m + durationMins
+      const hh = String(Math.floor(m / 60)).padStart(2, '0')
+      const mm = String(m % 60).padStart(2, '0')
+      const slotStr = `${hh}:${mm}`
+      const slotEndStr = `${String(Math.floor(slotEnd / 60)).padStart(2,'0')}:${String(slotEnd % 60).padStart(2,'0')}`
+
+      const conflict = existingBookings.rows.some(b => {
+        const bStart = b.start_time.slice(0, 5)
+        const bEnd = b.end_time.slice(0, 5)
+        return slotStr < bEnd && slotEndStr > bStart
+      })
+      if (!conflict) slots.push(slotStr)
+    }
+    res.json({ available: true, slots })
+  } catch (err) {
+    console.error('Availability error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/book/:username/book', async (req, res) => {
+  const { session_type_id, date, start_time, client_name, client_email, client_phone, notes } = req.body
+  if (!date || !start_time || !client_name || !client_email) {
+    return res.status(400).json({ error: 'date, start_time, client_name, and client_email are required' })
+  }
+  try {
+    const userRes = await pool.query('SELECT id, full_name, business_name, email FROM users WHERE booking_username=$1', [req.params.username])
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Photographer not found' })
+    const photographer = userRes.rows[0]
+
+    let durationMins = 60
+    let sessionTypeName = 'Photography Session'
+    if (session_type_id) {
+      const stRes = await pool.query('SELECT duration_minutes, name FROM session_types WHERE id=$1 AND user_id=$2', [session_type_id, photographer.id])
+      if (stRes.rows.length) { durationMins = stRes.rows[0].duration_minutes; sessionTypeName = stRes.rows[0].name }
+    }
+
+    const [startH, startM] = start_time.split(':').map(Number)
+    const endMins = startH * 60 + startM + durationMins
+    const end_time = `${String(Math.floor(endMins / 60)).padStart(2,'0')}:${String(endMins % 60).padStart(2,'0')}`
+
+    const existingCheck = await pool.query(
+      "SELECT id FROM bookings WHERE user_id=$1 AND booking_date=$2 AND start_time=$3 AND status != 'cancelled'",
+      [photographer.id, date, start_time]
+    )
+    if (existingCheck.rows.length) return res.status(409).json({ error: 'This time slot is no longer available' })
+
+    const clientRes = await pool.query('SELECT id FROM clients WHERE user_id=$1 AND email=$2', [photographer.id, client_email])
+    const clientId = clientRes.rows[0]?.id || null
+
+    const booking = await pool.query(
+      `INSERT INTO bookings (user_id, client_id, session_type_id, booking_date, start_time, end_time, client_name, client_email, client_phone, notes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmed') RETURNING *`,
+      [photographer.id, clientId, session_type_id || null, date, start_time, end_time, sanitize(client_name), client_email, sanitize(client_phone) || null, sanitize(notes) || null]
+    )
+
+    const biz = photographer.business_name || photographer.full_name || 'Your photographer'
+    const dateDisplay = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+
+    if (resend) {
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: client_email,
+        subject: `Booking confirmed — ${sessionTypeName} with ${biz}`,
+        html: emailTemplate({
+          title: 'Booking Confirmed',
+          preheader: `Your session with ${biz} is confirmed`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your booking is confirmed! 🎉</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${sanitize(client_name)}, your <strong>${sessionTypeName}</strong> with ${biz} has been confirmed.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>Time:</strong> ${start_time}</p>`,
+          ctaText: null,
+          ctaUrl: null,
+          footerNote: `Booking confirmed by ${biz} via PortalKit`,
+        }),
+      }).catch(() => {})
+
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: photographer.email,
+        subject: `New booking: ${sanitize(client_name)} — ${sessionTypeName}`,
+        html: emailTemplate({
+          title: 'New Booking',
+          preheader: `${sanitize(client_name)} just booked a session`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New booking received!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Client:</strong> ${sanitize(client_name)} (${client_email})</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Session:</strong> ${sessionTypeName}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Time:</strong> ${start_time} – ${end_time}</p>${notes ? `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Notes:</strong> ${sanitize(notes)}</p>` : ''}`,
+          ctaText: 'View Bookings →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/booking`,
+          footerNote: 'Sent by PortalKit',
+        }),
+      }).catch(() => {})
+    }
+
+    res.status(201).json({ booking_id: booking.rows[0].id, date, start_time, end_time, session_type_name: sessionTypeName })
+  } catch (err) {
+    console.error('Booking error:', err)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 

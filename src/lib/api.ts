@@ -13,6 +13,7 @@ export interface DashboardStats {
   pending_invoices: number
   upcoming_events: number
   trial_days_remaining: number | null
+  pipeline_counts?: { inquiry: number; consultation: number; booked: number; in_progress: number; delivered: number; archived: number }
 }
 
 export interface Client {
@@ -25,8 +26,90 @@ export interface Client {
   event_type: string | null
   notes: string | null
   portal_token: string
+  stage: string
   created_at: string
   updated_at: string
+}
+
+export interface QuestionnaireTemplate {
+  id: number
+  user_id: number
+  name: string
+  questions: QuestionDef[]
+  created_at: string
+}
+
+export interface QuestionDef {
+  id: string
+  type: 'text' | 'textarea' | 'select' | 'radio' | 'date'
+  label: string
+  required: boolean
+  options?: string[]
+}
+
+export interface QuestionnaireResponse {
+  id: number
+  template_id: number | null
+  client_id: number
+  user_id: number
+  title: string
+  questions: QuestionDef[]
+  responses: Record<string, string>
+  status: 'pending' | 'completed'
+  sent_at: string | null
+  completed_at: string | null
+  created_at: string
+  client_name?: string
+  client_email?: string
+}
+
+export interface SessionType {
+  id: number
+  user_id: number
+  name: string
+  duration_minutes: number
+  price_cents: number
+  description: string | null
+  active: boolean
+  color: string
+}
+
+export interface AvailabilitySlot {
+  id?: number
+  day_of_week: number
+  start_time: string
+  end_time: string
+  active: boolean
+}
+
+export interface Booking {
+  id: number
+  user_id: number
+  client_id: number | null
+  session_type_id: number | null
+  booking_date: string
+  start_time: string
+  end_time: string
+  client_name: string
+  client_email: string
+  client_phone: string | null
+  notes: string | null
+  status: 'pending' | 'confirmed' | 'cancelled'
+  session_type_name?: string
+  session_color?: string
+  created_at: string
+}
+
+export interface WorkflowSettings {
+  id: number
+  user_id: number
+  send_welcome_on_client_create: boolean
+  send_contract_reminder_3_days: boolean
+  send_balance_reminder_7_days: boolean
+  send_questionnaire_on_booking: boolean
+  send_thank_you_on_delivery: boolean
+  welcome_message: string | null
+  thank_you_message: string | null
 }
 
 export interface CreateClientPayload {
@@ -122,6 +205,7 @@ export interface PortalUser {
   onboarding_completed?: boolean
   stripe_connect_id?: string | null
   stripe_connect_enabled?: boolean
+  booking_username?: string | null
   created_at: string
 }
 

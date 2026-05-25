@@ -1,7 +1,93 @@
 import { useEffect, useState, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useApi, usePolling, type Client, type CreateClientPayload } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
+
+const STAGES = [
+  { key: 'inquiry',      label: 'Inquiry',      color: '#6B7280' },
+  { key: 'consultation', label: 'Consultation', color: '#D97706' },
+  { key: 'booked',       label: 'Booked',       color: '#2563EB' },
+  { key: 'in_progress',  label: 'In Progress',  color: '#7C3AED' },
+  { key: 'delivered',    label: 'Delivered',    color: '#059669' },
+  { key: 'archived',     label: 'Archived',     color: '#9CA3AF' },
+]
+
+function StageBadge({ stage }: { stage: string }) {
+  const s = STAGES.find(x => x.key === stage) || STAGES[0]
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: s.color + '18', color: s.color, border: `1px solid ${s.color}40`, whiteSpace: 'nowrap' }}>
+      {s.label}
+    </span>
+  )
+}
+
+function PipelineBoard({ clients, onCardClick, onDrop }: {
+  clients: Client[]
+  onCardClick: (c: Client) => void
+  onDrop: (clientId: number, stage: string) => void
+}) {
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const dragging = useRef<number | null>(null)
+
+  return (
+    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16 }}>
+      {STAGES.map(stage => {
+        const stageClients = clients.filter(c => (c.stage || 'inquiry') === stage.key)
+        return (
+          <div
+            key={stage.key}
+            onDragOver={e => { e.preventDefault(); setDragOver(stage.key) }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={e => {
+              e.preventDefault()
+              setDragOver(null)
+              if (dragging.current !== null) onDrop(dragging.current, stage.key)
+              dragging.current = null
+            }}
+            style={{
+              minWidth: 200, flex: '0 0 200px',
+              background: dragOver === stage.key ? '#f0f9ff' : 'var(--bg-secondary)',
+              borderRadius: 10,
+              border: `1px solid ${dragOver === stage.key ? stage.color : 'var(--border)'}`,
+              borderTop: `3px solid ${stage.color}`,
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: stage.color }}>{stage.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, minWidth: 20, height: 20, borderRadius: 10, background: stage.color + '20', color: stage.color, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{stageClients.length}</span>
+            </div>
+            <div style={{ flex: 1, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 60 }}>
+              {stageClients.length === 0 && (
+                <div style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: '12px 8px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 11 }}>
+                  No clients
+                </div>
+              )}
+              {stageClients.map(c => (
+                <div
+                  key={c.id}
+                  draggable
+                  onDragStart={() => { dragging.current = c.id }}
+                  onDragEnd={() => { dragging.current = null }}
+                  onClick={() => onCardClick(c)}
+                  style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', cursor: 'grab', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', userSelect: 'none' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)'}
+                >
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>{c.name}</p>
+                  {c.event_type && <p style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>{c.event_type}</p>}
+                  {c.event_date && <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{formatEventDate(c.event_date)}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 interface ClientEvent {
   id: number
@@ -54,8 +140,11 @@ const PANEL_W = 400
 export default function Clients() {
   const { authFetch } = useApi()
   const { user } = usePortalAuth()
+  const location = useLocation()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'list' | 'pipeline'>(() => location.pathname === '/dashboard/pipeline' ? 'pipeline' : 'list')
+  const [stageFilter, setStageFilter] = useState<string>('all')
 
   // Which client is selected for Info or Preview
   const [infoClient, setInfoClient] = useState<Client | null>(null)
@@ -235,6 +324,15 @@ export default function Clients() {
     setSendModal(client)
   }
 
+  const updateStage = async (clientId: number, stage: string) => {
+    setClients(prev => prev.map(c => c.id === clientId ? { ...c, stage } : c))
+    try {
+      await authFetch(`/api/clients/${clientId}/stage`, { method: 'patch', data: { stage } })
+    } catch {
+      fetchClients()
+    }
+  }
+
   const copyLink = (client: Client) => {
     const url = `${window.location.origin}/portal/${client.portal_token}`
     navigator.clipboard.writeText(url).then(() => {
@@ -266,10 +364,26 @@ export default function Clients() {
               {clients.length} client{clients.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button onClick={openNewClientPanel} className="btn btn-primary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Client
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* View toggle */}
+            <div style={{ display: 'flex', background: 'var(--bg-secondary)', borderRadius: 8, padding: 3, border: '1px solid var(--border)', gap: 2 }}>
+              {(['list', 'pipeline'] as const).map(v => (
+                <button key={v} onClick={() => setView(v)} style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', background: view === v ? '#fff' : 'transparent', color: view === v ? 'var(--text-primary)' : 'var(--text-dim)', boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.12s' }}>
+                  {v === 'list' ? 'List' : 'Pipeline'}
+                </button>
+              ))}
+            </div>
+            {view === 'list' && (
+              <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="input" style={{ fontSize: 12, padding: '6px 10px', height: 'auto' }}>
+                <option value="all">All Stages</option>
+                {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            )}
+            <button onClick={openNewClientPanel} className="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Client
+            </button>
+          </div>
         </div>
 
         {/* List */}
@@ -292,9 +406,11 @@ export default function Clients() {
             <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 24 }}>Add a client to generate their personal portal link.</p>
             <button onClick={openNewClientPanel} className="btn btn-primary">Add Your First Client</button>
           </div>
+        ) : view === 'pipeline' ? (
+          <PipelineBoard clients={clients} onCardClick={openInfoPanel} onDrop={updateStage} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {clients.map(c => {
+            {clients.filter(c => stageFilter === 'all' || (c.stage || 'inquiry') === stageFilter).map(c => {
               const days = daysUntil(c.event_date)
               const isInfoOpen = infoClient && 'id' in infoClient && infoClient.id === c.id
               const isPreviewOpen = previewClient?.id === c.id
@@ -330,6 +446,8 @@ export default function Clients() {
                       {[c.event_type, formatEventDate(c.event_date)].filter(Boolean).join(' · ') || c.email || 'No event details'}
                     </p>
                   </div>
+
+                  <StageBadge stage={c.stage || 'inquiry'} />
 
                   {/* Days badge */}
                   {days !== null && (

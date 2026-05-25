@@ -160,6 +160,21 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     onComplete()
   }
 
+  const handleFreePlan = async () => {
+    setSaving(true)
+    try {
+      const res = await authFetch('/api/users/choose-free-plan', { method: 'post' })
+      setUser(res.data)
+      posthog.capture('onboarding_chose_free_plan')
+      onComplete()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setStripeError(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   })
@@ -296,12 +311,21 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 8, textAlign: 'center' }}>{stripeError}</p>
               )}
 
-              <button
-                onClick={() => { setStep(1); setStripeError('') }}
-                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', marginTop: 14, width: '100%' }}
-              >
-                ← Back
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                <button
+                  onClick={() => { setStep(1); setStripeError('') }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer' }}
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleFreePlan}
+                  disabled={saving}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  {saving ? 'Setting up…' : 'Use free plan (1 client)'}
+                </button>
+              </div>
             </>
           )}
 

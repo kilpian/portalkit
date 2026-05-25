@@ -285,6 +285,155 @@ function InvoicePayment({ invoiceId, token, amount, onPaid }: {
   )
 }
 
+// ── Questionnaires ────────────────────────────────────────────
+interface PortalQuestionnaire {
+  id: number
+  title: string
+  questions: { id: string; type: string; label: string; required: boolean; options?: string[] }[]
+  responses: Record<string, string>
+  status: 'pending' | 'completed'
+  completed_at: string | null
+}
+
+function PortalQuestionnaires({ token }: { token: string }) {
+  const [questionnaires, setQuestionnaires] = useState<PortalQuestionnaire[]>([])
+  const [answers, setAnswers] = useState<Record<number, Record<string, string>>>({})
+  const [submitting, setSubmitting] = useState<number | null>(null)
+  const [submitted, setSubmitted] = useState<Record<number, boolean>>({})
+
+  useEffect(() => {
+    axios.get(`${API_URL}/api/portals/${token}/questionnaires`)
+      .then(r => setQuestionnaires(r.data))
+      .catch(() => {})
+  }, [token])
+
+  if (questionnaires.length === 0) return null
+
+  const handleSubmit = async (q: PortalQuestionnaire) => {
+    const qAnswers = answers[q.id] || {}
+    const missing = q.questions.filter(qu => qu.required && !qAnswers[qu.id])
+    if (missing.length > 0) { alert(`Please answer: ${missing.map(m => m.label).join(', ')}`) ; return }
+    setSubmitting(q.id)
+    try {
+      await axios.post(`${API_URL}/api/portals/${token}/questionnaires/${q.id}/respond`, { responses: qAnswers })
+      setSubmitted(prev => ({ ...prev, [q.id]: true }))
+      setQuestionnaires(prev => prev.map(item => item.id === q.id ? { ...item, status: 'completed', responses: qAnswers } : item))
+      posthog.capture('client_completed_questionnaire')
+    } catch {} finally {
+      setSubmitting(null)
+    }
+  }
+
+  return (
+    <SectionCard title="Questionnaires" icon={
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    }>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {questionnaires.map(q => {
+          const isComplete = q.status === 'completed' || submitted[q.id]
+          const qAnswers = answers[q.id] || {}
+          return (
+            <div key={q.id} style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{q.title}</p>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99,
+                  background: isComplete ? 'var(--color-green-bg)' : 'var(--color-yellow-bg)',
+                  color: isComplete ? 'var(--color-green)' : 'var(--color-yellow)',
+                  border: `1px solid ${isComplete ? 'var(--color-green-border)' : 'var(--color-yellow-border)'}`,
+                }}>
+                  {isComplete ? '✓ Completed' : 'Pending'}
+                </span>
+              </div>
+
+              {isComplete ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {q.questions.map(qu => (
+                    <div key={qu.id}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 2px' }}>{qu.label}</p>
+                      <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{q.responses[qu.id] || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {q.questions.map(qu => (
+                    <div key={qu.id}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: 6 }}>
+                        {qu.label}{qu.required && <span style={{ color: 'var(--color-red)', marginLeft: 2 }}>*</span>}
+                      </label>
+                      {qu.type === 'textarea' ? (
+                        <textarea
+                          className="input"
+                          rows={3}
+                          style={{ resize: 'vertical', fontSize: 14 }}
+                          value={qAnswers[qu.id] || ''}
+                          onChange={e => setAnswers(prev => ({ ...prev, [q.id]: { ...prev[q.id], [qu.id]: e.target.value } }))}
+                        />
+                      ) : qu.type === 'select' ? (
+                        <select
+                          className="input"
+                          value={qAnswers[qu.id] || ''}
+                          onChange={e => setAnswers(prev => ({ ...prev, [q.id]: { ...prev[q.id], [qu.id]: e.target.value } }))}
+                          style={{ fontSize: 14 }}
+                        >
+                          <option value="">Select...</option>
+                          {(qu.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : qu.type === 'radio' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {(qu.options || []).map(opt => (
+                            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+                              <input
+                                type="radio"
+                                name={`q${q.id}_${qu.id}`}
+                                value={opt}
+                                checked={qAnswers[qu.id] === opt}
+                                onChange={() => setAnswers(prev => ({ ...prev, [q.id]: { ...prev[q.id], [qu.id]: opt } }))}
+                              />
+                              {opt}
+                            </label>
+                          ))}
+                        </div>
+                      ) : qu.type === 'date' ? (
+                        <input
+                          type="date"
+                          className="input"
+                          value={qAnswers[qu.id] || ''}
+                          onChange={e => setAnswers(prev => ({ ...prev, [q.id]: { ...prev[q.id], [qu.id]: e.target.value } }))}
+                          style={{ fontSize: 14 }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          className="input"
+                          value={qAnswers[qu.id] || ''}
+                          onChange={e => setAnswers(prev => ({ ...prev, [q.id]: { ...prev[q.id], [qu.id]: e.target.value } }))}
+                          style={{ fontSize: 14 }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => handleSubmit(q)}
+                    disabled={submitting === q.id}
+                    className="btn btn-primary"
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    {submitting === q.id ? 'Submitting…' : 'Submit Questionnaire'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </SectionCard>
+  )
+}
+
 // ── ClientPortalContent (exported for preview modal) ──────────
 export function ClientPortalContent({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null>(null)
@@ -625,6 +774,9 @@ export function ClientPortalContent({ token }: { token: string }) {
                 })()
             }
           </SectionCard>
+
+          {/* Questionnaires */}
+          <PortalQuestionnaires token={token} />
 
           {/* Messages */}
           <SectionCard title="Messages" icon={

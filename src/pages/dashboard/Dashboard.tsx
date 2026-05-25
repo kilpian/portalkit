@@ -215,6 +215,15 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {user?.plan === 'free' && (
+        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>You're on the free plan (1 client). Upgrade to $39/mo for unlimited clients.</p>
+          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--gold-border)', background: 'var(--gold)', color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {upgrading ? 'Loading…' : 'Upgrade Now →'}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
           {[0,1,2,3].map(i => (
@@ -225,12 +234,36 @@ export default function Dashboard() {
           ))}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-          <StatCard label="Total Clients" value={stats?.total_clients ?? 0} to="/dashboard/clients" />
-          <StatCard label="Active Portals" value={stats?.active_portals ?? 0} to="/dashboard/clients" />
-          <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} to="/dashboard/invoices" />
-          <StatCard label="Upcoming Events" value={stats?.upcoming_events ?? 0} to="/dashboard/clients" />
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
+            <StatCard label="Total Clients" value={stats?.total_clients ?? 0} to="/dashboard/clients" />
+            <StatCard label="Active Portals" value={stats?.active_portals ?? 0} to="/dashboard/clients" />
+            <StatCard label="Pending Invoices" value={stats?.pending_invoices ?? 0} to="/dashboard/invoices" />
+            <StatCard label="Upcoming Events" value={stats?.upcoming_events ?? 0} to="/dashboard/clients" />
+          </div>
+          {stats?.pipeline_counts && stats.total_clients > 0 && (
+            <div className="card" style={{ padding: '12px 20px', marginBottom: 32, display: 'flex', gap: 0, flexWrap: 'wrap', overflow: 'hidden' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 16, display: 'flex', alignItems: 'center' }}>Pipeline</span>
+              {[
+                { key: 'inquiry', label: 'Inquiry', color: '#6B7280' },
+                { key: 'consultation', label: 'Consultation', color: '#D97706' },
+                { key: 'booked', label: 'Booked', color: '#2563EB' },
+                { key: 'in_progress', label: 'In Progress', color: '#7C3AED' },
+                { key: 'delivered', label: 'Delivered', color: '#059669' },
+                { key: 'archived', label: 'Archived', color: '#9CA3AF' },
+              ].map((s, i, arr) => (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                  <Link to="/dashboard/pipeline" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', textDecoration: 'none' }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: s.color }}>{stats.pipeline_counts![s.key as keyof typeof stats.pipeline_counts]}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{s.label}</span>
+                  </Link>
+                  {i < arr.length - 1 && <span style={{ color: 'var(--border)', fontSize: 16 }}>·</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {!stats?.pipeline_counts && <div style={{ marginBottom: 32 }} />}
+        </>
       )}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

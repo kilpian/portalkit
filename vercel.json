@@ -14,7 +14,8 @@
     {"source": "/signup/sso-callback", "destination": "/app.html"},
     {"source": "/dashboard", "destination": "/app.html"},
     {"source": "/dashboard/(.*)", "destination": "/app.html"},
-    {"source": "/portal/(.*)", "destination": "/app.html"}
+    {"source": "/portal/(.*)", "destination": "/app.html"},
+    {"source": "/book/:username", "destination": "/app.html"}
   ],
   "headers": [
     {

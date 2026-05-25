@@ -38,6 +38,17 @@ const NAV = [
     ),
   },
   {
+    to: '/dashboard/pipeline',
+    label: 'Pipeline',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="5" height="18" rx="1"/>
+        <rect x="10" y="3" width="5" height="13" rx="1"/>
+        <rect x="17" y="3" width="5" height="9" rx="1"/>
+      </svg>
+    ),
+  },
+  {
     to: '/dashboard/contracts',
     label: 'Contracts',
     icon: (
@@ -45,6 +56,15 @@ const NAV = [
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
         <polyline points="14 2 14 8 20 8"/>
         <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/dashboard/questionnaires',
+    label: 'Questionnaires',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
       </svg>
     ),
   },
@@ -59,11 +79,30 @@ const NAV = [
     ),
   },
   {
+    to: '/dashboard/booking',
+    label: 'Booking',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+  {
     to: '/dashboard/files',
     label: 'Files',
     icon: (
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/dashboard/workflows',
+    label: 'Workflows',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
     ),
   },
