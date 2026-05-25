@@ -2608,6 +2608,46 @@ app.post('/api/ai/generate-contract', requireAuth, aiLimiter, async (req, res) =
   }
 })
 
+app.post('/api/ai/generate-proposal', requireAuth, aiLimiter, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' })
+  const now = Date.now()
+  const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
+  if (timestamps.length >= 10) return res.status(429).json({ error: 'Rate limit: 10 AI requests per hour' })
+  const allowed = await checkAndIncrementAiCalls(req.userId)
+  if (!allowed) return res.status(429).json({ error: 'Daily AI limit reached (20/day)' })
+  aiRateLimit.set(req.userId, [...timestamps, now])
+  const { client_id, notes: rawNotes } = req.body
+  const notes = rawNotes ? sanitizePrompt(String(rawNotes)) : ''
+  try {
+    const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
+    const photographer = userResult.rows[0]
+    const businessName = photographer?.business_name || photographer?.full_name || 'the photographer'
+    let clientContext = 'a photography client'
+    if (client_id) {
+      const r = await pool.query('SELECT name, event_type, event_date, notes FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+      if (r.rows.length) {
+        const c = r.rows[0]
+        clientContext = `Client: ${c.name}. Event: ${c.event_type || 'photography session'}. Date: ${c.event_date ? new Date(c.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD'}.`
+      }
+    }
+    const userPrompt = `Generate 3 wedding photography packages (Silver, Gold, Platinum) for ${businessName}. Client: ${clientContext}. ${notes ? 'Extra context: ' + notes : ''} Return ONLY valid JSON with this exact shape: {"packages":[{"name":"Silver","description":"...","price_cents":0,"deposit_cents":0,"features":["..."]},...],"message":"..."} where message is a warm 2-sentence proposal intro.`
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      system: 'You are a pricing expert for professional wedding photographers. Return only valid JSON, no markdown, no code fences.',
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+    const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return res.status(500).json({ error: 'AI returned invalid response' })
+    const parsed = JSON.parse(jsonMatch[0])
+    res.json(parsed)
+  } catch (err) {
+    console.error('AI proposal error:', err.message)
+    res.status(500).json({ error: 'AI generation failed' })
+  }
+})
+
 // ── CONTRACT TEMPLATES ────────────────────────────────────────
 
 app.get('/api/contract-templates', requireAuth, async (req, res) => {

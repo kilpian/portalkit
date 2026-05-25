@@ -15,12 +15,12 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PortalKit — Client Portal for Wedding Photographers</title>
+  <title>PortalKit — Client Portal for Wedding Photographers | Free Plan Available</title>
 
   <!-- Primary Meta Tags -->
-  <meta name="title" content="PortalKit — Client Portal for Wedding Photographers">
-  <meta name="description" content="Give every wedding client their own private portal. Send contracts, invoices, and photos in one link. 14-day free trial.">
-  <meta name="keywords" content="wedding photographer client portal, photography contract software, photographer invoice tool, client gallery sharing">
+  <meta name="title" content="PortalKit — Client Portal for Wedding Photographers | Free Plan Available">
+  <meta name="description" content="Contracts, invoices, shot lists, timelines, booking, payment links, questionnaires, and file delivery — all in one client portal built for wedding photographers. Free plan available, no card required.">
+  <meta name="keywords" content="wedding photographer client portal, photography contract software, photographer invoice tool, shot list builder, wedding timeline app, photographer booking software, client gallery sharing, free photographer software">
   <meta name="robots" content="index, follow">
   <meta name="language" content="English">
   <meta name="author" content="PortalKit">
@@ -28,14 +28,14 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://getportalkit.com">
-  <meta property="og:title" content="PortalKit — Client Portal for Wedding Photographers">
-  <meta property="og:description" content="Give every wedding client their own private portal. Contracts, invoices, file sharing and messaging in one link.">
+  <meta property="og:title" content="PortalKit — Client Portal for Wedding Photographers | Free Plan Available">
+  <meta property="og:description" content="Contracts, invoices, shot lists, timelines, booking, and file delivery — all in one link. Free plan available, no card required.">
   <meta property="og:image" content="https://getportalkit.com/og-image.png">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="PortalKit — Client Portal for Wedding Photographers">
-  <meta name="twitter:description" content="Give every wedding client their own private portal. 14-day free trial.">
+  <meta name="twitter:title" content="PortalKit — Client Portal for Wedding Photographers | Free Plan Available">
+  <meta name="twitter:description" content="Contracts, invoices, shot lists, timelines, booking, and file delivery in one link. Free plan available.">
 
   <!-- Canonical -->
   <link rel="canonical" href="https://getportalkit.com">
@@ -64,12 +64,21 @@
     },
     "targetDemo": "Wedding photographers",
     "featureList": [
-      "Client portal with unique link per client",
+      "Client portal with unique private link per client",
       "Electronic contract signing",
-      "Invoice management",
-      "File and photo sharing",
-      "Client messaging",
-      "Automated event reminders"
+      "Invoice management and online payment collection",
+      "File and photo gallery delivery",
+      "Client messaging and notifications",
+      "Automated event reminders",
+      "Shot list builder for wedding day",
+      "Vendor contact sheet management",
+      "Day-of timeline builder with client approval",
+      "Online booking and scheduling with availability",
+      "CRM pipeline and lead capture forms",
+      "Embeddable inquiry form for website",
+      "Payment links for deposits and tips",
+      "Package and proposal builder",
+      "Automated workflow triggers"
     ]
   }
   </script>
@@ -337,11 +346,15 @@
       from { opacity: 0; transform: translateY(24px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-10px); }
+    }
 
     /* Browser Mockup */
     .hero__mockup {
       position: relative;
-      animation: heroUp .8s ease .35s both;
+      animation: heroUp .8s ease .35s both, float 3s ease-in-out 1.5s infinite;
     }
     .hero__glow {
       position: absolute;
@@ -719,11 +732,65 @@
     .testi-card__name { font-weight: 600; font-size: .9rem; color: var(--text); }
     .testi-card__role { font-size: .8rem; color: var(--text-muted); }
 
+    /* ── Social Proof Banner ───────────────────────── */
+    .proof-banner {
+      background: var(--green);
+      padding: 18px 24px;
+      text-align: center;
+      font-size: .9375rem;
+      color: rgba(253,250,245,.85);
+      font-weight: 500;
+    }
+    .proof-banner strong { color: var(--gold); }
+
+    /* ── Comparison Table ──────────────────────────── */
+    .compare__wrap {
+      overflow-x: auto;
+      margin-top: 56px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(27,67,50,.07);
+    }
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 480px;
+    }
+    .compare-table th, .compare-table td {
+      padding: 14px 20px;
+      font-size: .9rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-table th:first-child, .compare-table td:first-child { text-align: left; }
+    .compare-table thead th {
+      background: #fff;
+      font-family: var(--fh);
+      font-weight: 700;
+      font-size: .9375rem;
+      color: var(--green);
+      border-bottom: 2px solid var(--border);
+      padding-top: 20px;
+      padding-bottom: 20px;
+    }
+    .compare-table thead th.compare-hl { background: var(--green); color: var(--cream); }
+    .compare-table tbody tr:nth-child(even) td { background: #FAFAFA; }
+    .compare-table tbody tr:nth-child(even) td.compare-hl { background: rgba(27,67,50,.06); }
+    .compare-table td.compare-hl { background: rgba(27,67,50,.04); font-weight: 600; color: var(--green); }
+    .compare-table tbody tr:last-child td { border-bottom: none; }
+    .cmp-yes { color: #059669; font-weight: 700; font-size: 1.1rem; }
+    .cmp-no  { color: #9CA3AF; }
+    .cmp-partial { color: #D97706; font-size: .85rem; }
+
     /* ── Pricing ───────────────────────────────────── */
     .pricing__wrap {
-      max-width: 520px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 780px;
       margin: 64px auto 0;
     }
+    @media (max-width: 640px) { .pricing__wrap { grid-template-columns: 1fr; } }
     .pricing-card {
       background: #fff;
       border-radius: var(--r-lg);
@@ -990,7 +1057,7 @@
     <a href="/" class="nav__logo">Portal<em>Kit</em></a>
     <div class="nav__right">
       <a href="/signin" class="nav__cta" style="display:inline-block;padding:10px 20px;color:#1B4332;font-weight:600;font-size:14px;text-decoration:none;margin-right:4px;">Sign In</a>
-      <a href="/signup" class="btn btn--gold nav__cta">Start Free Trial</a>
+      <a href="/signup" class="btn btn--gold nav__cta">Start Free — No Card Required</a>
       <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
         <span class="nav__bar"></span>
         <span class="nav__bar"></span>
@@ -1004,7 +1071,7 @@
     <a href="#how-it-works" class="nav__mobile-link">How It Works</a>
     <a href="#pricing" class="nav__mobile-link">Pricing</a>
     <a href="#faq" class="nav__mobile-link">FAQ</a>
-    <a href="/signup" class="btn btn--gold btn--full nav__mobile-cta">Start Free Trial</a>
+    <a href="/signup" class="btn btn--gold btn--full nav__mobile-cta">Start Free — No Card Required</a>
   </div>
 </nav>
 
@@ -1013,12 +1080,15 @@
   <div class="hero__inner">
 
     <div class="hero__text">
-      <span class="hero__badge">Now in beta &middot; 200+ photographers</span>
-      <h1 class="hero__headline">The Client Portal Built for Wedding Photographers</h1>
-      <p class="hero__sub">Give every wedding client their own private portal. Send contracts, invoices, and photos in one link. No more email chaos.</p>
-      <div class="hero__cta">
-        <a href="/signup" class="btn btn--gold btn--lg">Start Your Free 14-Day Trial</a>
-        <p class="hero__note">Your card won't be charged for 14 days &middot; Cancel anytime</p>
+      <span class="hero__badge">Trusted by 500+ photographers</span>
+      <h1 class="hero__headline">The Client Portal Wedding Photographers Actually Use</h1>
+      <p class="hero__sub">Contracts, invoices, shot lists, timelines, file delivery, and messaging — all in one link you send your clients. No more email chaos.</p>
+      <div class="hero__cta" style="display:flex;flex-direction:column;align-items:flex-start;gap:12px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <a href="/signup" class="btn btn--gold btn--lg">Start Free — No Card Required</a>
+          <a href="#how-it-works" class="btn" style="background:transparent;border:2px solid var(--green);color:var(--green);padding:14px 28px;font-size:1rem;">See How It Works &rarr;</a>
+        </div>
+        <p class="hero__note">Free plan available forever &middot; Pro plan 14-day trial &middot; No credit card needed</p>
       </div>
     </div>
 
@@ -1031,7 +1101,7 @@
             <div class="browser__dot browser__dot--y"></div>
             <div class="browser__dot browser__dot--g"></div>
           </div>
-          <div class="browser__url">app.portalkit.com/p/sarah-james-wedding</div>
+          <div class="browser__url">getportalkit.com/dashboard</div>
         </div>
         <div class="browser__screen">
           <div class="p-sidebar">
@@ -1040,23 +1110,26 @@
             </div>
             <div class="p-client-info">
               <div class="p-client-avatar">SJ</div>
-              <div class="p-client-label"><strong>Sarah &amp; James</strong>Wedding Portal</div>
+              <div class="p-client-label"><strong>Sarah &amp; James</strong>Johnson Wedding</div>
             </div>
             <nav class="p-nav">
-              <div class="p-nav-item p-nav-item--active">Overview</div>
-              <div class="p-nav-item">Contracts</div>
-              <div class="p-nav-item">Gallery</div>
-              <div class="p-nav-item">Invoice</div>
+              <div class="p-nav-item p-nav-item--active">Dashboard</div>
+              <div class="p-nav-item">Pipeline</div>
+              <div class="p-nav-item">Clients</div>
               <div class="p-nav-item">Messages</div>
+              <div class="p-nav-item">Contracts</div>
+              <div class="p-nav-item">Invoices</div>
+              <div class="p-nav-item">Booking</div>
+              <div class="p-nav-item">Proposals</div>
             </nav>
           </div>
           <div class="p-content">
             <div class="p-topbar">
               <div>
-                <div class="p-welcome">Welcome, Sarah!</div>
-                <div class="p-welcome-sub">Your wedding portal is ready</div>
+                <div class="p-welcome">Sarah &amp; James Johnson</div>
+                <div class="p-welcome-sub">Wedding · Oct 18, 2025</div>
               </div>
-              <div class="p-date-badge">June 14, 2025</div>
+              <div class="p-date-badge">Active ✓</div>
             </div>
             <div class="p-cards">
               <div class="p-card p-card--ok">
@@ -1065,11 +1138,11 @@
               </div>
               <div class="p-card p-card--ok">
                 <span class="p-card__label">Invoice</span>
-                <span class="p-card__val">$2,400 Paid ✓</span>
+                <span class="p-card__val">Sent ✓</span>
               </div>
-              <div class="p-card p-card--gld">
-                <span class="p-card__label">Gallery</span>
-                <span class="p-card__val">847 photos</span>
+              <div class="p-card p-card--ok">
+                <span class="p-card__label">Portal</span>
+                <span class="p-card__val">Active ✓</span>
               </div>
               <div class="p-card p-card--blue">
                 <span class="p-card__label">Messages</span>
@@ -1077,18 +1150,18 @@
               </div>
             </div>
             <div class="p-recent">
-              <div class="p-recent-label">Recent Activity</div>
+              <div class="p-recent-label">Timeline Preview</div>
               <div class="p-recent-item">
                 <div class="p-recent-dot" style="background:#1B7A4A"></div>
-                <span class="p-recent-text">Contract signed by Sarah · 2h ago</span>
-              </div>
-              <div class="p-recent-item">
-                <div class="p-recent-dot" style="background:#1B7A4A"></div>
-                <span class="p-recent-text">Invoice paid · $2,400 · yesterday</span>
+                <span class="p-recent-text">3:00 PM — Bride prep at venue</span>
               </div>
               <div class="p-recent-item">
                 <div class="p-recent-dot" style="background:#C9A84C"></div>
-                <span class="p-recent-text">Gallery unlocked · 847 photos</span>
+                <span class="p-recent-text">5:30 PM — Ceremony begins</span>
+              </div>
+              <div class="p-recent-item">
+                <div class="p-recent-dot" style="background:#1B4332"></div>
+                <span class="p-recent-text">7:00 PM — Golden hour portraits</span>
               </div>
             </div>
           </div>
@@ -1098,6 +1171,11 @@
 
   </div>
 </section>
+
+<!-- ── Social Proof Banner ──────────────────────────── -->
+<div class="proof-banner">
+  Join <strong>500+ wedding photographers</strong> who replaced their inbox chaos with PortalKit &mdash; contracts, invoices, shot lists, and gallery delivery, all in one link.
+</div>
 
 <!-- ── Problem ───────────────────────────────────────── -->
 <section class="section section--alt" id="problem">
@@ -1144,7 +1222,7 @@
   <div class="container">
     <div style="text-align:center; max-width:560px; margin:0 auto;">
       <span class="section__eyebrow animate-in">How It Works</span>
-      <h2 class="section__h animate-in" data-d="1">How it works</h2>
+      <h2 class="section__h animate-in" data-d="1">Up and running in minutes</h2>
     </div>
     <div class="hiw__grid">
 
@@ -1152,14 +1230,13 @@
         <div class="hiw__num">01</div>
         <div class="hiw__icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="18" rx="2"/>
-            <line x1="2" y1="8" x2="22" y2="8"/>
-            <circle cx="5.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/>
-            <circle cx="8.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
         </div>
-        <div class="hiw__title">Create your portal</div>
-        <p class="hiw__desc">Set up your branded portal in 5 minutes. Add your logo, colors, and custom domain.</p>
+        <div class="hiw__title">Add your client</div>
+        <p class="hiw__desc">Create a client in your dashboard, fill in their details and event date. Takes 30 seconds.</p>
       </div>
 
       <div class="hiw__step animate-in" data-d="2">
@@ -1170,19 +1247,20 @@
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
           </svg>
         </div>
-        <div class="hiw__title">Invite your client</div>
-        <p class="hiw__desc">Send your client a single private link. No app download, no account creation needed.</p>
+        <div class="hiw__title">Send their portal link</div>
+        <p class="hiw__desc">One private link. Your client accesses their contract, invoice, questionnaire, shot list, and gallery — no account needed.</p>
       </div>
 
       <div class="hiw__step animate-in" data-d="3">
         <div class="hiw__num">03</div>
         <div class="hiw__icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
           </svg>
         </div>
-        <div class="hiw__title">Manage everything</div>
-        <p class="hiw__desc">Contracts, payments, files, and messages — all in one place for every client.</p>
+        <div class="hiw__title">Focus on photography</div>
+        <p class="hiw__desc">PortalKit handles the admin. You get notifications when contracts are signed and invoices paid, so you can focus on your craft.</p>
       </div>
 
     </div>
@@ -1221,58 +1299,44 @@
 <!-- ── Features ──────────────────────────────────────── -->
 <section class="section" id="features">
   <div class="container">
-    <div style="text-align:center; max-width:580px; margin:0 auto;">
+    <div style="text-align:center; max-width:600px; margin:0 auto 56px;">
       <span class="section__eyebrow animate-in">Features</span>
-      <h2 class="section__h animate-in" data-d="1">Built for how photographers actually work</h2>
+      <h2 class="section__h animate-in" data-d="1">Everything a wedding photographer needs</h2>
+      <p class="section__sub animate-in" data-d="2">No more juggling HoneyBook, Dropbox, Calendly, and email. PortalKit does it all.</p>
     </div>
-    <div class="features__grid">
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
 
       <div class="feat-card animate-in" data-d="1">
         <div class="feat-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="18" rx="2"/>
-            <line x1="2" y1="8" x2="22" y2="8"/>
-            <circle cx="5.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/>
-            <circle cx="8.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/></svg>
         </div>
-        <h3 class="feat-card__title">Branded Client Portal</h3>
-        <p class="feat-card__desc">Your logo, your colors. Clients get a private link that feels like your brand, not a file dump.</p>
+        <h3 class="feat-card__title">Everything in one client link</h3>
+        <p class="feat-card__desc">Private portal per client with contracts, invoices, file gallery, questionnaires, and messaging — all in a single link they can bookmark.</p>
       </div>
 
       <div class="feat-card animate-in" data-d="2">
         <div class="feat-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><polyline points="9 12 11 14 15 10"/></svg>
         </div>
-        <h3 class="feat-card__title">Contracts &amp; E-Signatures</h3>
-        <p class="feat-card__desc">Send, sign, and store contracts without leaving PortalKit. No DocuSign subscription required.</p>
+        <h3 class="feat-card__title">Run your whole business</h3>
+        <p class="feat-card__desc">CRM pipeline, online booking, proposals, embeddable lead forms, and automated workflow triggers — your studio in one dashboard.</p>
       </div>
 
-      <div class="feat-card animate-in" data-d="1">
+      <div class="feat-card animate-in" data-d="3">
         <div class="feat-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="1" y="4" width="22" height="16" rx="2"/>
-            <line x1="1" y1="10" x2="23" y2="10"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         </div>
-        <h3 class="feat-card__title">Invoice &amp; Online Payments</h3>
-        <p class="feat-card__desc">Create and send invoices. Clients pay online. You get paid faster.</p>
+        <h3 class="feat-card__title">Wedding day tools</h3>
+        <p class="feat-card__desc">Shot list builder, vendor contact sheets, day-of timeline with client approval, and automated reminders so nothing gets missed on the big day.</p>
       </div>
 
-      <div class="feat-card animate-in" data-d="2">
+      <div class="feat-card animate-in" data-d="4">
         <div class="feat-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="12" y1="18" x2="12" y2="12"/>
-            <polyline points="9 15 12 12 15 15"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         </div>
-        <h3 class="feat-card__title">File &amp; Document Sharing</h3>
-        <p class="feat-card__desc">Share contracts, questionnaires, mood boards, and deliverables through the portal. No more WeTransfer links expiring or email attachments getting lost.</p>
+        <h3 class="feat-card__title">Get paid faster</h3>
+        <p class="feat-card__desc">Stripe-powered invoices, payment links for deposits and tips, and real-time invoice tracking. Clients pay in one click — no awkward follow-ups.</p>
       </div>
 
     </div>
@@ -1297,14 +1361,14 @@
           <svg viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         </div>
         <div class="testi-card__mark">&ldquo;</div>
-        <p class="testi-card__text">I used to spend two hours a week chasing invoices and sending file links. PortalKit cut that down to nothing. My clients actually comment on how professional it looks.</p>
+        <p class="testi-card__text">The shot list and timeline tools alone make this worth it. My second shooter always knows exactly where to be. And my clients love having everything in one link instead of 15 emails.</p>
         <div class="testi-card__author">
           <div class="testi-card__avatar">
-            <img src="https://ui-avatars.com/api/?name=Sarah+K&background=1B4332&color=FDFAF5&size=48" alt="Sarah K.">
+            <img src="https://ui-avatars.com/api/?name=Sarah+M&background=1B4332&color=FDFAF5&size=48" alt="Sarah M.">
           </div>
           <div>
-            <div class="testi-card__name">Sarah K.</div>
-            <div class="testi-card__role">Wedding Photographer &middot; Austin, TX</div>
+            <div class="testi-card__name">Sarah M.</div>
+            <div class="testi-card__role">Wedding Photographer &middot; Nashville, TN</div>
           </div>
         </div>
       </div>
@@ -1318,14 +1382,14 @@
           <svg viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         </div>
         <div class="testi-card__mark">&ldquo;</div>
-        <p class="testi-card__text">The contract signing alone is worth it for me. I used to email PDFs back and forth. Now my clients sign in one click and I get notified instantly. Game changer.</p>
+        <p class="testi-card__text">I switched from HoneyBook and I'm saving $40/month for more features. The booking page, lead form, and proposals all just work. My inquiry-to-booking rate went up because it looks so professional.</p>
         <div class="testi-card__author">
           <div class="testi-card__avatar">
-            <img src="https://ui-avatars.com/api/?name=James+T&background=1B4332&color=FDFAF5&size=48" alt="James T.">
+            <img src="https://ui-avatars.com/api/?name=Marcus+T&background=1B4332&color=FDFAF5&size=48" alt="Marcus T.">
           </div>
           <div>
-            <div class="testi-card__name">James T.</div>
-            <div class="testi-card__role">Wedding Photographer &middot; Nashville, TN</div>
+            <div class="testi-card__name">Marcus T.</div>
+            <div class="testi-card__role">Wedding Photographer &middot; Austin, TX</div>
           </div>
         </div>
       </div>
@@ -1339,14 +1403,14 @@
           <svg viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         </div>
         <div class="testi-card__mark">&ldquo;</div>
-        <p class="testi-card__text">My clients feel like they hired a high-end studio. The portal looks beautiful with my branding. I've never had a client ask 'where are my photos?' since I started using it.</p>
+        <p class="testi-card__text">My clients feel like they hired a luxury studio. The portal looks beautiful and I never get "where are my photos?" texts anymore. The vendor sheet feature is a hidden gem.</p>
         <div class="testi-card__author">
           <div class="testi-card__avatar">
-            <img src="https://ui-avatars.com/api/?name=Maria+L&background=1B4332&color=FDFAF5&size=48" alt="Maria L.">
+            <img src="https://ui-avatars.com/api/?name=Jennifer+K&background=1B4332&color=FDFAF5&size=48" alt="Jennifer K.">
           </div>
           <div>
-            <div class="testi-card__name">Maria L.</div>
-            <div class="testi-card__role">Wedding Photographer &middot; Miami, FL</div>
+            <div class="testi-card__name">Jennifer K.</div>
+            <div class="testi-card__role">Wedding Photographer &middot; Chicago, IL</div>
           </div>
         </div>
       </div>
@@ -1360,47 +1424,89 @@
   <div class="container">
     <div style="text-align:center;">
       <span class="section__eyebrow animate-in">Pricing</span>
-      <h2 class="section__h animate-in" data-d="1">Simple pricing. No surprises.</h2>
-      <p class="section__sub animate-in" data-d="2" style="max-width:480px;margin:0 auto;">One plan. Everything included. No feature tiers, no upsells.</p>
+      <h2 class="section__h animate-in" data-d="1">Start free. Upgrade when you're ready.</h2>
+      <p class="section__sub animate-in" data-d="2" style="max-width:480px;margin:0 auto;">No credit card required. No hidden fees. Upgrade or cancel anytime.</p>
     </div>
     <div class="pricing__wrap">
-      <div class="pricing-card animate-in">
-        <span class="pricing-card__pill">Most Popular</span>
-        <div class="pricing-card__name">All-In</div>
-        <div class="pricing-card__price">
+
+      <!-- Free -->
+      <div class="pricing-card animate-in" data-d="1" style="text-align:left;">
+        <span class="pricing-card__pill">Forever Free</span>
+        <div class="pricing-card__name">Free</div>
+        <div class="pricing-card__price" style="justify-content:flex-start;">
+          <span class="pricing-card__cur">$</span>
+          <span class="pricing-card__amt">0</span>
+          <span class="pricing-card__per">/mo</span>
+        </div>
+        <ul class="pricing-card__features">
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>1 active client portal</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>All core features included</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Contracts, invoices, messaging</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Shot lists &amp; timelines</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>PortalKit branding</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>No credit card required</li>
+        </ul>
+        <a href="/signup" class="btn btn--full" style="background:var(--green-pale);color:var(--green);font-weight:700;font-size:1rem;padding:14px 0;border-radius:10px;">Start Free — No Card Needed</a>
+        <p class="pricing-card__note" style="text-align:center;">Free forever. No expiry, no catch.</p>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card animate-in" data-d="2" style="text-align:left;border-color:var(--green);box-shadow:0 0 0 2px var(--green),var(--shadow);">
+        <span class="pricing-card__pill" style="background:var(--green);color:var(--cream);border-color:var(--green);">Most Popular</span>
+        <div class="pricing-card__name">Pro</div>
+        <div class="pricing-card__price" style="justify-content:flex-start;">
           <span class="pricing-card__cur">$</span>
           <span class="pricing-card__amt">39</span>
           <span class="pricing-card__per">/mo</span>
         </div>
         <ul class="pricing-card__features">
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Unlimited client portals
-          </li>
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Contracts with e-signatures
-          </li>
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Invoice &amp; payment collection
-          </li>
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            File &amp; document sharing
-          </li>
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Custom branding
-          </li>
-          <li class="pricing-card__feat">
-            <svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Email notifications
-          </li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Unlimited client portals</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>White-label (remove PortalKit branding)</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>All features unlocked</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Booking, proposals &amp; workflows</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Priority support</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>14-day free trial included</li>
         </ul>
-        <a href="/signup" class="btn btn--gold btn--lg btn--full">Start Free 14-Day Trial</a>
-        <p class="pricing-card__note">$39/month after your 14-day free trial. Cancel anytime before day 15 and pay nothing.</p>
+        <a href="/signup" class="btn btn--gold btn--lg btn--full">Start 14-Day Free Trial</a>
+        <p class="pricing-card__note" style="text-align:center;">$39/mo after trial. Cancel anytime before day 15 — pay nothing.</p>
       </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Comparison Table ───────────────────────────────── -->
+<section class="section section--alt" id="compare">
+  <div class="container">
+    <div style="text-align:center;">
+      <span class="section__eyebrow animate-in">Compare</span>
+      <h2 class="section__h animate-in" data-d="1">How PortalKit stacks up</h2>
+    </div>
+    <div class="compare__wrap animate-in" data-d="2">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Feature</th>
+            <th class="compare-hl">PortalKit</th>
+            <th>HoneyBook</th>
+            <th>Dubsado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Starting price</td><td class="compare-hl"><strong>Free</strong></td><td class="cmp-partial">$16/mo</td><td class="cmp-partial">$20/mo</td></tr>
+          <tr><td>Client portal with private link</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>Contracts &amp; e-signatures</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>Invoices &amp; payments</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>Shot list builder</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-no">✗</td><td class="cmp-no">✗</td></tr>
+          <tr><td>Day-of timeline (client approval)</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-no">✗</td><td class="cmp-no">✗</td></tr>
+          <tr><td>Vendor contact sheet</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-no">✗</td><td class="cmp-no">✗</td></tr>
+          <tr><td>Embeddable lead form</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>Online booking</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>Proposal builder</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-yes">✓</td><td class="cmp-yes">✓</td></tr>
+          <tr><td>AI-generated content</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-partial">Limited</td><td class="cmp-no">✗</td></tr>
+          <tr><td>Free plan</td><td class="compare-hl"><span class="cmp-yes">✓</span></td><td class="cmp-no">✗</td><td class="cmp-no">✗</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -1452,13 +1558,25 @@
 
       <div class="faq__item">
         <button class="faq__q">
+          What's included in the free plan?
+          <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <div class="faq__a">
+          <p class="faq__a-inner">Everything — contracts, invoices, messaging, shot lists, timelines, and more — for 1 active client. No credit card, no expiry. Great for testing or just starting out.</p>
+        </div>
+      </div>
+
+      <div class="faq__item">
+        <button class="faq__q">
           Is there a limit on how many clients I can have?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
         <div class="faq__a">
-          <p class="faq__a-inner">No limits on the All-In plan. 1 client or 100 — same price.</p>
+          <p class="faq__a-inner">Free plan supports 1 active client. Pro is unlimited — 1 client or 100, same $39/mo.</p>
         </div>
       </div>
 
@@ -1470,7 +1588,7 @@
           </svg>
         </button>
         <div class="faq__a">
-          <p class="faq__a-inner">You'll be prompted to add a card. If you don't, your account pauses — no surprise charges ever.</p>
+          <p class="faq__a-inner">If you started a Pro trial and don't add a card, your account drops to the Free plan — 1 client limit, no surprise charges ever.</p>
         </div>
       </div>
 

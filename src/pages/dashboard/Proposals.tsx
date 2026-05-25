@@ -30,6 +30,8 @@ export default function Proposals() {
   const [savingProp, setSavingProp] = useState(false)
   const [copied, setCopied] = useState<number | null>(null)
   const [sending, setSending] = useState<number | null>(null)
+  const [aiNotes, setAiNotes] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -65,7 +67,24 @@ export default function Proposals() {
   const openNewProp = () => {
     setEditingProp(null)
     setPropForm({ title: '', message: '', client_id: '', expires_at: '', packages: [] })
+    setAiNotes('')
     setShowPropForm(true)
+  }
+
+  const generateWithAI = async () => {
+    setAiGenerating(true)
+    try {
+      const res = await authFetch('/api/ai/generate-proposal', { method: 'post', data: { client_id: propForm.client_id || undefined, notes: aiNotes } })
+      const { packages: aiPkgs, message } = res.data
+      if (aiPkgs?.length) {
+        const newPkgs: Package[] = aiPkgs.map((p: Package, i: number) => ({ ...p, id: -(i + 1), user_id: 0, active: true, created_at: new Date().toISOString() }))
+        setPropForm(f => ({ ...f, packages: newPkgs, message: message || f.message }))
+      }
+    } catch {
+      // silent — user can retry
+    } finally {
+      setAiGenerating(false)
+    }
   }
 
   const openEditProp = (p: Proposal) => {
@@ -215,6 +234,13 @@ export default function Proposals() {
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'block', marginBottom: 6 }}>Expiry Date (optional)</label>
                 <input type="date" value={propForm.expires_at} onChange={e => setPropForm(f => ({ ...f, expires_at: e.target.value }))} style={{ width: '100%', padding: '9px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 10, padding: '14px 16px' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: '0 0 8px' }}>✨ Generate packages with AI</p>
+                <textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} placeholder="Optional: add context (e.g. outdoor wedding, 8 hours, 2 photographers)" rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid #A7F3D0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'none', fontFamily: 'inherit', background: '#fff', marginBottom: 8 }} />
+                <button onClick={generateWithAI} disabled={aiGenerating} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: aiGenerating ? 0.7 : 1 }}>
+                  {aiGenerating ? 'Generating...' : '✨ Generate Packages'}
+                </button>
               </div>
               {packages.length > 0 && (
                 <div>
