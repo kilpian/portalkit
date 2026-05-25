@@ -67,6 +67,14 @@ export default function Files() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (typeof sidebarKey === 'number') {
+      setUploadClientId(String(sidebarKey))
+    } else {
+      setUploadClientId('')
+    }
+  }, [sidebarKey])
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
   const uploadFiles = async (fileList: FileList | File[]) => {
@@ -315,7 +323,23 @@ export default function Files() {
                                 <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(null) }} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer' }}>No</button>
                               </div>
                             ) : (
-                              <div style={{ display: 'flex', gap: 4 }}>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {!f.client_id && (
+                                  assigningId === f.id ? (
+                                    <select
+                                      autoFocus
+                                      onBlur={() => setAssigningId(null)}
+                                      onChange={e => { if (e.target.value) assignFile(f.id, e.target.value) }}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, border: 'none', background: 'rgba(0,0,0,0.7)', color: 'white', maxWidth: 100 }}
+                                    >
+                                      <option value="">Assign to...</option>
+                                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                  ) : (
+                                    <button onClick={e => { e.stopPropagation(); setAssigningId(f.id) }} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Assign</button>
+                                  )
+                                )}
                                 <a href={f.storage_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.2)', color: '#fff', textDecoration: 'none', fontWeight: 600 }}>↓</a>
                                 <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(f.id) }} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(220,38,38,0.6)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>✕</button>
                               </div>

@@ -71,6 +71,7 @@ export default function Clients() {
   const [copied, setCopied] = useState<number | null>(null)
   const [sendModal, setSendModal] = useState<Client | null>(null)
   const [sendLinkCopied, setSendLinkCopied] = useState(false)
+  const [sendMsgCopied, setSendMsgCopied] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
 
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([])
@@ -567,57 +568,72 @@ export default function Clients() {
       )}
 
       {/* Send to client modal */}
-      {sendModal && (
-        <>
-          <div onClick={() => setSendModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299, backdropFilter: 'blur(2px)' }} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            zIndex: 300, width: 'min(440px, 90vw)',
-            background: 'var(--bg-elevated)', borderRadius: 14,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-            padding: 28,
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>Share Portal Link</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
-              Share this link with <strong>{sendModal.name}</strong> to give them access to their portal.
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <input
-                className="input"
+      {sendModal && (() => {
+        const portalUrl = `${window.location.origin}/portal/${sendModal.portal_token}`
+        const businessName = user?.business_name || user?.full_name || 'Your photographer'
+        const fullMessage = `Hi ${sendModal.name},\n\nYour client portal is ready. You can view your contract, invoice, and any files I've shared with you here:\n\n${portalUrl}\n\nLet me know if you have any questions!\n\n${businessName}`
+        return (
+          <>
+            <div onClick={() => setSendModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299, backdropFilter: 'blur(2px)' }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+              zIndex: 300, width: 'min(480px, 90vw)',
+              background: 'var(--bg-elevated)', borderRadius: 14,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              padding: 28,
+            }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>Send to {sendModal.name}</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+                Copy the link or the ready-to-send message below.
+              </p>
+
+              {/* Portal link row */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                  className="input"
+                  readOnly
+                  value={portalUrl}
+                  style={{ flex: 1, fontSize: 12, color: 'var(--text-dim)' }}
+                  onFocus={e => e.target.select()}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(portalUrl)
+                    setSendLinkCopied(true)
+                    setTimeout(() => setSendLinkCopied(false), 2000)
+                  }}
+                  style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, padding: '0 14px', borderRadius: 8, border: `1px solid ${sendLinkCopied ? 'var(--color-green-border)' : 'var(--border)'}`, background: sendLinkCopied ? 'var(--color-green-bg)' : 'transparent', cursor: 'pointer', color: sendLinkCopied ? 'var(--color-green)' : 'var(--text-dim)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
+                >
+                  {sendLinkCopied ? '✓ Copied!' : 'Copy Link'}
+                </button>
+              </div>
+
+              {/* Pre-written message */}
+              <textarea
                 readOnly
-                value={`${window.location.origin}/portal/${sendModal.portal_token}`}
-                style={{ flex: 1, fontSize: 12, color: 'var(--text-dim)' }}
-                onFocus={e => e.target.select()}
+                value={fullMessage}
+                onClick={e => (e.target as HTMLTextAreaElement).select()}
+                rows={7}
+                style={{ width: '100%', fontSize: 12, lineHeight: 1.6, color: 'var(--text-dim)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'text', marginBottom: 8 }}
               />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/portal/${sendModal.portal_token}`)
-                  setSendLinkCopied(true)
-                  setTimeout(() => setSendLinkCopied(false), 2500)
-                }}
-                style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, padding: '0 16px', borderRadius: 8, border: `1px solid ${sendLinkCopied ? 'var(--color-green-border)' : 'var(--border)'}`, background: sendLinkCopied ? 'var(--color-green-bg)' : 'transparent', cursor: 'pointer', color: sendLinkCopied ? 'var(--color-green)' : 'var(--text-dim)', transition: 'all 0.15s' }}
-              >
-                {sendLinkCopied ? '✓ Copied' : 'Copy'}
-              </button>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(fullMessage)
+                    setSendMsgCopied(true)
+                    setTimeout(() => setSendMsgCopied(false), 2000)
+                  }}
+                  style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 8, border: `1px solid ${sendMsgCopied ? 'var(--color-green-border)' : 'var(--border)'}`, background: sendMsgCopied ? 'var(--color-green-bg)' : 'transparent', cursor: 'pointer', color: sendMsgCopied ? 'var(--color-green)' : 'var(--text-primary)', transition: 'all 0.15s' }}
+                >
+                  {sendMsgCopied ? '✓ Copied!' : 'Copy Message'}
+                </button>
+                <button onClick={() => setSendModal(null)} className="btn btn-ghost" style={{ flex: 1 }}>Done</button>
+              </div>
             </div>
-            {sendModal.email && (
-              <button
-                onClick={() => {
-                  const url = `${window.location.origin}/portal/${sendModal.portal_token}`
-                  const businessName = user?.business_name || user?.full_name || 'Your photographer'
-                  const subject = encodeURIComponent(`Your portal is ready — ${sendModal.name}`)
-                  const body = encodeURIComponent(`Hi ${sendModal.name},\n\nYour portal is ready. You can access everything here:\n\n${url}\n\nYou'll find your contract, invoice, and any files we share with you.\n\n${businessName}`)
-                  window.open(`mailto:${sendModal.email}?subject=${subject}&body=${body}`)
-                }}
-                style={{ display: 'block', width: '100%', marginBottom: 12, fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}
-              >
-                Open in Email App ✉
-              </button>
-            )}
-            <button onClick={() => setSendModal(null)} className="btn btn-ghost" style={{ width: '100%' }}>Done</button>
-          </div>
-        </>
-      )}
+          </>
+        )
+      })()}
 
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
