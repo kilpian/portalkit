@@ -19,7 +19,7 @@ if (SENTRY_DSN) {
       }),
     ],
     tracesSampleRate: 0.1,
-    replaysSessionSampleRate: 0.1,
+    replaysSessionSampleRate: 0.05,
     replaysOnErrorSampleRate: 1.0,
   })
 }
@@ -53,16 +53,18 @@ createRoot(root).render(
         alignItems: 'center', justifyContent: 'center',
         minHeight: '100vh', fontFamily: 'sans-serif',
         background: '#FDFAF5', color: '#1B4332', padding: 24,
+        textAlign: 'center',
       }}>
-        <h2 style={{ fontSize: 24, marginBottom: 8 }}>Something went wrong</h2>
-        <p style={{ color: '#6B7280', marginBottom: 24 }}>
-          We've been notified and are fixing it. Please refresh to try again.
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Something went wrong</h2>
+        <p style={{ color: '#6B7280', marginBottom: 24, maxWidth: 400 }}>
+          We've been notified and are working on a fix. Please refresh to try again.
         </p>
         <button
           onClick={() => window.location.reload()}
           style={{
             background: '#1B4332', color: 'white',
-            border: 'none', padding: '10px 24px',
+            border: 'none', padding: '12px 28px',
             borderRadius: 8, cursor: 'pointer',
             fontSize: 15, fontWeight: 600,
           }}

@@ -106,6 +106,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [clientSecret, setClientSecret] = useState('')
   const [stripeError, setStripeError] = useState('')
   const [agreedTerms, setAgreedTerms] = useState(false)
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false)
   const [agreedBilling, setAgreedBilling] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
@@ -240,11 +241,34 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               )}
 
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', marginBottom: 10, fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
+                  <input
+                    type="checkbox"
+                    checked={agreedTerms}
+                    onChange={e => setAgreedTerms(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, accentColor: '#1B4332', flexShrink: 0 }}
+                  />
+                  I agree to PortalKit's{' '}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4332', fontWeight: 600 }}>Terms of Service</a>
+                </label>
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
+                  <input
+                    type="checkbox"
+                    checked={agreedPrivacy}
+                    onChange={e => setAgreedPrivacy(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, accentColor: '#1B4332', flexShrink: 0 }}
+                  />
+                  I have read and agree to the{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4332', fontWeight: 600 }}>Privacy Policy</a>
+                </label>
+              </div>
+
               <p style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 12 }}>
                 Next: add your card to activate your free trial
               </p>
 
-              <button onClick={handleStep1} disabled={saving || !businessName.trim()} className="btn btn-primary" style={{ width: '100%' }}>
+              <button onClick={handleStep1} disabled={saving || !businessName.trim() || !agreedTerms || !agreedPrivacy} className="btn btn-primary" style={{ width: '100%' }}>
                 {saving ? 'Saving…' : 'Continue →'}
               </button>
             </>

@@ -3889,6 +3889,14 @@ app.post('/api/proposals/:id/accept', async (req, res) => {
 
 Sentry.setupExpressErrorHandler(app)
 
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.message)
+  res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+  })
+})
+
 async function startServer() {
   console.log('Starting server...')
   console.log('📧 Resend configured:', !!process.env.RESEND_API_KEY)
