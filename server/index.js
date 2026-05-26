@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node'
 import express from 'express'
 import pkg from 'pg'
 import cors from 'cors'
@@ -14,6 +15,16 @@ import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    integrations: [Sentry.expressIntegration()],
+    tracesSampleRate: 0.1,
+  })
+  console.log('🔍 Sentry configured')
+}
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -3875,6 +3886,8 @@ app.post('/api/proposals/:id/accept', async (req, res) => {
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
+
+Sentry.setupExpressErrorHandler(app)
 
 async function startServer() {
   console.log('Starting server...')

@@ -519,7 +519,7 @@ export default function DashboardLayout() {
         </div>
 
         {/* Page content */}
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <main key={location.pathname} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           <Outlet />
         </main>
       </div>
