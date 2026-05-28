@@ -489,7 +489,8 @@ export default function Clients() {
                     ) : (
                       <button
                         onClick={() => setDeleteConfirmId(c.id)}
-                        title="Delete"
+                        title="Delete client"
+                        aria-label="Delete client"
                         style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#DC2626'; e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
                         onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'transparent' }}

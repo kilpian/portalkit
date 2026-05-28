@@ -24,6 +24,7 @@
   <meta name="robots" content="index, follow">
   <meta name="language" content="English">
   <meta name="author" content="PortalKit">
+  <meta name="theme-color" content="#1B4332">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
@@ -1049,10 +1050,12 @@
 </head>
 <body>
 
+<a href="#main-content" style="position:absolute;top:-40px;left:0;background:#1B4332;color:#fff;padding:8px 16px;z-index:9999;font-weight:600;text-decoration:none;border-radius:0 0 6px 0;transition:top 0.2s" onfocus="this.style.top='0'" onblur="this.style.top='-40px'">Skip to main content</a>
+
 <!-- GTM: Paste Google Tag Manager <noscript> snippet here (body open) -->
 
 <!-- ── Nav ──────────────────────────────────────────── -->
-<nav class="nav" id="nav">
+<nav class="nav" id="nav" role="navigation" aria-label="Main navigation">
   <div class="nav__inner">
     <a href="/" class="nav__logo">Portal<em>Kit</em></a>
     <div class="nav__right">
@@ -1076,6 +1079,7 @@
 </nav>
 
 <!-- ── Hero ─────────────────────────────────────────── -->
+<main id="main-content">
 <section class="hero" id="hero">
   <div class="hero__inner">
 
@@ -1521,7 +1525,7 @@
     <div class="faq__list">
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           Do my clients need to create an account?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1533,7 +1537,7 @@
       </div>
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           Can I use my own branding?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1545,7 +1549,7 @@
       </div>
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           How does payment collection work?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1557,31 +1561,31 @@
       </div>
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           What's included in the free plan?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
         <div class="faq__a">
-          <p class="faq__a-inner">Everything — contracts, invoices, messaging, shot lists, timelines, and more — for 1 active client. No credit card, no expiry. Great for testing or just starting out.</p>
+          <p class="faq__a-inner">Everything — contracts, invoices, messaging, shot lists, timelines, and more — for up to 3 clients. No credit card, no expiry. Great for testing or just starting out.</p>
         </div>
       </div>
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           Is there a limit on how many clients I can have?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
         <div class="faq__a">
-          <p class="faq__a-inner">Free plan supports 1 active client. Pro is unlimited — 1 client or 100, same $39/mo.</p>
+          <p class="faq__a-inner">Free plan supports up to 3 clients total. Pro is unlimited — 1 client or 100, same $39/mo.</p>
         </div>
       </div>
 
       <div class="faq__item">
-        <button class="faq__q">
+        <button class="faq__q" aria-expanded="false">
           What happens after my free trial?
           <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <line class="faq__vline" x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1595,6 +1599,8 @@
     </div>
   </div>
 </section>
+
+</main>
 
 <!-- ── Footer ────────────────────────────────────────── -->
 <footer class="footer">
@@ -1617,6 +1623,7 @@
         <ul class="footer__links">
           <li><a href="/privacy">Privacy Policy</a></li>
           <li><a href="/terms">Terms of Service</a></li>
+          <li><a href="/accessibility">Accessibility</a></li>
         </ul>
       </div>
     </div>
@@ -1668,8 +1675,14 @@
     btn.addEventListener('click', () => {
       const item = btn.closest('.faq__item');
       const wasOpen = item.classList.contains('open');
-      document.querySelectorAll('.faq__item.open').forEach(i => i.classList.remove('open'));
-      if (!wasOpen) item.classList.add('open');
+      document.querySelectorAll('.faq__item.open').forEach(i => {
+        i.classList.remove('open');
+        i.querySelector('.faq__q').setAttribute('aria-expanded', 'false');
+      });
+      if (!wasOpen) {
+        item.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
     });
   });
 </script>

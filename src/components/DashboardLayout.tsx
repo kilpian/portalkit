@@ -300,7 +300,7 @@ export default function DashboardLayout() {
       )}
 
       {/* Main nav */}
-      <nav style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
+      <nav role="navigation" aria-label="Main navigation" style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
         {NAV.map(item => (
           <NavItem
             key={item.to}

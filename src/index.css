@@ -220,7 +220,7 @@ img, svg {
 
 /* ─── Focus Ring ─────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 3px solid #1B4332;
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }

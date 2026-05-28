@@ -1053,7 +1053,9 @@ export function ClientPortalContent({ token }: { token: string }) {
             <a href="https://getportalkit.com/privacy" target="_blank" rel="noopener noreferrer"
                style={{ fontSize: 12, color: '#6B7280', marginRight: 16, textDecoration: 'none' }}>Privacy Policy</a>
             <a href="https://getportalkit.com/terms" target="_blank" rel="noopener noreferrer"
-               style={{ fontSize: 12, color: '#6B7280', textDecoration: 'none' }}>Terms of Service</a>
+               style={{ fontSize: 12, color: '#6B7280', marginRight: 16, textDecoration: 'none' }}>Terms of Service</a>
+            <a href="https://getportalkit.com/accessibility" target="_blank" rel="noopener noreferrer"
+               style={{ fontSize: 12, color: '#6B7280', textDecoration: 'none' }}>Accessibility</a>
           </div>
           <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>
             This portal is private and secure. Powered by{' '}

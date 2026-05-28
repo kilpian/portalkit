@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1B4332">
+  <title>Accessibility Statement — PortalKit</title>
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: #FDFAF5;
+      color: #1A1208;
+      line-height: 1.7;
+      padding: 0;
+    }
+    :focus-visible {
+      outline: 3px solid #1B4332;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+    .nav {
+      background: #FDFAF5;
+      border-bottom: 1px solid rgba(27,67,50,0.12);
+      padding: 0 24px;
+    }
+    .nav__inner {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      height: 60px;
+    }
+    .nav__logo {
+      font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      color: #1B4332;
+      text-decoration: none;
+      letter-spacing: -0.03em;
+    }
+    .nav__logo em { font-style: normal; color: #C9A84C; }
+    main {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 800;
+      color: #1B4332;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .updated {
+      font-size: 13px;
+      color: #6B7280;
+      margin-bottom: 40px;
+    }
+    h2 {
+      font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #1B4332;
+      margin-top: 40px;
+      margin-bottom: 12px;
+    }
+    p { margin-bottom: 16px; color: #374151; }
+    ul { margin-bottom: 16px; padding-left: 24px; color: #374151; }
+    li { margin-bottom: 8px; }
+    a { color: #1B4332; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+    .contact-box {
+      background: rgba(27,67,50,0.06);
+      border: 1px solid rgba(27,67,50,0.15);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-top: 32px;
+    }
+    .contact-box p { margin-bottom: 8px; }
+    .contact-box p:last-child { margin-bottom: 0; }
+    footer {
+      border-top: 1px solid rgba(27,67,50,0.12);
+      text-align: center;
+      padding: 24px;
+      font-size: 13px;
+      color: #6B7280;
+    }
+    footer a { color: #1B4332; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+<nav role="navigation" aria-label="Main navigation" class="nav">
+  <div class="nav__inner">
+    <a href="/" class="nav__logo">Portal<em>Kit</em></a>
+  </div>
+</nav>
+
+<main id="main-content">
+  <h1>Accessibility Statement</h1>
+  <p class="updated">Last updated: May 2026</p>
+
+  <p>
+    Kilpian LLC ("PortalKit") is committed to ensuring digital accessibility for people with disabilities.
+    We continually improve the user experience for everyone and apply relevant accessibility standards.
+  </p>
+
+  <h2>Conformance Status</h2>
+  <p>
+    We aim to conform to the <strong>Web Content Accessibility Guidelines (WCAG) 2.1 Level AA</strong>.
+    These guidelines explain how to make web content more accessible to people with disabilities.
+    Conformance with these guidelines helps make the web more user-friendly for everyone.
+  </p>
+
+  <h2>Measures We Take</h2>
+  <ul>
+    <li>Skip navigation links to allow keyboard users to bypass repeated content</li>
+    <li>Semantic HTML landmarks (<code>main</code>, <code>nav</code>, <code>footer</code>) for screen reader navigation</li>
+    <li>Sufficient color contrast ratios (4.5:1 minimum for text)</li>
+    <li>Visible focus indicators for all interactive elements</li>
+    <li>Descriptive aria-labels on icon-only buttons</li>
+    <li>Keyboard-accessible navigation throughout the application</li>
+    <li>Form fields with associated labels</li>
+    <li>Alt text on meaningful images</li>
+  </ul>
+
+  <h2>Known Limitations</h2>
+  <p>
+    While we strive for full WCAG 2.1 AA compliance, some areas are still being improved.
+    We are actively working to address any gaps and welcome feedback to help us prioritize fixes.
+  </p>
+
+  <h2>Technical Specifications</h2>
+  <p>
+    PortalKit relies on the following technologies for conformance with WCAG 2.1:
+  </p>
+  <ul>
+    <li>HTML5</li>
+    <li>CSS3</li>
+    <li>WAI-ARIA</li>
+    <li>JavaScript (React)</li>
+  </ul>
+
+  <h2>Feedback and Contact</h2>
+  <p>
+    We welcome your feedback on the accessibility of PortalKit. If you experience any barriers,
+    please let us know and we will work to address the issue promptly.
+  </p>
+
+  <div class="contact-box">
+    <p><strong>Email:</strong> <a href="mailto:accessibility@kilpian.com">accessibility@kilpian.com</a></p>
+    <p><strong>Response time:</strong> We aim to respond within 2 business days.</p>
+    <p><strong>Company:</strong> Kilpian LLC, operating PortalKit (<a href="https://getportalkit.com">getportalkit.com</a>)</p>
+  </div>
+
+  <h2>Formal Complaints</h2>
+  <p>
+    If you are not satisfied with our response, you may contact the relevant enforcement authority
+    in your jurisdiction. In the United States, you may contact the
+    <a href="https://www.ada.gov" target="_blank" rel="noopener noreferrer">U.S. Department of Justice ADA Information Line</a>.
+  </p>
+</main>
+
+<footer>
+  <p>
+    &copy; 2026 PortalKit &mdash;
+    <a href="/privacy">Privacy Policy</a> &middot;
+    <a href="/terms">Terms of Service</a> &middot;
+    <a href="/">Home</a>
+  </p>
+</footer>
+
+</body>
+</html>

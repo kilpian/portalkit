@@ -217,7 +217,9 @@ export default function Dashboard() {
 
       {user?.plan === 'free' && (
         <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>You're on the free plan (1 client). Upgrade to $39/mo for unlimited clients.</p>
+          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>
+            Free plan — {stats?.total_clients_created ?? 0} of 3 clients used. Upgrade to Pro for unlimited.
+          </p>
           <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--gold-border)', background: 'var(--gold)', color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
             {upgrading ? 'Loading…' : 'Upgrade Now →'}
           </button>
