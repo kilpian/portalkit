@@ -1171,6 +1171,16 @@ async function requireAuth(req, res, next) {
       }
     }
 
+    if (req.user.plan === 'free') {
+      if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
+        return res.status(402).json({
+          error: 'Subscription required',
+          message: 'Please upgrade to a paid plan to continue.',
+          upgradeRequired: true,
+        })
+      }
+    }
+
     if (req.user.plan === 'grace' && req.user.grace_period_ends_at) {
       if (new Date() > new Date(req.user.grace_period_ends_at)) {
         if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
@@ -1531,7 +1541,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     const [clients, invoices, user, upcomingMain, upcomingEvents, stageCounts] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
       pool.query("SELECT COUNT(*) FROM invoices WHERE user_id=$1 AND status != 'paid'", [req.userId]),
-      pool.query('SELECT plan, trial_ends_at, total_clients_created FROM users WHERE id=$1', [req.userId]),
+      pool.query('SELECT plan, trial_ends_at FROM users WHERE id=$1', [req.userId]),
       pool.query(`SELECT COUNT(*) FROM clients WHERE user_id=$1 AND event_date >= CURRENT_DATE AND event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
       pool.query(`SELECT COUNT(*) FROM client_events ce JOIN clients c ON ce.client_id = c.id WHERE c.user_id=$1 AND ce.event_date >= CURRENT_DATE AND ce.event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
       pool.query(`SELECT COALESCE(stage,'inquiry') as stage, COUNT(*) FROM clients WHERE user_id=$1 GROUP BY stage`, [req.userId]),
@@ -1554,7 +1564,6 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       upcoming_events: parseInt(upcomingMain.rows[0].count, 10) + parseInt(upcomingEvents.rows[0].count, 10),
       trial_days_remaining,
       pipeline_counts,
-      total_clients_created: parseInt(u?.total_clients_created ?? 0, 10),
     })
   } catch (err) {
     console.error('Dashboard stats error:', err)
@@ -1581,13 +1590,6 @@ app.post('/api/clients', requireAuth, async (req, res) => {
   const { name, email, phone, event_date, event_type, notes } = req.body
   if (!name) return res.status(400).json({ error: 'Client name is required' })
   try {
-    if (req.user.plan === 'free') {
-      const userRow = await pool.query('SELECT total_clients_created FROM users WHERE id=$1', [req.userId])
-      const totalCreated = parseInt(userRow.rows[0]?.total_clients_created ?? 0, 10)
-      if (totalCreated >= 3) {
-        return res.status(402).json({ error: 'Free plan allows up to 3 clients total. Upgrade to Pro for unlimited.', upgradeRequired: true })
-      }
-    }
     const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
     const result = await pool.query(
       `INSERT INTO clients (user_id, name, email, phone, event_date, event_type, notes, portal_token)
@@ -1596,7 +1598,6 @@ app.post('/api/clients', requireAuth, async (req, res) => {
       [req.userId, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(notes) || null, portalToken]
     )
     const client = result.rows[0]
-    await pool.query('UPDATE users SET total_clients_created = total_clients_created + 1 WHERE id=$1', [req.userId])
 
     if (email && resend) {
       const wsRes = await pool.query('SELECT * FROM workflow_settings WHERE user_id=$1', [req.userId])
@@ -2753,24 +2754,6 @@ app.post('/api/admin/test-reminders', async (req, res) => {
   }
 })
 
-// ── FREE PLAN ─────────────────────────────────────────────────
-
-app.post('/api/users/choose-free-plan', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      "UPDATE users SET plan='free', trial_ends_at=NULL WHERE id=$1 AND plan='trial' RETURNING *",
-      [req.userId]
-    )
-    if (!result.rows.length) {
-      const current = await pool.query('SELECT * FROM users WHERE id=$1', [req.userId])
-      return res.json(current.rows[0])
-    }
-    res.json(result.rows[0])
-  } catch (err) {
-    console.error('Choose free plan error:', err)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
 
 // ── CRM PIPELINE ──────────────────────────────────────────────
 

@@ -105,6 +105,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
   const [clientSecret, setClientSecret] = useState('')
   const [stripeError, setStripeError] = useState('')
+  const [businessNameError, setBusinessNameError] = useState('')
   const [agreedTerms, setAgreedTerms] = useState(false)
   const [agreedPrivacy, setAgreedPrivacy] = useState(false)
   const [agreedBilling, setAgreedBilling] = useState(false)
@@ -121,7 +122,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   }
 
   const handleStep1 = async () => {
-    if (!businessName.trim()) return
+    if (!businessName.trim()) {
+      setBusinessNameError('Please enter your business or studio name')
+      return
+    }
+    setBusinessNameError('')
     setSaving(true)
     setStripeError('')
     try {
@@ -161,21 +166,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     onComplete()
   }
 
-  const handleFreePlan = async () => {
-    setSaving(true)
-    try {
-      const res = await authFetch('/api/users/choose-free-plan', { method: 'post' })
-      setUser(res.data)
-      posthog.capture('onboarding_chose_free_plan')
-      onComplete()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      setStripeError(msg)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   })
@@ -200,7 +190,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
               <div style={{ marginBottom: 18 }}>
                 <label className="field-label">Business name <span style={{ color: 'var(--color-red)' }}>*</span></label>
-                <input className="input" type="text" placeholder="Your Photography Studio" value={businessName} onChange={e => setBusinessName(e.target.value)} autoFocus />
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Your Photography Studio"
+                  value={businessName}
+                  onChange={e => { setBusinessName(e.target.value); if (e.target.value.trim()) setBusinessNameError('') }}
+                  autoFocus
+                />
+                {businessNameError && (
+                  <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 4 }}>{businessNameError}</p>
+                )}
               </div>
 
               <div style={{ marginBottom: 18 }}>
@@ -335,19 +335,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 8, textAlign: 'center' }}>{stripeError}</p>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+              <div style={{ marginTop: 14 }}>
                 <button
                   onClick={() => { setStep(1); setStripeError('') }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer' }}
                 >
                   ← Back
-                </button>
-                <button
-                  onClick={handleFreePlan}
-                  disabled={saving}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  {saving ? 'Setting up…' : 'Use free plan (1 client)'}
                 </button>
               </div>
             </>

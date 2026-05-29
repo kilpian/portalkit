@@ -128,7 +128,9 @@ export default function Dashboard() {
   // column is missing (e.g. before migration runs) or returns undefined for any reason.
   // This eliminates the race condition where stats loaded before user.
   const userLoaded = !!user
-  const showOnboarding = userLoaded && !onboardingDone && user.onboarding_completed !== true
+  const showOnboarding = userLoaded && !onboardingDone && (
+    user.onboarding_completed !== true || !user.stripe_subscription_id
+  )
 
   if (import.meta.env.DEV) {
     console.log('Onboarding check:', {
@@ -143,19 +145,23 @@ export default function Dashboard() {
 
   if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
-  const trialExpired = (user?.plan === 'trial' && days === 0) || user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace'
+  const trialExpired = (user?.plan === 'trial' && days === 0) || user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   const blockedHeading = user?.plan === 'cancelled'
     ? 'Your subscription has been cancelled'
     : user?.plan === 'grace'
     ? 'Payment failed — please update your card'
+    : user?.plan === 'free'
+    ? 'Free plan no longer available'
     : 'Your trial has ended'
 
   const blockedBody = user?.plan === 'cancelled'
     ? 'Your PortalKit subscription has ended. Resubscribe to regain access to your client portals, contracts, and invoices.'
     : user?.plan === 'grace'
     ? 'Your last payment didn\'t go through. Please update your payment method to keep your account active.'
+    : user?.plan === 'free'
+    ? 'We\'ve moved to a paid-only model with a 14-day free trial. Please upgrade to continue using PortalKit — all your data is safe.'
     : 'Your 14-day free trial has expired. Upgrade to continue accessing your client portals, contracts, and invoices.'
 
   const blockedIcon = user?.plan === 'cancelled' ? '❌' : user?.plan === 'grace' ? '💳' : '⏰'
@@ -215,16 +221,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {user?.plan === 'free' && (
-        <div style={{ background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, color: 'var(--gold-dim)', fontWeight: 600 }}>
-            Free plan — {stats?.total_clients_created ?? 0} of 3 clients used. Upgrade to Pro for unlimited.
-          </p>
-          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--gold-border)', background: 'var(--gold)', color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {upgrading ? 'Loading…' : 'Upgrade Now →'}
-          </button>
-        </div>
-      )}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>

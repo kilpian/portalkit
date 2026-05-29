@@ -14,7 +14,6 @@ export interface DashboardStats {
   upcoming_events: number
   trial_days_remaining: number | null
   pipeline_counts?: { inquiry: number; consultation: number; booked: number; in_progress: number; delivered: number; archived: number }
-  total_clients_created?: number
 }
 
 export interface Client {
@@ -348,6 +347,7 @@ export interface PortalUser {
   plan?: string
   trial_ends_at?: string
   stripe_customer_id?: string
+  stripe_subscription_id?: string | null
   logo_url?: string | null
   brand_color?: string | null
   onboarding_completed?: boolean
