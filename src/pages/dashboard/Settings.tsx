@@ -40,6 +40,8 @@ export default function Settings() {
   // Billing
   const [billingLoading, setBillingLoading] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [switchingAnnual, setSwitchingAnnual] = useState(false)
+  const [switchMsg, setSwitchMsg] = useState('')
 
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
@@ -156,6 +158,22 @@ export default function Settings() {
       window.location.href = res.data.url
     } catch {
       setBillingLoading(false)
+    }
+  }
+
+  const handleSwitchToAnnual = async () => {
+    if (!window.confirm('Switch to annual billing? You\'ll be charged the prorated annual amount today and save $120/year going forward.')) return
+    setSwitchingAnnual(true)
+    setSwitchMsg('')
+    try {
+      await authFetch('/api/stripe/switch-to-annual', { method: 'post' })
+      if (user) setUser({ ...user, billing_cycle: 'annual' })
+      setSwitchMsg('You\'re now on annual billing — saving $120/year. 🎉')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setSwitchMsg('Could not switch: ' + (msg || 'Please try again'))
+    } finally {
+      setSwitchingAnnual(false)
     }
   }
 
@@ -300,7 +318,30 @@ export default function Settings() {
                 )}
               </div>
               {isActive ? (
-                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>You're on the PortalKit All-In plan — unlimited clients and portals.</p>
+                <>
+                  <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>You're on the PortalKit All-In plan — unlimited clients and portals.</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>
+                    Billing: <strong style={{ color: 'var(--text-primary)' }}>{user?.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}</strong>
+                    {' · '}{user?.billing_cycle === 'annual' ? '$348/year' : '$39/month'}
+                  </p>
+                  {user?.billing_cycle !== 'annual' && (
+                    <button
+                      onClick={handleSwitchToAnnual}
+                      disabled={switchingAnnual}
+                      style={{
+                        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                        color: '#1B4332', background: 'transparent', border: '1.5px solid #1B4332',
+                        cursor: switchingAnnual ? 'not-allowed' : 'pointer', opacity: switchingAnnual ? 0.6 : 1,
+                      }}
+                    >
+                      {switchingAnnual ? 'Switching…' : 'Switch to Annual — Save $120/year →'}
+                    </button>
+                  )}
+                  {switchMsg && (
+                    <p style={{ fontSize: 13, color: 'var(--color-green)', marginTop: 8 }}>{switchMsg}</p>
+                  )}
+                </>
               ) : (
                 <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
                   {days > 0

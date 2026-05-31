@@ -516,6 +516,10 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_cycle TEXT DEFAULT 'monthly';
+      `).catch(() => {})
+
+      await pool.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_today INTEGER DEFAULT 0;
       `).catch(() => {})
 
@@ -1229,7 +1233,7 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
          brand_color=COALESCE($5, brand_color),
          onboarding_completed=CASE WHEN $7 THEN $8 ELSE onboarding_completed END
        WHERE id=$6
-       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, onboarding_completed, stripe_connect_id, stripe_connect_enabled, booking_username, created_at`,
+       RETURNING id, clerk_id, full_name, email, business_name, plan, trial_ends_at, stripe_customer_id, logo_url, brand_color, billing_cycle, onboarding_completed, stripe_connect_id, stripe_connect_enabled, booking_username, created_at`,
       [
         full_name ? sanitize(full_name) : null,
         business_name !== undefined ? (sanitize(business_name) || null) : null,
@@ -1457,7 +1461,8 @@ app.post('/api/stripe/connect/disconnect', requireAuth, async (req, res) => {
 
 app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
   try {
-    console.log('💳 Creating setup intent for user:', req.user.id)
+    const { billingCycle = 'monthly' } = req.body
+    console.log('💳 Creating setup intent for user:', req.user.id, 'cycle:', billingCycle)
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
 
     let customerId = req.user.stripe_customer_id
@@ -1474,7 +1479,7 @@ app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
       payment_method_types: ['card'],
-      metadata: { user_id: String(req.user.id) },
+      metadata: { user_id: String(req.user.id), billing_cycle: billingCycle },
     })
 
     res.json({ clientSecret: setupIntent.client_secret, customerId })
@@ -1487,13 +1492,15 @@ app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
 app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
-    const { paymentMethodId, immediate } = req.body
+    const { paymentMethodId, immediate, billingCycle = 'monthly' } = req.body
     if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId required' })
 
     const customerId = req.user.stripe_customer_id
     if (!customerId) return res.status(400).json({ error: 'No Stripe customer found' })
 
-    const priceId = process.env.STRIPE_PRICE_PORTALKIT
+    const priceId = billingCycle === 'annual'
+      ? process.env.STRIPE_PRICE_PORTALKIT_ANNUAL
+      : process.env.STRIPE_PRICE_PORTALKIT
     if (!priceId) return res.status(500).json({ error: 'Price not configured' })
 
     await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId })
@@ -1509,7 +1516,7 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
         await stripe.subscriptions.update(existingSub, {
           default_payment_method: paymentMethodId,
         })
-        await pool.query("UPDATE users SET plan='active' WHERE id=$1", [req.user.id])
+        await pool.query("UPDATE users SET plan='active', billing_cycle=$1 WHERE id=$2", [billingCycle, req.user.id])
         console.log(`💳 Subscription reactivated for user ${req.user.id}: ${existingSub}`)
         return res.json({ success: true, subscription: existingSub })
       }
@@ -1517,11 +1524,11 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
         customer: customerId,
         items: [{ price: priceId }],
         default_payment_method: paymentMethodId,
-        metadata: { user_id: String(req.user.id) },
+        metadata: { user_id: String(req.user.id), billing_cycle: billingCycle },
       })
       await pool.query(
-        'UPDATE users SET stripe_subscription_id=$1, plan=$2 WHERE id=$3',
-        [subscription.id, 'active', req.user.id]
+        'UPDATE users SET stripe_subscription_id=$1, plan=$2, billing_cycle=$3 WHERE id=$4',
+        [subscription.id, 'active', billingCycle, req.user.id]
       )
       console.log(`💳 Subscription activated for user ${req.user.id}: ${subscription.id}`)
       return res.json({ success: true, subscription: subscription.id })
@@ -1531,18 +1538,46 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
       customer: customerId,
       items: [{ price: priceId }],
       trial_period_days: 14,
-      metadata: { user_id: String(req.user.id) },
+      metadata: { user_id: String(req.user.id), billing_cycle: billingCycle },
     })
 
     await pool.query(
-      'UPDATE users SET stripe_subscription_id=$1, plan=$2 WHERE id=$3',
-      [subscription.id, 'trial', req.user.id]
+      'UPDATE users SET stripe_subscription_id=$1, plan=$2, billing_cycle=$3 WHERE id=$4',
+      [subscription.id, 'trial', billingCycle, req.user.id]
     )
 
-    console.log(`💳 Subscription created for user ${req.user.id}: ${subscription.id}`)
+    console.log(`💳 Subscription created for user ${req.user.id}: ${subscription.id} (${billingCycle})`)
     res.json({ success: true, subscription: subscription.id })
   } catch (err) {
     console.error('💳 Confirm setup error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/stripe/switch-to-annual', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const annualPriceId = process.env.STRIPE_PRICE_PORTALKIT_ANNUAL
+    if (!annualPriceId) return res.status(500).json({ error: 'Annual price not configured' })
+
+    const subId = req.user.stripe_subscription_id
+    if (!subId || subId === 'manual_activation') {
+      return res.status(400).json({ error: 'No active subscription to switch' })
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subId)
+    const itemId = subscription.items.data[0].id
+
+    await stripe.subscriptions.update(subId, {
+      items: [{ id: itemId, price: annualPriceId }],
+      proration_behavior: 'always_invoice',
+    })
+
+    await pool.query("UPDATE users SET billing_cycle='annual' WHERE id=$1", [req.user.id])
+    console.log(`💳 Switched user ${req.user.id} to annual billing`)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('💳 Switch to annual error:', err)
     res.status(500).json({ error: err.message })
   }
 })

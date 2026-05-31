@@ -14,7 +14,7 @@ interface OnboardingProps {
   onComplete: () => void
 }
 
-function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg: string) => void }) {
+function CardForm({ onSuccess, onError, billingCycle }: { onSuccess: () => void; onError: (msg: string) => void; billingCycle: 'monthly' | 'annual' }) {
   const stripe = useStripe()
   const elements = useElements()
   const { authFetch } = useApi()
@@ -40,7 +40,7 @@ function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg
 
       await authFetch('/api/stripe/confirm-setup', {
         method: 'post',
-        data: { paymentMethodId: paymentMethod.id },
+        data: { paymentMethodId: paymentMethod.id, billingCycle },
       })
 
       onSuccess()
@@ -99,6 +99,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const { setUser } = usePortalAuth()
   const { authFetch } = useApi()
   const [step, setStep] = useState(1)
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
   const [saving, setSaving] = useState(false)
   const [businessName, setBusinessName] = useState('')
   const [brandColor, setBrandColor] = useState('#1B4332')
@@ -138,7 +139,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       setUser(profileRes.data)
       posthog.capture('onboarding_step1_complete', { business_name: businessName.trim() })
 
-      const setupRes = await authFetch('/api/stripe/create-setup-intent', { method: 'post' })
+      const setupRes = await authFetch('/api/stripe/create-setup-intent', { method: 'post', data: { billingCycle } })
       setClientSecret(setupRes.data.clientSecret)
       setStep(2)
     } catch (err: unknown) {
@@ -278,15 +279,58 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 Add your card to activate your 14-day free trial.
               </p>
 
+              {/* Billing cycle toggle */}
+              <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 8, padding: 4, marginBottom: 20, position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('annual')}
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: 'none', borderRadius: 6, padding: '10px 12px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    background: billingCycle === 'annual' ? 'white' : 'transparent',
+                    color: billingCycle === 'annual' ? '#1B4332' : '#6B7280',
+                    boxShadow: billingCycle === 'annual' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  Annual
+                  <span style={{ marginLeft: 6, background: '#1B4332', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99 }}>SAVE 26%</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('monthly')}
+                  style={{
+                    flex: 1, border: 'none', borderRadius: 6, padding: '10px 12px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    background: billingCycle === 'monthly' ? 'white' : 'transparent',
+                    color: billingCycle === 'monthly' ? '#1B4332' : '#6B7280',
+                    boxShadow: billingCycle === 'monthly' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  Monthly
+                </button>
+              </div>
+
+              {/* Dynamic pricing display */}
+              <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 16px', background: '#EAF3DE', borderRadius: 8 }}>
+                {billingCycle === 'annual' ? (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#1B4332' }}>$29<span style={{ fontSize: 14, fontWeight: 600, color: '#4B5563' }}>/month</span></div>
+                    <div style={{ fontSize: 13, color: '#4B5563', marginTop: 2 }}>$348 billed today</div>
+                    <div style={{ fontSize: 12, color: '#1B4332', fontWeight: 600, marginTop: 2 }}>You save $120/year vs monthly</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#1B4332' }}>$39<span style={{ fontSize: 14, fontWeight: 600, color: '#4B5563' }}>/month</span></div>
+                    <div style={{ fontSize: 13, color: '#4B5563', marginTop: 2 }}>billed monthly</div>
+                  </>
+                )}
+              </div>
+
               {/* $0 today callout */}
-              <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, padding: '12px 14px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 18, lineHeight: 1 }}>🎉</span>
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: '#166534', margin: 0 }}>$0 due today</p>
-                  <p style={{ fontSize: 12, color: '#15803D', margin: '2px 0 0', lineHeight: 1.4 }}>
-                    Your 14-day free trial starts now. We'll charge $39/mo on {trialEndDate} — cancel anytime before then.
-                  </p>
-                </div>
+              <div style={{ background: '#EAF3DE', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#166534', margin: 0 }}>💚 $0 due today</p>
+                <p style={{ fontSize: 12, color: '#15803D', margin: '2px 0 0', lineHeight: 1.4 }}>
+                  Your 14-day free trial starts now. First charge of {billingCycle === 'annual' ? '$348' : '$39'} on {trialEndDate} — cancel anytime before then.
+                </p>
               </div>
 
               <Elements
@@ -299,7 +343,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   },
                 }}
               >
-                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} />
+                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} billingCycle={billingCycle} />
               </Elements>
 
               <p style={{ marginTop: 12, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
@@ -307,7 +351,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Terms</a>
                 {' '}and{' '}
                 <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Privacy Policy</a>.
-                {' '}$39/mo billed after trial ends on {trialEndDate}.
+                {' '}{billingCycle === 'annual' ? '$348/yr' : '$39/mo'} billed after trial ends on {trialEndDate}.
               </p>
 
               {stripeError && (

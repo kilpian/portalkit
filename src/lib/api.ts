@@ -350,6 +350,7 @@ export interface PortalUser {
   full_name: string
   business_name?: string
   plan?: string
+  billing_cycle?: string
   trial_ends_at?: string
   stripe_customer_id?: string
   stripe_subscription_id?: string | null

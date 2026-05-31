@@ -157,6 +157,16 @@
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(201,168,76,.35);
     }
+    .btn--outline {
+      background: transparent;
+      color: var(--green);
+      border: 1.5px solid var(--green);
+    }
+    .btn--outline:hover {
+      background: var(--green);
+      color: var(--cream);
+      transform: translateY(-2px);
+    }
     .btn--lg { padding: 16px 36px; font-size: 1rem; }
     .btn--full { width: 100%; }
 
@@ -1469,17 +1479,18 @@
       <h2 class="section__h animate-in" data-d="1">Simple, honest pricing.</h2>
       <p class="section__sub animate-in" data-d="2" style="max-width:480px;margin:0 auto;">14-day free trial. $0 today. Cancel anytime before day 15 and pay nothing.</p>
     </div>
-    <div class="pricing__wrap">
+    <div class="pricing__wrap" style="max-width:780px;gap:24px;flex-wrap:wrap;align-items:stretch;">
 
-      <!-- Pro -->
-      <div class="pricing-card animate-in" data-d="1" style="text-align:left;border-color:var(--green);box-shadow:0 0 0 2px var(--green),var(--shadow);width:100%;">
-        <span class="pricing-card__pill" style="background:var(--green);color:var(--cream);border-color:var(--green);">14-Day Free Trial</span>
-        <div class="pricing-card__name">Pro</div>
+      <!-- Annual (best value) -->
+      <div class="pricing-card animate-in" data-d="1" style="flex:1;min-width:300px;text-align:left;padding:40px 32px;border:2px solid #1B4332;box-shadow:0 0 0 2px var(--green),var(--shadow);">
+        <span class="pricing-card__pill" style="background:var(--green);color:var(--cream);border-color:var(--green);">MOST POPULAR &middot; BEST VALUE</span>
+        <div class="pricing-card__name">Annual</div>
         <div class="pricing-card__price" style="justify-content:flex-start;">
           <span class="pricing-card__cur">$</span>
-          <span class="pricing-card__amt">39</span>
+          <span class="pricing-card__amt">29</span>
           <span class="pricing-card__per">/mo</span>
         </div>
+        <p style="margin:-4px 0 0;color:var(--text-dim);font-size:.95rem;">$348 billed annually &middot; <strong style="color:var(--green);">Save $120/year</strong></p>
         <ul class="pricing-card__features">
           <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Unlimited client portals</li>
           <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>All features unlocked — nothing held back</li>
@@ -1490,6 +1501,29 @@
           <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Priority support</li>
         </ul>
         <a href="/signup" class="btn btn--gold btn--lg btn--full">Start 14-Day Free Trial &rarr;</a>
+        <p class="pricing-card__note" style="text-align:center;">$348/yr after 14 days &middot; Cancel anytime &middot; No surprises</p>
+      </div>
+
+      <!-- Monthly -->
+      <div class="pricing-card animate-in" data-d="2" style="flex:1;min-width:300px;text-align:left;padding:40px 32px;">
+        <span class="pricing-card__pill">14-Day Free Trial</span>
+        <div class="pricing-card__name">Monthly</div>
+        <div class="pricing-card__price" style="justify-content:flex-start;">
+          <span class="pricing-card__cur">$</span>
+          <span class="pricing-card__amt">39</span>
+          <span class="pricing-card__per">/mo</span>
+        </div>
+        <p style="margin:-4px 0 0;color:var(--text-dim);font-size:.95rem;">Billed monthly &middot; No long-term commitment</p>
+        <ul class="pricing-card__features">
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Unlimited client portals</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>All features unlocked — nothing held back</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Contracts, invoices, messaging</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Shot lists, timelines &amp; vendor sheets</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Booking, proposals &amp; workflows</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>White-label (remove PortalKit branding)</li>
+          <li class="pricing-card__feat"><svg class="check" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Priority support</li>
+        </ul>
+        <a href="/signup" class="btn btn--outline btn--lg btn--full">Start 14-Day Free Trial &rarr;</a>
         <p class="pricing-card__note" style="text-align:center;">$39/mo after 14 days &middot; Cancel anytime &middot; No surprises</p>
       </div>
 
