@@ -4,6 +4,7 @@ import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../context/AuthContext'
 import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'
+import Onboarding from '../pages/dashboard/Onboarding'
 
 // FIX 2: reordered — Dashboard, Messages, Clients, Contracts, Invoices, Files
 const NAV = [
@@ -148,9 +149,29 @@ const SETTINGS_ICON = (
 )
 
 // Defined OUTSIDE DashboardLayout so its reference is stable across renders
-function NavItem({ to, end, label, icon, collapsed, onClick, badge }: {
-  to: string; end?: boolean; label: string; icon: React.ReactNode; collapsed?: boolean; onClick?: () => void; badge?: number
+function NavItem({ to, end, label, icon, collapsed, onClick, badge, disabled }: {
+  to: string; end?: boolean; label: string; icon: React.ReactNode; collapsed?: boolean; onClick?: () => void; badge?: number; disabled?: boolean
 }) {
+  if (disabled) {
+    return (
+      <div
+        title="Complete setup to access this feature"
+        style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: 10, padding: collapsed ? '10px 0' : '9px 10px',
+          borderRadius: 7, fontSize: 14, fontWeight: 500,
+          marginBottom: 2, opacity: 0.3, cursor: 'not-allowed',
+          color: 'rgba(255,255,255,0.55)',
+          borderLeft: '3px solid transparent',
+          userSelect: 'none',
+        }}
+      >
+        <span style={{ flexShrink: 0, display: 'flex' }}>{icon}</span>
+        {!collapsed && label}
+      </div>
+    )
+  }
   return (
     <NavLink
       to={to}
@@ -258,6 +279,7 @@ export default function DashboardLayout() {
 
   const days = trialDaysLeft(portalUser)
   const isPaid = portalUser?.plan === 'active'
+  const onboardingComplete = !portalUser || portalUser.onboarding_completed === true
 
   // FIX 3: derive display info directly from Clerk
   const displayName = clerkUser?.fullName || clerkUser?.firstName || clerkUser?.emailAddresses?.[0]?.emailAddress || 'User'
@@ -308,6 +330,7 @@ export default function DashboardLayout() {
             collapsed={isCollapsed}
             onClick={() => setMobileOpen(false)}
             badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
+            disabled={!onboardingComplete && item.to !== '/dashboard'}
           />
         ))}
       </nav>
@@ -523,6 +546,17 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Onboarding gate — full-screen, non-dismissible */}
+      {!onboardingComplete && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg-primary)' }}
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => { if (e.key === 'Escape') e.stopPropagation() }}
+        >
+          <Onboarding onComplete={() => {}} />
+        </div>
+      )}
 
       <style>{`
         @media (max-width: 767px) {

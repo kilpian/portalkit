@@ -14,7 +14,7 @@ interface OnboardingProps {
   onComplete: () => void
 }
 
-function CardForm({ onSuccess, onError, bothAgreed }: { onSuccess: () => void; onError: (msg: string) => void; bothAgreed: boolean }) {
+function CardForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg: string) => void }) {
   const stripe = useStripe()
   const elements = useElements()
   const { authFetch } = useApi()
@@ -22,7 +22,7 @@ function CardForm({ onSuccess, onError, bothAgreed }: { onSuccess: () => void; o
   const [cardError, setCardError] = useState('')
 
   const handleSubmit = async () => {
-    if (!stripe || !elements || !bothAgreed) return
+    if (!stripe || !elements) return
     setSaving(true)
     setCardError('')
 
@@ -52,7 +52,7 @@ function CardForm({ onSuccess, onError, bothAgreed }: { onSuccess: () => void; o
     }
   }
 
-  const disabled = saving || !stripe || !bothAgreed
+  const disabled = saving || !stripe
 
   return (
     <div>
@@ -108,10 +108,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [businessNameError, setBusinessNameError] = useState('')
   const [agreedTerms, setAgreedTerms] = useState(false)
   const [agreedPrivacy, setAgreedPrivacy] = useState(false)
-  const [agreedBilling, setAgreedBilling] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
-
-  const bothAgreed = agreedTerms && agreedBilling
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -302,34 +299,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   },
                 }}
               >
-                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} bothAgreed={bothAgreed} />
+                <CardForm onSuccess={handlePaymentSuccess} onError={setStripeError} />
               </Elements>
 
-              {/* Agreement checkboxes */}
-              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={agreedTerms}
-                    onChange={e => setAgreedTerms(e.target.checked)}
-                    style={{ marginTop: 2, accentColor: '#1B4332', flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4 }}>
-                    I agree to the <a href="https://getportalkit.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Terms of Service</a> and <a href="https://getportalkit.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Privacy Policy</a>
-                  </span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={agreedBilling}
-                    onChange={e => setAgreedBilling(e.target.checked)}
-                    style={{ marginTop: 2, accentColor: '#1B4332', flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4 }}>
-                    I understand my card will be charged $39/mo after the free trial ends on {trialEndDate}
-                  </span>
-                </label>
-              </div>
+              <p style={{ marginTop: 12, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
+                By starting your trial you agree to our{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Terms</a>
+                {' '}and{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>Privacy Policy</a>.
+                {' '}$39/mo billed after trial ends on {trialEndDate}.
+              </p>
 
               {stripeError && (
                 <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 8, textAlign: 'center' }}>{stripeError}</p>

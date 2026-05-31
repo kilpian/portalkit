@@ -4,7 +4,6 @@ import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, usePolling, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
-import Onboarding from './Onboarding'
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -121,29 +120,6 @@ export default function Dashboard() {
       setUpgrading(false)
     }
   }
-
-  const [onboardingDone, setOnboardingDone] = useState(false)
-  // DB-backed: never evaluate until `user` is fully loaded, then trust onboarding_completed.
-  // Use `!== true` (not `=== false`) so the flag defaults to "show onboarding" when the
-  // column is missing (e.g. before migration runs) or returns undefined for any reason.
-  // This eliminates the race condition where stats loaded before user.
-  const userLoaded = !!user
-  const showOnboarding = userLoaded && !onboardingDone && (
-    user.onboarding_completed !== true || !user.stripe_subscription_id
-  )
-
-  if (import.meta.env.DEV) {
-    console.log('Onboarding check:', {
-      userLoaded,
-      businessName: user?.business_name,
-      totalClients: stats?.total_clients,
-      onboardingCompleted: user?.onboarding_completed,
-      onboardingDone,
-      showOnboarding,
-    })
-  }
-
-  if (showOnboarding) return <Onboarding onComplete={() => setOnboardingDone(true)} />
 
   const trialExpired = (user?.plan === 'trial' && days === 0) || user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3

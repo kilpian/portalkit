@@ -384,8 +384,14 @@ export function useApi() {
         withCredentials: false,
       })
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 402) {
-        window.location.href = '/dashboard/settings'
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 402) {
+          window.location.href = '/dashboard/settings'
+        }
+        if (error.response?.status === 403 && error.response?.data?.error === 'onboarding_required') {
+          window.location.href = '/dashboard'
+          return error.response as never
+        }
       }
       throw error
     }

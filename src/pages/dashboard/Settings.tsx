@@ -40,9 +40,10 @@ export default function Settings() {
   const [billingLoading, setBillingLoading] = useState(false)
   const [upgradeLoading, setUpgradeLoading] = useState(false)
 
-  // Delete
+  // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleteComment, setDeleteComment] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
 
@@ -191,11 +192,14 @@ export default function Settings() {
     }
   }
 
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== 'DELETE') { setDeleteErr('Type DELETE to confirm.'); return }
+  const handleConfirmDelete = async () => {
     setDeleteLoading(true)
+    setDeleteErr('')
     try {
-      await authFetch('/api/users/me', { method: 'delete' })
+      await authFetch('/api/users/me', {
+        method: 'delete',
+        data: { reason: deleteReason, comment: deleteComment },
+      })
       signOut()
     } catch {
       setDeleteErr('Failed to delete account. Please try again.')
@@ -418,7 +422,7 @@ export default function Settings() {
               <p style={{ fontSize: 14, fontWeight: 600, color: '#DC2626', marginBottom: 4 }}>Delete Account</p>
               <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Permanently delete your account and all data. This cannot be undone.</p>
             </div>
-            <button onClick={() => { setDeleteModal(true); setDeleteConfirmText(''); setDeleteErr('') }}
+            <button onClick={() => { setDeleteModal(true); setDeleteReason(''); setDeleteComment(''); setDeleteErr('') }}
               style={{ fontSize: 13, fontWeight: 600, padding: '8px 16px', borderRadius: 8, cursor: 'pointer', color: '#DC2626', background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', flexShrink: 0 }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.12)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
@@ -458,47 +462,64 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Delete Modal */}
+      {/* Exit Survey + Delete Modal */}
       {deleteModal && (
-        <>
-          <div onClick={() => setDeleteModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299, backdropFilter: 'blur(2px)' }} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            zIndex: 300, width: 'min(420px, 90vw)',
-            background: 'var(--bg-elevated)', borderRadius: 14,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-            padding: 28,
-          }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#DC2626', marginBottom: 10, fontFamily: 'var(--font-display)' }}>Delete Account?</h3>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-              This will permanently delete your account, all clients, portals, contracts, invoices, and files. This cannot be undone.
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 12, padding: 28, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1B4332', marginBottom: 8 }}>Before you go…</h3>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.5 }}>
+              Help us improve PortalKit for other photographers. Why are you leaving?
             </p>
-            {deleteErr && <div className="alert alert-error" style={{ marginBottom: 14 }}>{deleteErr}</div>}
-            <div style={{ marginBottom: 20 }}>
-              <label className="field-label" style={{ color: '#DC2626' }}>Type DELETE to confirm</label>
-              <input className="input" type="text" value={deleteConfirmText}
-                onChange={e => setDeleteConfirmText(e.target.value)}
-                placeholder="DELETE"
-                style={{ borderColor: 'rgba(220,38,38,0.3)' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setDeleteModal(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+
+            {(['Too expensive', 'Missing features I need', 'Switching to a different tool', 'Just testing / not ready yet', 'Too complicated to set up', 'My business needs changed', 'Other'] as const).map(reason => (
+              <label key={reason} style={{
+                display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, cursor: 'pointer',
+                fontSize: 13, color: deleteReason === reason ? '#1B4332' : '#374151',
+                fontWeight: deleteReason === reason ? 600 : 400,
+              }}>
+                <input
+                  type="radio"
+                  name="deleteReason"
+                  value={reason}
+                  checked={deleteReason === reason}
+                  onChange={() => setDeleteReason(reason)}
+                  style={{ accentColor: '#1B4332' }}
+                />
+                {reason}
+              </label>
+            ))}
+
+            <textarea
+              placeholder="Any additional feedback? (optional)"
+              value={deleteComment}
+              onChange={e => setDeleteComment(e.target.value)}
+              rows={3}
+              style={{ width: '100%', marginTop: 12, marginBottom: 8, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+            />
+
+            {deleteErr && <p style={{ color: '#A32D2D', fontSize: 12, marginBottom: 8 }}>{deleteErr}</p>}
+
+            <p style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 14, lineHeight: 1.5 }}>
+              This will permanently delete your account, all clients, portals, contracts, and invoices. This cannot be undone.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={handleDeleteAccount}
-                disabled={deleteLoading || deleteConfirmText !== 'DELETE'}
-                style={{
-                  flex: 2, padding: '10px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                  cursor: deleteConfirmText === 'DELETE' ? 'pointer' : 'not-allowed',
-                  color: '#fff', background: deleteConfirmText === 'DELETE' ? '#DC2626' : 'rgba(220,38,38,0.3)',
-                  border: 'none', opacity: deleteLoading ? 0.7 : 1, transition: 'background 0.15s',
-                }}
+                onClick={() => { setDeleteModal(false); setDeleteReason(''); setDeleteComment(''); setDeleteErr('') }}
+                style={{ flex: 1, padding: '10px', background: 'none', border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
               >
-                {deleteLoading ? 'Deleting…' : 'Delete My Account'}
+                Keep My Account
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteLoading}
+                style={{ flex: 1, padding: '10px', background: '#A32D2D', color: 'white', border: 'none', borderRadius: 8, cursor: deleteLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: deleteLoading ? 0.7 : 1 }}
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete Account'}
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   )

@@ -878,6 +878,19 @@ async function initDb() {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_clients_created INTEGER DEFAULT 0
       `).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cancellations (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER,
+          email TEXT,
+          business_name TEXT,
+          plan TEXT,
+          reason TEXT,
+          comment TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1193,6 +1206,16 @@ async function requireAuth(req, res, next) {
       }
     }
 
+    const ONBOARDING_EXEMPT = ['/api/auth/me', '/api/users/me', '/api/stripe/', '/api/health', '/api/debug/']
+    if (!req.user.onboarding_completed) {
+      if (!ONBOARDING_EXEMPT.some(r => req.path.startsWith(r))) {
+        return res.status(403).json({
+          error: 'onboarding_required',
+          message: 'Please complete onboarding first',
+        })
+      }
+    }
+
     next()
   } catch (err) {
     console.error('❌ Auth error:', err.message)
@@ -1244,7 +1267,36 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
 })
 
 app.delete('/api/users/me', requireAuth, async (req, res) => {
+  const { reason, comment } = req.body || {}
   try {
+    await pool.query(
+      'INSERT INTO cancellations (user_id, email, business_name, plan, reason, comment) VALUES ($1,$2,$3,$4,$5,$6)',
+      [req.user.id, req.user.email, req.user.business_name, req.user.plan, reason || null, comment || null]
+    ).catch(() => {})
+
+    if (resend) {
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: 'contact.kilpian@gmail.com',
+        subject: `PortalKit account deleted: ${reason || 'No reason given'}`,
+        html: emailTemplate({
+          title: 'Account Deleted',
+          preheader: `A PortalKit account was just deleted`,
+          body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Account deleted</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+              <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${req.user.email}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${req.user.business_name || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${req.user.plan || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Reason:</td><td>${reason || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Comment:</td><td>${comment || '—'}</td></tr>
+            </table>`,
+          ctaText: null,
+          ctaUrl: null,
+          footerNote: 'PortalKit Internal Notification',
+        }),
+      }).catch(err => console.error('Cancellation notification email failed:', err))
+    }
+
     await pool.query('DELETE FROM users WHERE id=$1', [req.userId])
     res.json({ success: true })
   } catch (err) {
