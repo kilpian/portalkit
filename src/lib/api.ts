@@ -28,6 +28,7 @@ export interface Client {
   notes: string | null
   portal_token: string
   stage: string
+  stage_changed_at?: string | null
   gallery_url: string | null
   secondary_name: string | null
   secondary_email: string | null

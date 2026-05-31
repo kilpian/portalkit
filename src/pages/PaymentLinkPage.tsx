@@ -16,6 +16,8 @@ interface PaymentLinkData {
   link_type: 'fixed' | 'tip' | 'custom'
   full_name: string | null
   business_name: string | null
+  logo_url: string | null
+  brand_color: string | null
   stripe_connect_enabled: boolean
 }
 
@@ -35,6 +37,7 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
   const [paid, setPaid] = useState(false)
+  const brandColor = link.brand_color || '#111827'
 
   if (paid) {
     return (
@@ -84,7 +87,7 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
           <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Choose an amount</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             {TIP_PRESETS.map(p => (
-              <button key={p} onClick={() => { setAmount(p); setCustomAmount('') }} style={{ padding: '8px 16px', borderRadius: 8, border: `2px solid ${amount === p && !customAmount ? '#111827' : '#E5E7EB'}`, background: amount === p && !customAmount ? '#111827' : '#fff', color: amount === p && !customAmount ? '#fff' : '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+              <button key={p} onClick={() => { setAmount(p); setCustomAmount('') }} style={{ padding: '8px 16px', borderRadius: 8, border: `2px solid ${amount === p && !customAmount ? brandColor : '#E5E7EB'}`, background: amount === p && !customAmount ? brandColor : '#fff', color: amount === p && !customAmount ? '#fff' : '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                 {formatCents(p)}
               </button>
             ))}
@@ -113,7 +116,7 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
         </div>
       </div>
       {error && <p style={{ fontSize: 13, color: '#DC2626' }}>{error}</p>}
-      <button onClick={handlePay} disabled={processing || !stripe} style={{ background: '#111827', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}>
+      <button onClick={handlePay} disabled={processing || !stripe} style={{ background: brandColor, color: '#fff', border: 'none', borderRadius: 10, padding: '13px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}>
         {processing ? 'Processing...' : `Pay ${formatCents(finalAmount)}`}
       </button>
     </div>
@@ -158,18 +161,22 @@ export default function PaymentLinkPage() {
   }
 
   const businessName = link.business_name || link.full_name || 'Your photographer'
+  const brandColor = link.brand_color || '#111827'
 
   return (
     <div style={{ minHeight: '100vh', background: '#F9FAFB' }}>
-      <div style={{ background: '#111827', padding: '16px 24px' }}>
-        <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{businessName}</span>
+      <div style={{ background: brandColor, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {link.logo_url && (
+          <img src={link.logo_url} alt={businessName} style={{ height: 28, width: 28, objectFit: 'contain', borderRadius: 6, background: '#fff', padding: 3 }} />
+        )}
+        <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{businessName}</span>
       </div>
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 20px 80px' }}>
         <div style={{ background: '#fff', borderRadius: 14, padding: '28px 28px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#111827', marginBottom: 6 }}>{link.title}</h1>
           {link.description && <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>{link.description}</p>}
           {link.link_type === 'fixed' && link.amount_cents && (
-            <p style={{ fontSize: 28, fontWeight: 800, color: '#059669', marginBottom: 20 }}>{formatCents(link.amount_cents)}</p>
+            <p style={{ fontSize: 28, fontWeight: 800, color: brandColor, marginBottom: 20 }}>{formatCents(link.amount_cents)}</p>
           )}
 
           {!link.stripe_connect_enabled ? (

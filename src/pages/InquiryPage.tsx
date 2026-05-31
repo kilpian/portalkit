@@ -10,6 +10,9 @@ interface LeadFormData {
   subheadline: string | null
   fields: string[]
   brand_color: string
+  business_name: string | null
+  full_name: string | null
+  logo_url: string | null
 }
 
 export default function InquiryPage() {
@@ -85,15 +88,25 @@ export default function InquiryPage() {
     )
   }
 
+  const businessName = form.business_name || form.full_name || 'Photography'
+
   return (
     <div style={{ minHeight: '100vh', background: '#F9FAFB' }}>
-      <div style={{ background: brandColor, padding: '20px 24px' }}>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Powered by PortalKit</p>
-      </div>
+      <header style={{ background: brandColor, padding: '24px 24px 28px' }}>
+        <div style={{ maxWidth: 520, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+          {form.logo_url && (
+            <img src={form.logo_url} alt={businessName} style={{ height: 44, width: 44, objectFit: 'contain', borderRadius: 8, background: '#fff', padding: 4 }} />
+          )}
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1.2 }}>{businessName}</h1>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, margin: '2px 0 0' }}>Wedding Photography</p>
+          </div>
+        </div>
+      </header>
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '48px 20px 80px' }}>
         <div style={{ marginBottom: 32, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 30, fontWeight: 800, color: brandColor, marginBottom: 10 }}>{form.headline}</h1>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: brandColor, marginBottom: 10 }}>{form.headline}</h2>
           {form.subheadline && <p style={{ fontSize: 15, color: '#6B7280', lineHeight: 1.6 }}>{form.subheadline}</p>}
         </div>
 

@@ -590,6 +590,7 @@ async function initDb() {
 
       // ── Feature: CRM Pipeline ─────────────────────────────────
       await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'inquiry';`).catch(() => {})
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => {})
       await pool.query(`
         DO $$ BEGIN
           ALTER TABLE clients ADD CONSTRAINT clients_stage_check
@@ -1120,8 +1121,12 @@ async function requireAuth(req, res, next) {
           await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
         }
 
-        const rawUsername = (email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 28) || 'photographer'
-        const bookingUsername = rawUsername + Math.floor(Math.random() * 9000 + 1000)
+        const base = ((email || '').split('@')[0]).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'photographer'
+        let bookingUsername = base
+        const taken = await pool.query('SELECT 1 FROM users WHERE booking_username=$1', [base])
+        if (taken.rows.length) {
+          bookingUsername = base.slice(0, 24) + Math.floor(Math.random() * 9000 + 1000)
+        }
         const newUser = await pool.query(
           `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, booking_username)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -1636,14 +1641,14 @@ app.get('/api/clients', requireAuth, async (req, res) => {
       const countRes = await pool.query('SELECT COUNT(*) as count FROM clients WHERE user_id=$1', [req.userId])
       const count = parseInt(countRes.rows[0].count, 10)
       const placeholders = Array(Math.min(count, 5)).fill(null).map((_, i) => ({
-        id: i + 1, name: '████████', email: '████@████.com',
+        id: -(i + 1), name: '██████████', email: '████@████.com',
         phone: null, event_date: '████-██-██', event_type: '██████',
         notes: null, portal_token: '', stage: 'booked', _blurred: true,
       }))
       return res.json(placeholders)
     }
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
       [req.userId]
     )
     res.json(result.rows)
@@ -2847,12 +2852,29 @@ app.post('/api/admin/test-reminders', async (req, res) => {
 
 const VALID_STAGES = ['inquiry','consultation','booked','in_progress','delivered','archived']
 
+app.get('/api/pipeline/stats', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT COALESCE(c.stage, 'inquiry') as stage,
+             COUNT(DISTINCT c.id) as client_count,
+             COALESCE(SUM(i.amount_cents), 0) as total_cents
+      FROM clients c
+      LEFT JOIN invoices i ON i.client_id = c.id AND i.status != 'paid'
+      WHERE c.user_id = $1
+      GROUP BY COALESCE(c.stage, 'inquiry')`, [req.userId])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Pipeline stats error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
   const { stage } = req.body
   if (!VALID_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage' })
   try {
     const result = await pool.query(
-      'UPDATE clients SET stage=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING *',
+      'UPDATE clients SET stage=$1, stage_changed_at=NOW(), updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING *',
       [stage, req.params.id, req.userId]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
@@ -3378,11 +3400,19 @@ app.get('/api/lead-submissions', requireAuth, async (req, res) => {
 app.options('/api/lead/:username', publicCors)
 app.get('/api/lead/:username', publicCors, async (req, res) => {
   try {
-    const userRes = await pool.query('SELECT id FROM users WHERE booking_username=$1', [req.params.username])
+    const userRes = await pool.query('SELECT id, full_name, business_name, logo_url, brand_color FROM users WHERE booking_username=$1', [req.params.username])
     if (!userRes.rows.length) return res.status(404).json({ error: 'Not found' })
-    const result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [userRes.rows[0].id])
+    const u = userRes.rows[0]
+    const result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [u.id])
     if (!result.rows.length || !result.rows[0].active) return res.status(404).json({ error: 'Form not found' })
-    res.json(result.rows[0])
+    const form = result.rows[0]
+    res.json({
+      ...form,
+      business_name: u.business_name,
+      full_name: u.full_name,
+      logo_url: u.logo_url,
+      brand_color: form.brand_color || u.brand_color || '#1B4332',
+    })
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
@@ -3473,7 +3503,7 @@ app.options('/api/pay/:linkId', publicCors)
 app.get('/api/pay/:linkId', publicCors, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT pl.*, u.full_name, u.business_name, u.stripe_connect_enabled, u.stripe_connect_account_id
+      `SELECT pl.*, u.full_name, u.business_name, u.logo_url, u.brand_color, u.stripe_connect_enabled, u.stripe_connect_account_id
        FROM payment_links pl JOIN users u ON u.id = pl.user_id
        WHERE pl.id=$1 AND pl.active=true`, [req.params.linkId]
     )

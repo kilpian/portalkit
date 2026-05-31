@@ -6,139 +6,111 @@ import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'
 import Onboarding from '../pages/dashboard/Onboarding'
 
-// FIX 2: reordered — Dashboard, Messages, Clients, Contracts, Invoices, Files
-const NAV = [
-  {
-    to: '/dashboard', end: true,
-    label: 'Dashboard',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/messages',
-    label: 'Messages',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/clients',
-    label: 'Clients',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/pipeline',
-    label: 'Pipeline',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="5" height="18" rx="1"/>
-        <rect x="10" y="3" width="5" height="13" rx="1"/>
-        <rect x="17" y="3" width="5" height="9" rx="1"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/contracts',
-    label: 'Contracts',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/questionnaires',
-    label: 'Questionnaires',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/invoices',
-    label: 'Invoices',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="1" y="4" width="22" height="16" rx="2"/>
-        <line x1="1" y1="10" x2="23" y2="10"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/booking',
-    label: 'Booking',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/files',
-    label: 'Files',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/workflows',
-    label: 'Workflows',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/leads',
-    label: 'Lead Form',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/payment-links',
-    label: 'Payment Links',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/dashboard/proposals',
-    label: 'Proposals',
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="12" y1="17" x2="8" y2="17"/>
-      </svg>
-    ),
-  },
+// FIX 4: grouped nav with section dividers
+const ICON_DASHBOARD = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+  </svg>
+)
+const ICON_MESSAGES = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+const ICON_CLIENTS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+)
+const ICON_PIPELINE = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="5" height="18" rx="1"/>
+    <rect x="10" y="3" width="5" height="13" rx="1"/>
+    <rect x="17" y="3" width="5" height="9" rx="1"/>
+  </svg>
+)
+const ICON_CONTRACTS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>
+)
+const ICON_QUESTIONNAIRES = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  </svg>
+)
+const ICON_INVOICES = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="4" width="22" height="16" rx="2"/>
+    <line x1="1" y1="10" x2="23" y2="10"/>
+  </svg>
+)
+const ICON_BOOKING = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+)
+const ICON_FILES = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+const ICON_WORKFLOWS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+  </svg>
+)
+const ICON_LEADS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+)
+const ICON_PAYMENT_LINKS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </svg>
+)
+const ICON_PROPOSALS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="12" y1="17" x2="8" y2="17"/>
+  </svg>
+)
+
+const NAV_SECTIONS: { section: string | null; items: { to: string; label: string; icon: React.ReactNode; end?: boolean }[] }[] = [
+  { section: null, items: [
+    { to: '/dashboard', end: true, label: 'Dashboard', icon: ICON_DASHBOARD },
+  ] },
+  { section: 'Clients', items: [
+    { to: '/dashboard/pipeline', label: 'Pipeline', icon: ICON_PIPELINE },
+    { to: '/dashboard/clients', label: 'Clients', icon: ICON_CLIENTS },
+    { to: '/dashboard/messages', label: 'Messages', icon: ICON_MESSAGES },
+  ] },
+  { section: 'Booking', items: [
+    { to: '/dashboard/booking', label: 'Booking', icon: ICON_BOOKING },
+    { to: '/dashboard/leads', label: 'Lead Form', icon: ICON_LEADS },
+    { to: '/dashboard/proposals', label: 'Proposals', icon: ICON_PROPOSALS },
+  ] },
+  { section: 'Work', items: [
+    { to: '/dashboard/contracts', label: 'Contracts', icon: ICON_CONTRACTS },
+    { to: '/dashboard/invoices', label: 'Invoices', icon: ICON_INVOICES },
+    { to: '/dashboard/payment-links', label: 'Payment Links', icon: ICON_PAYMENT_LINKS },
+    { to: '/dashboard/questionnaires', label: 'Questionnaires', icon: ICON_QUESTIONNAIRES },
+    { to: '/dashboard/files', label: 'Files', icon: ICON_FILES },
+  ] },
+  { section: 'Automation', items: [
+    { to: '/dashboard/workflows', label: 'Workflows', icon: ICON_WORKFLOWS },
+  ] },
 ]
 
 const SETTINGS_ICON = (
@@ -330,15 +302,27 @@ export default function DashboardLayout() {
 
       {/* Main nav */}
       <nav role="navigation" aria-label="Main navigation" style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
-        {NAV.map(item => (
-          <NavItem
-            key={item.to}
-            {...item}
-            collapsed={isCollapsed}
-            onClick={() => setMobileOpen(false)}
-            badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
-            disabled={!onboardingComplete && item.to !== '/dashboard'}
-          />
+        {NAV_SECTIONS.map((group, gi) => (
+          <div key={group.section ?? `group-${gi}`}>
+            {group.section && !isCollapsed && (
+              <div style={{ padding: '16px 16px 4px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', opacity: 0.6, textTransform: 'uppercase' }}>
+                {group.section}
+              </div>
+            )}
+            {group.section && isCollapsed && gi > 0 && (
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 6px' }} />
+            )}
+            {group.items.map(item => (
+              <NavItem
+                key={item.to}
+                {...item}
+                collapsed={isCollapsed}
+                onClick={() => setMobileOpen(false)}
+                badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
+                disabled={!onboardingComplete && item.to !== '/dashboard'}
+              />
+            ))}
+          </div>
         ))}
       </nav>
 

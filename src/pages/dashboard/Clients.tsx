@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
 import { useApi, usePolling, type Client, type CreateClientPayload } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
@@ -19,73 +18,6 @@ function StageBadge({ stage }: { stage: string }) {
     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: s.color + '18', color: s.color, border: `1px solid ${s.color}40`, whiteSpace: 'nowrap' }}>
       {s.label}
     </span>
-  )
-}
-
-function PipelineBoard({ clients, onCardClick, onDrop }: {
-  clients: Client[]
-  onCardClick: (c: Client) => void
-  onDrop: (clientId: number, stage: string) => void
-}) {
-  const [dragOver, setDragOver] = useState<string | null>(null)
-  const dragging = useRef<number | null>(null)
-
-  return (
-    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16 }}>
-      {STAGES.map(stage => {
-        const stageClients = clients.filter(c => (c.stage || 'inquiry') === stage.key)
-        return (
-          <div
-            key={stage.key}
-            onDragOver={e => { e.preventDefault(); setDragOver(stage.key) }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={e => {
-              e.preventDefault()
-              setDragOver(null)
-              if (dragging.current !== null) onDrop(dragging.current, stage.key)
-              dragging.current = null
-            }}
-            style={{
-              minWidth: 200, flex: '0 0 200px',
-              background: dragOver === stage.key ? '#f0f9ff' : 'var(--bg-secondary)',
-              borderRadius: 10,
-              border: `1px solid ${dragOver === stage.key ? stage.color : 'var(--border)'}`,
-              borderTop: `3px solid ${stage.color}`,
-              display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: stage.color }}>{stage.label}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, minWidth: 20, height: 20, borderRadius: 10, background: stage.color + '20', color: stage.color, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{stageClients.length}</span>
-            </div>
-            <div style={{ flex: 1, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 60 }}>
-              {stageClients.length === 0 && (
-                <div style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: '12px 8px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 11 }}>
-                  No clients
-                </div>
-              )}
-              {stageClients.map(c => (
-                <div
-                  key={c.id}
-                  draggable
-                  onDragStart={() => { dragging.current = c.id }}
-                  onDragEnd={() => { dragging.current = null }}
-                  onClick={() => onCardClick(c)}
-                  style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', cursor: 'grab', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', userSelect: 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'}
-                  onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)'}
-                >
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>{c.name}</p>
-                  {c.event_type && <p style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>{c.event_type}</p>}
-                  {c.event_date && <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{formatEventDate(c.event_date)}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -140,10 +72,8 @@ const PANEL_W = 400
 export default function Clients() {
   const { authFetch } = useApi()
   const { user } = usePortalAuth()
-  const location = useLocation()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'list' | 'pipeline'>(() => location.pathname === '/dashboard/pipeline' ? 'pipeline' : 'list')
   const [stageFilter, setStageFilter] = useState<string>('all')
 
   // Which client is selected for Info or Preview
@@ -350,6 +280,7 @@ export default function Clients() {
   })
 
   const hasPanel = !!(infoClient || previewClient)
+  const isBlurred = clients.some(c => c._blurred)
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -367,20 +298,10 @@ export default function Clients() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* View toggle */}
-            <div style={{ display: 'flex', background: 'var(--bg-secondary)', borderRadius: 8, padding: 3, border: '1px solid var(--border)', gap: 2 }}>
-              {(['list', 'pipeline'] as const).map(v => (
-                <button key={v} onClick={() => setView(v)} style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', background: view === v ? '#fff' : 'transparent', color: view === v ? 'var(--text-primary)' : 'var(--text-dim)', boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.12s' }}>
-                  {v === 'list' ? 'List' : 'Pipeline'}
-                </button>
-              ))}
-            </div>
-            {view === 'list' && (
-              <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="input" style={{ fontSize: 12, padding: '6px 10px', height: 'auto' }}>
-                <option value="all">All Stages</option>
-                {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </select>
-            )}
+            <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="input" style={{ fontSize: 12, padding: '6px 10px', height: 'auto' }}>
+              <option value="all">All Stages</option>
+              {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
             <button onClick={openNewClientPanel} className="btn btn-primary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New Client
@@ -408,10 +329,18 @@ export default function Clients() {
             <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 24 }}>Add a client to generate their personal portal link.</p>
             <button onClick={openNewClientPanel} className="btn btn-primary">Add Your First Client</button>
           </div>
-        ) : view === 'pipeline' ? (
-          <PipelineBoard clients={clients} onCardClick={openInfoPanel} onDrop={updateStage} />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
+            {isBlurred && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: 'var(--gold-bg)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '12px 16px', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  You have {clients.length} client{clients.length === 1 ? '' : 's'} (upgrade to view)
+                </span>
+                <button onClick={() => window.dispatchEvent(new Event('pk:upgrade-required'))} className="btn btn-primary btn-sm">
+                  Upgrade to view
+                </button>
+              </div>
+            )}
             {clients.filter(c => stageFilter === 'all' || (c.stage || 'inquiry') === stageFilter).map(c => {
               const days = daysUntil(c.event_date)
               const isInfoOpen = infoClient && 'id' in infoClient && infoClient.id === c.id
@@ -420,6 +349,7 @@ export default function Clients() {
               return (
                 <div
                   key={c.id}
+                  className={c._blurred ? 'blurred-row' : undefined}
                   style={{
                     background: isActive ? 'var(--green-bg)' : '#fff',
                     border: `1px solid ${isActive ? 'var(--green-border)' : 'var(--border)'}`,
@@ -429,12 +359,12 @@ export default function Clients() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 14,
-                    cursor: 'pointer',
+                    cursor: c._blurred ? 'default' : 'pointer',
                     transition: 'all 0.15s',
                   }}
-                  onClick={() => openInfoPanel(c)}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-secondary)' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = '#fff' }}
+                  onClick={() => { if (!c._blurred) openInfoPanel(c) }}
+                  onMouseEnter={e => { if (!isActive && !c._blurred) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                  onMouseLeave={e => { if (!isActive && !c._blurred) e.currentTarget.style.background = '#fff' }}
                 >
                   {/* Avatar */}
                   <div style={{ width: 40, height: 40, borderRadius: '50%', background: isActive ? 'var(--green)' : 'var(--bg-tertiary)', color: isActive ? '#FDFAF5' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
@@ -555,6 +485,23 @@ export default function Clients() {
             <label className="field-label">Event date</label>
             <input className="input" type="date" {...field('event_date')} />
           </div>
+          {editingClient?.id && (
+            <div>
+              <label className="field-label">Pipeline stage</label>
+              <select
+                className="input"
+                value={editingClient.stage || 'inquiry'}
+                onChange={e => {
+                  const stage = e.target.value
+                  updateStage(editingClient.id, stage)
+                  setEditingClient(prev => prev ? { ...prev, stage } : prev)
+                  setInfoClient(prev => (prev && 'id' in prev) ? { ...prev, stage } : prev)
+                }}
+              >
+                {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="field-label">Notes</label>
             <textarea className="input" placeholder="Any details about this client or event…" rows={4}

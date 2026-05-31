@@ -230,6 +230,9 @@ export default function Settings() {
             <div>
               <label className="field-label">Email address</label>
               <input className="input" type="email" value={user?.email ?? ''} disabled style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                Update the email address on your account. The new address will need to be verified before it activates. Your subscription and data are not affected by email changes.
+              </p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" disabled={profileSaving} className="btn btn-primary btn-sm">

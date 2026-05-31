@@ -11,6 +11,7 @@ import BookingPage from './pages/BookingPage'
 
 import Dashboard from './pages/dashboard/Dashboard'
 import Clients from './pages/dashboard/Clients'
+import Pipeline from './pages/dashboard/Pipeline'
 import NewPortal from './pages/dashboard/NewPortal'
 import Contracts from './pages/dashboard/Contracts'
 import Invoices from './pages/dashboard/Invoices'
@@ -54,7 +55,7 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="clients" element={<Clients />} />
-            <Route path="pipeline" element={<Clients />} />
+            <Route path="pipeline" element={<Pipeline />} />
             <Route path="clients/new" element={<NewPortal />} />
             <Route path="contracts" element={<Contracts />} />
             <Route path="questionnaires" element={<Questionnaires />} />
