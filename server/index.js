@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/node'
 import express from 'express'
 import pkg from 'pg'
 import cors from 'cors'
@@ -15,16 +14,6 @@ import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
-
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'production',
-    integrations: [Sentry.expressIntegration()],
-    tracesSampleRate: 0.1,
-  })
-  console.log('🔍 Sentry configured')
-}
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -3936,7 +3925,17 @@ app.post('/api/proposals/:id/accept', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
-Sentry.setupExpressErrorHandler(app)
+app.post('/api/admin/activate-account', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  const { email } = req.body
+  const result = await pool.query(
+    `UPDATE users SET onboarding_completed=true, plan='active', stripe_subscription_id='manual_activation' WHERE email=$1 RETURNING id, email, plan`,
+    [email]
+  )
+  if (!result.rows[0]) return res.status(404).json({ error: 'User not found' })
+  res.json({ success: true, user: result.rows[0] })
+})
 
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message)
