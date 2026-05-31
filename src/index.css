@@ -746,3 +746,15 @@ textarea {
   color: #FDFAF5 !important;
 }
 .contract-content li { margin: 4px 0; line-height: 1.6; }
+
+/* Expired-trial teaser: blur placeholder rows. The real data is never sent by
+   the server, so this is purely cosmetic — it cannot be bypassed via devtools. */
+.blurred-row { position: relative; pointer-events: none; user-select: none; }
+.blurred-row::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}

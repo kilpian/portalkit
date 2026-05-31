@@ -242,7 +242,7 @@ function UserAvatar({ imageUrl, initials, size = 32 }: { imageUrl?: string; init
 export default function DashboardLayout() {
   // FIX 3: use Clerk's useUser() directly for reliable, immediate user data
   const { user: clerkUser } = useUser()
-  const { user: portalUser, signOut } = usePortalAuth()
+  const { user: portalUser, signOut, refreshUser } = usePortalAuth()
   const { authFetch } = useApi()
   const navigate = useNavigate()
   const location = useLocation()
@@ -280,6 +280,13 @@ export default function DashboardLayout() {
   const days = trialDaysLeft(portalUser)
   const isPaid = portalUser?.plan === 'active'
   const onboardingComplete = !portalUser || portalUser.onboarding_completed === true
+
+  // FIX 5: block the entire dashboard until onboarding is done — no sidebar, no
+  // content, no route is reachable. This prevents bypassing onboarding by typing
+  // a /dashboard/* URL directly. All hooks above run unconditionally first.
+  if (portalUser && !portalUser.onboarding_completed) {
+    return <Onboarding onComplete={refreshUser} />
+  }
 
   // FIX 3: derive display info directly from Clerk
   const displayName = clerkUser?.fullName || clerkUser?.firstName || clerkUser?.emailAddresses?.[0]?.emailAddress || 'User'
@@ -546,17 +553,6 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
-
-      {/* Onboarding gate — full-screen, non-dismissible */}
-      {!onboardingComplete && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg-primary)' }}
-          onClick={e => e.stopPropagation()}
-          onKeyDown={e => { if (e.key === 'Escape') e.stopPropagation() }}
-        >
-          <Onboarding onComplete={() => {}} />
-        </div>
-      )}
 
       <style>{`
         @media (max-width: 767px) {

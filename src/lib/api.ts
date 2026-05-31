@@ -14,6 +14,7 @@ export interface DashboardStats {
   upcoming_events: number
   trial_days_remaining: number | null
   pipeline_counts?: { inquiry: number; consultation: number; booked: number; in_progress: number; delivered: number; archived: number }
+  _expired?: boolean
 }
 
 export interface Client {
@@ -33,6 +34,7 @@ export interface Client {
   secondary_phone: string | null
   created_at: string
   updated_at: string
+  _blurred?: boolean
 }
 
 export interface QuestionnaireTemplate {
@@ -302,6 +304,7 @@ export interface Contract {
   photographer_signature: string | null
   created_at: string
   updated_at: string
+  _blurred?: boolean
 }
 
 export interface ContractTemplate {
@@ -324,6 +327,7 @@ export interface Invoice {
   notes: string | null
   created_at: string
   updated_at: string
+  _blurred?: boolean
 }
 
 export interface UploadedFile {
@@ -386,7 +390,12 @@ export function useApi() {
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 402) {
-          window.location.href = '/dashboard/settings'
+          // Trial/subscription required. Don't hard-redirect (and never to hosted
+          // Stripe) — let the app surface the embedded upgrade modal in place so
+          // the user keeps their context. Dashboard listens for this event.
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('pk:upgrade-required'))
+          }
         }
         if (error.response?.status === 403 && error.response?.data?.error === 'onboarding_required') {
           window.location.href = '/dashboard'

@@ -4,6 +4,7 @@ import { useClerk } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
+import UpgradeModal from '../../components/UpgradeModal'
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -38,7 +39,7 @@ export default function Settings() {
 
   // Billing
   const [billingLoading, setBillingLoading] = useState(false)
-  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
@@ -146,15 +147,7 @@ export default function Settings() {
     }
   }
 
-  const handleUpgrade = async () => {
-    setUpgradeLoading(true)
-    try {
-      const res = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
-      window.location.href = res.data.url
-    } catch {
-      setUpgradeLoading(false)
-    }
-  }
+  const handleUpgrade = () => setShowUpgradeModal(true)
 
   const handleManageBilling = async () => {
     setBillingLoading(true)
@@ -209,6 +202,9 @@ export default function Settings() {
 
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 680, margin: '0 auto' }}>
+      {showUpgradeModal && (
+        <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+      )}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>
           Settings
@@ -320,18 +316,16 @@ export default function Settings() {
               ) : (
                 <button
                   onClick={handleUpgrade}
-                  disabled={upgradeLoading}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                     padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
                     color: '#1B4332', background: '#C9A84C',
-                    border: 'none', whiteSpace: 'nowrap', cursor: upgradeLoading ? 'not-allowed' : 'pointer',
+                    border: 'none', whiteSpace: 'nowrap', cursor: 'pointer',
                     boxShadow: '0 1px 4px rgba(201,168,76,0.35)',
-                    opacity: upgradeLoading ? 0.7 : 1,
                     transition: 'opacity 0.15s',
                   }}
                 >
-                  {upgradeLoading ? 'Loading…' : 'Upgrade to All-In — $39/mo'}
+                  Upgrade to All-In — $39/mo
                 </button>
               )}
             </div>

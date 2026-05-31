@@ -10,6 +10,7 @@ interface PortalAuthContextType {
   isLoaded: boolean
   signOut: () => void
   setUser: (user: PortalUser) => void
+  refreshUser: () => Promise<void>
 }
 
 const PortalAuthContext = createContext<PortalAuthContextType | null>(null)
@@ -20,36 +21,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { getToken } = useClerkAuth()
   const [portalUser, setPortalUser] = useState<PortalUser | null>(null)
 
+  const fetchUser = useCallback(async (retries = 3) => {
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (data.id) {
+        setPortalUser(data)
+        posthog.identify(data.id.toString(), {
+          email: data.email,
+          name: data.full_name,
+          business_name: data.business_name,
+          plan: data.plan,
+          created_at: data.created_at,
+        })
+      } else if (retries > 0) {
+        setTimeout(() => fetchUser(retries - 1), 1000)
+      }
+    } catch (err) {
+      if (retries > 0) setTimeout(() => fetchUser(retries - 1), 1000)
+    }
+  }, [getToken])
+
   useEffect(() => {
     if (!clerkLoaded) return
     if (!clerkUser) { setPortalUser(null); return }
-
-    const fetchUser = async (retries = 3) => {
-      try {
-        const token = await getToken()
-        const res = await fetch(`${API_BASE}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        const data = await res.json()
-        if (data.id) {
-          setPortalUser(data)
-          posthog.identify(data.id.toString(), {
-            email: data.email,
-            name: data.full_name,
-            business_name: data.business_name,
-            plan: data.plan,
-            created_at: data.created_at,
-          })
-        } else if (retries > 0) {
-          setTimeout(() => fetchUser(retries - 1), 1000)
-        }
-      } catch (err) {
-        if (retries > 0) setTimeout(() => fetchUser(retries - 1), 1000)
-      }
-    }
-
     fetchUser()
-  }, [clerkUser, clerkLoaded, getToken])
+  }, [clerkUser, clerkLoaded, fetchUser])
+
+  const refreshUser = useCallback(async () => {
+    await fetchUser(0)
+  }, [fetchUser])
 
   const signOut = useCallback(() => {
     setPortalUser(null)
@@ -67,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoaded: clerkLoaded,
       signOut,
       setUser: updateUser,
+      refreshUser,
     }}>
       {children}
     </PortalAuthContext.Provider>

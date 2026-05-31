@@ -4,6 +4,7 @@ import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, usePolling, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
+import UpgradeModal from '../../components/UpgradeModal'
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -64,7 +65,7 @@ export default function Dashboard() {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const paymentStatus = searchParams.get('payment')
-  const [upgrading, setUpgrading] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   const days = trialDaysLeft(user)
 
@@ -97,6 +98,13 @@ export default function Dashboard() {
 
   usePolling(fetchStats, 60000)
 
+  // Open the embedded upgrade modal whenever a blocked (402) request fires.
+  useEffect(() => {
+    const handler = () => setShowUpgradeModal(true)
+    window.addEventListener('pk:upgrade-required', handler)
+    return () => window.removeEventListener('pk:upgrade-required', handler)
+  }, [])
+
   const greeting = () => {
     const h = new Date().getHours()
     if (h < 12) return 'Good morning'
@@ -104,24 +112,12 @@ export default function Dashboard() {
     return 'Good evening'
   }
 
-  const createCheckout = async () => {
-    setUpgrading(true)
-    try {
-      const res = await authFetch('/api/stripe/create-checkout-with-trial', { method: 'post' })
-      if (res.data?.url) {
-        window.location.href = res.data.url
-      } else {
-        alert('Could not create checkout session. Please try again.')
-      }
-    } catch (err: unknown) {
-      console.error('Upgrade error:', err)
-      alert('Payment setup failed. Please try again.')
-    } finally {
-      setUpgrading(false)
-    }
-  }
+  const openUpgrade = () => setShowUpgradeModal(true)
 
-  const trialExpired = (user?.plan === 'trial' && days === 0) || user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
+  // Trial that has run out → soft teaser (blurred data + bottom bar), data stays loaded.
+  const isTrialTeaser = user?.plan === 'trial' && days === 0
+  // Non-paying / cancelled / grace → hard overlay, no data behind it.
+  const isHardBlocked = user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   const blockedHeading = user?.plan === 'cancelled'
@@ -144,24 +140,35 @@ export default function Dashboard() {
 
   return (
     <>
-      {trialExpired && (
+      {showUpgradeModal && (
+        <UpgradeModal onClose={() => setShowUpgradeModal(false)} clientCount={stats?.total_clients} />
+      )}
+
+      {isHardBlocked && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 440 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>{blockedIcon}</div>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>{blockedHeading}</h2>
             <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 28 }}>{blockedBody}</p>
-            <button onClick={createCheckout} disabled={upgrading} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
-              {upgrading ? 'Loading…' : user?.plan === 'grace' ? 'Update Payment Method →' : 'Upgrade — $39/mo'}
+            <button onClick={openUpgrade} className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
+              {user?.plan === 'grace' ? 'Update Payment Method →' : 'Upgrade — $39/mo'}
             </button>
           </div>
+        </div>
+      )}
+
+      {isTrialTeaser && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#1B4332', color: 'white', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 9998, gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>⏰ Your trial has ended — your data is safe and waiting for you</p>
+          <button onClick={openUpgrade} style={{ background: '#C9A84C', color: '#1B4332', border: 'none', padding: '8px 20px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Upgrade — $39/mo →</button>
         </div>
       )}
 
       {showRedBanner && (
         <div style={{ background: '#FCEBEB', borderBottom: '1px solid #FCA5A5', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, color: '#A32D2D', fontWeight: 600 }}>⚠️ Your trial expires in {days} day{days === 1 ? '' : 's'}. Add payment now to avoid losing access.</p>
-          <button onClick={createCheckout} disabled={upgrading} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'transparent', color: '#A32D2D', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {upgrading ? 'Loading…' : 'Add Card Now →'}
+          <button onClick={openUpgrade} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'transparent', color: '#A32D2D', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Add Card Now →
           </button>
         </div>
       )}
@@ -240,7 +247,11 @@ export default function Dashboard() {
         </>
       )}
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div
+        className="card"
+        style={{ padding: 0, overflow: 'hidden', cursor: isTrialTeaser ? 'pointer' : undefined }}
+        onClick={isTrialTeaser ? openUpgrade : undefined}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>Recent Clients</h2>
           <Link to="/dashboard/clients" style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, textDecoration: 'none' }}>View all →</Link>
@@ -284,7 +295,7 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {clients.map(c => (
-                <tr key={c.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <tr key={c.id} className={c._blurred ? 'blurred-row' : undefined} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 20px' }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</p>
                     {c.email && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{c.email}</p>}
@@ -293,7 +304,7 @@ export default function Dashboard() {
                     {c.event_type || '—'}
                     {c.event_date && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{formatDate(c.event_date)}</span>}
                   </td>
-                  <td style={{ padding: '12px 20px' }}><CopyToken token={c.portal_token} /></td>
+                  <td style={{ padding: '12px 20px' }}>{c._blurred ? <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>••••</span> : <CopyToken token={c.portal_token} />}</td>
                   <td style={{ padding: '12px 20px', fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(c.created_at)}</td>
                 </tr>
               ))}

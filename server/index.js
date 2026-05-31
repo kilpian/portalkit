@@ -319,27 +319,9 @@ app.post('/api/webhooks/clerk',
       return res.status(400).json({ error: 'Webhook verification failed' })
     }
     try {
-      if (event.type === 'user.created') {
-        const clerkUser = event.data
-        const email = clerkUser.email_addresses?.[0]?.email_address
-        const firstName = clerkUser.first_name || ''
-        if (email && resend) {
-          await resend.emails.send({
-            from: 'PortalKit <hello@mail.getportalkit.com>',
-            to: email,
-            subject: "Welcome to PortalKit — you're all set",
-            html: emailTemplate({
-              title: 'Welcome to PortalKit',
-              preheader: 'Your 14-day free trial has started.',
-              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Welcome${firstName ? `, ${firstName}` : ''}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your 14-day free trial has started. Here's how to get going:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin:0 0 16px;"><li>Create your first client</li><li>Share their private portal link</li><li>Get paid faster</li></ol><p style="color:#9C8E7A;font-size:13px;margin:0;">Questions? Reply to this email — we read every one.</p>`,
-              ctaText: 'Go to Dashboard →',
-              ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
-              footerNote: 'PortalKit by Kilpian LLC',
-            }),
-          })
-          console.log('Welcome email sent to:', email)
-        }
-      }
+      // FIX 3: Welcome email is sent once on payment success (invoice.payment_succeeded),
+      // NOT here at user creation — that fired a second email alongside Clerk's own
+      // verification email. user.created is acknowledged with no email.
       res.json({ received: true })
     } catch (err) {
       console.error('Clerk webhook handler error:', err)
@@ -1160,21 +1142,28 @@ async function requireAuth(req, res, next) {
     }
 
     const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/stripe/create-setup-intent', '/api/stripe/confirm-setup', '/api/health']
+    const isExempt = allowedAfterExpiry.some(p => req.path.startsWith(p))
 
-    if (req.user.plan === 'trial' && req.user.trial_ends_at) {
-      if (new Date() > new Date(req.user.trial_ends_at)) {
-        if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
-          return res.status(402).json({
-            error: 'Trial expired',
-            message: 'Your 14-day trial has ended. Please upgrade to continue.',
-            upgradeUrl: 'https://buy.stripe.com/8x2eVfcbid7ZcILcby9IQ00',
-          })
-        }
+    // Collection reads that return REDACTED placeholder data to expired-trial users.
+    // Real names/emails/contract content never leave the server (no F12 bypass).
+    const blurReadRoutes = ['/api/clients', '/api/contracts', '/api/invoices', '/api/messages', '/api/files', '/api/dashboard/stats']
+
+    if (req.user.plan === 'trial' && req.user.trial_ends_at && new Date() > new Date(req.user.trial_ends_at)) {
+      req.trialExpired = true
+      // Reads pass through so handlers can return redacted data; writes & everything else are blocked.
+      const blurRead = req.method === 'GET' && blurReadRoutes.includes(req.path)
+      if (!isExempt && !blurRead) {
+        return res.status(402).json({
+          error: 'Trial expired',
+          message: 'Your 14-day trial has ended. Please upgrade to continue.',
+          upgradeRequired: true,
+        })
       }
     }
 
-    if (req.user.plan === 'free') {
-      if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
+    // Non-paying plans get no data at all (frontend shows an upgrade overlay).
+    if (['free', 'expired', 'cancelled'].includes(req.user.plan)) {
+      if (!isExempt) {
         return res.status(402).json({
           error: 'Subscription required',
           message: 'Please upgrade to a paid plan to continue.',
@@ -1185,11 +1174,11 @@ async function requireAuth(req, res, next) {
 
     if (req.user.plan === 'grace' && req.user.grace_period_ends_at) {
       if (new Date() > new Date(req.user.grace_period_ends_at)) {
-        if (!allowedAfterExpiry.some(p => req.path.startsWith(p))) {
+        if (!isExempt) {
           return res.status(402).json({
             error: 'Payment failed',
             message: 'Please update your payment method to continue.',
-            upgradeUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+            upgradeRequired: true,
           })
         }
       }
@@ -1493,7 +1482,7 @@ app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
 app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
-    const { paymentMethodId } = req.body
+    const { paymentMethodId, immediate } = req.body
     if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId required' })
 
     const customerId = req.user.stripe_customer_id
@@ -1506,6 +1495,32 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
     await stripe.customers.update(customerId, {
       invoice_settings: { default_payment_method: paymentMethodId },
     })
+
+    // immediate === activate-now flow (expired trial / upgrade modal): bill now, plan='active'.
+    // Otherwise === onboarding flow: start the 14-day trial, plan='trial'.
+    if (immediate) {
+      const existingSub = req.user.stripe_subscription_id
+      if (existingSub && existingSub !== 'manual_activation') {
+        await stripe.subscriptions.update(existingSub, {
+          default_payment_method: paymentMethodId,
+        })
+        await pool.query("UPDATE users SET plan='active' WHERE id=$1", [req.user.id])
+        console.log(`💳 Subscription reactivated for user ${req.user.id}: ${existingSub}`)
+        return res.json({ success: true, subscription: existingSub })
+      }
+      const subscription = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: priceId }],
+        default_payment_method: paymentMethodId,
+        metadata: { user_id: String(req.user.id) },
+      })
+      await pool.query(
+        'UPDATE users SET stripe_subscription_id=$1, plan=$2 WHERE id=$3',
+        [subscription.id, 'active', req.user.id]
+      )
+      console.log(`💳 Subscription activated for user ${req.user.id}: ${subscription.id}`)
+      return res.json({ success: true, subscription: subscription.id })
+    }
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
@@ -1605,6 +1620,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       upcoming_events: parseInt(upcomingMain.rows[0].count, 10) + parseInt(upcomingEvents.rows[0].count, 10),
       trial_days_remaining,
       pipeline_counts,
+      _expired: !!req.trialExpired,
     })
   } catch (err) {
     console.error('Dashboard stats error:', err)
@@ -1616,6 +1632,16 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 
 app.get('/api/clients', requireAuth, async (req, res) => {
   try {
+    if (req.trialExpired) {
+      const countRes = await pool.query('SELECT COUNT(*) as count FROM clients WHERE user_id=$1', [req.userId])
+      const count = parseInt(countRes.rows[0].count, 10)
+      const placeholders = Array(Math.min(count, 5)).fill(null).map((_, i) => ({
+        id: i + 1, name: '████████', email: '████@████.com',
+        phone: null, event_date: '████-██-██', event_type: '██████',
+        notes: null, portal_token: '', stage: 'booked', _blurred: true,
+      }))
+      return res.json(placeholders)
+    }
     const result = await pool.query(
       'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
       [req.userId]
@@ -1782,6 +1808,15 @@ app.delete('/api/clients/:id/events/:eventId', requireAuth, async (req, res) => 
 
 app.get('/api/contracts', requireAuth, async (req, res) => {
   try {
+    if (req.trialExpired) {
+      const countRes = await pool.query('SELECT COUNT(*) as count FROM contracts WHERE user_id=$1', [req.userId])
+      const count = parseInt(countRes.rows[0].count, 10)
+      const placeholders = Array(Math.min(count, 5)).fill(null).map((_, i) => ({
+        id: i + 1, client_name: '████████', title: '████████████',
+        content: null, status: 'sent', created_at: new Date().toISOString(), _blurred: true,
+      }))
+      return res.json(placeholders)
+    }
     const result = await pool.query(
       `SELECT c.*, cl.name as client_name FROM contracts c
        LEFT JOIN clients cl ON cl.id = c.client_id
@@ -1841,6 +1876,16 @@ app.delete('/api/contracts/:id', requireAuth, async (req, res) => {
 
 app.get('/api/invoices', requireAuth, async (req, res) => {
   try {
+    if (req.trialExpired) {
+      const countRes = await pool.query('SELECT COUNT(*) as count FROM invoices WHERE user_id=$1', [req.userId])
+      const count = parseInt(countRes.rows[0].count, 10)
+      const placeholders = Array(Math.min(count, 5)).fill(null).map((_, i) => ({
+        id: i + 1, client_name: '████████', invoice_number: '████',
+        amount_cents: 0, status: 'sent', due_date: null,
+        created_at: new Date().toISOString(), _blurred: true,
+      }))
+      return res.json(placeholders)
+    }
     const result = await pool.query(
       `SELECT i.*, cl.name as client_name FROM invoices i
        LEFT JOIN clients cl ON cl.id = i.client_id
@@ -2134,6 +2179,7 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
 
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
+    if (req.trialExpired) return res.json([])
     const result = await pool.query(
       `SELECT f.*, cl.name as client_name FROM files f
        LEFT JOIN clients cl ON cl.id = f.client_id
@@ -2359,6 +2405,7 @@ app.get('/api/messages/summaries', requireAuth, async (req, res) => {
 })
 
 app.get('/api/messages', requireAuth, async (req, res) => {
+  if (req.trialExpired) return res.json([])
   const { client_id } = req.query
   if (!client_id) return res.status(400).json({ error: 'client_id required' })
   try {
