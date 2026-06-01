@@ -585,6 +585,11 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      // Trial-expiry reminders are account-level (no client), so client_id must be nullable
+      await pool.query(`
+        ALTER TABLE reminders_sent ALTER COLUMN client_id DROP NOT NULL;
+      `).catch(() => {})
+
       await pool.query(`
         CREATE TABLE IF NOT EXISTS client_events (
           id SERIAL PRIMARY KEY,
@@ -1105,9 +1110,146 @@ async function sendEventReminders() {
   } catch (err) { console.error('Balance reminder error:', err.message) }
 }
 
+async function sendTrialExpiryReminders() {
+  if (!resend) return
+  try {
+    // 3 days before trial ends
+    const threeDayWarning = await pool.query(`
+      SELECT u.* FROM users u
+      WHERE u.plan = 'trial'
+      AND DATE(u.trial_ends_at) = CURRENT_DATE + 3
+      AND NOT EXISTS (
+        SELECT 1 FROM reminders_sent rs
+        WHERE rs.client_id IS NULL
+        AND rs.reminder_type = 'trial_3day_' || u.id::text
+      )
+    `)
+
+    for (const user of threeDayWarning.rows) {
+      const firstName = user.full_name?.split(' ')[0] || 'there'
+      const trialEndDate = new Date(user.trial_ends_at)
+        .toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric'
+        })
+      const manageUrl = (process.env.FRONTEND_URL || 'https://getportalkit.com') +
+        '/dashboard/settings'
+
+      await resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: user.email,
+        subject: 'Your PortalKit trial ends in 3 days',
+        html: emailTemplate({
+          title: 'Your trial ends in 3 days',
+          preheader: 'Your free trial ends on ' + trialEndDate,
+          body: `
+            <h2 style="margin:0 0 16px;font-size:22px;
+              font-weight:700;color:#1B4332;">
+              Hi ${firstName} — your trial ends ${trialEndDate}
+            </h2>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              Your 14-day free trial of PortalKit ends on
+              <strong>${trialEndDate}</strong>. After that,
+              your account will be charged $39/month
+              (or $29/month if you're on annual).
+            </p>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              If you'd like to cancel before being charged,
+              you can do so anytime from your account settings.
+            </p>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              If you're enjoying PortalKit, no action needed —
+              your subscription continues automatically.
+            </p>
+          `,
+          ctaText: 'Manage Your Subscription →',
+          ctaUrl: manageUrl,
+          footerNote: 'You are receiving this because you signed up for a PortalKit trial. Cancel anytime at ' + manageUrl
+        })
+      })
+
+      // Record that we sent this
+      await pool.query(
+        `INSERT INTO reminders_sent (client_id, reminder_type)
+         VALUES (NULL, $1) ON CONFLICT DO NOTHING`,
+        ['trial_3day_' + user.id]
+      )
+      console.log('📧 Trial 3-day warning sent to:', user.email)
+    }
+
+    // 1 day before trial ends
+    const oneDayWarning = await pool.query(`
+      SELECT u.* FROM users u
+      WHERE u.plan = 'trial'
+      AND DATE(u.trial_ends_at) = CURRENT_DATE + 1
+      AND NOT EXISTS (
+        SELECT 1 FROM reminders_sent rs
+        WHERE rs.client_id IS NULL
+        AND rs.reminder_type = 'trial_1day_' || u.id::text
+      )
+    `)
+
+    for (const user of oneDayWarning.rows) {
+      const firstName = user.full_name?.split(' ')[0] || 'there'
+      const trialEndDate = new Date(user.trial_ends_at)
+        .toLocaleDateString('en-US', {
+          month: 'long', day: 'numeric'
+        })
+      const manageUrl = (process.env.FRONTEND_URL || 'https://getportalkit.com') +
+        '/dashboard/settings'
+
+      await resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: user.email,
+        subject: '⚠️ Your PortalKit trial ends tomorrow',
+        html: emailTemplate({
+          title: 'Trial ends tomorrow',
+          preheader: 'Last chance to cancel before ' + trialEndDate,
+          body: `
+            <h2 style="margin:0 0 16px;font-size:22px;
+              font-weight:700;color:#1B4332;">
+              Hi ${firstName} — last reminder
+            </h2>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              Your PortalKit trial ends <strong>tomorrow,
+              ${trialEndDate}</strong>. Your card on file will
+              be charged automatically to continue your
+              subscription.
+            </p>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              <strong>To cancel:</strong> Go to Dashboard →
+              Settings → Subscription → Cancel before midnight
+              tomorrow.
+            </p>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              Questions? Reply to this email — we read every one.
+            </p>
+          `,
+          ctaText: 'Manage Subscription →',
+          ctaUrl: manageUrl,
+          footerNote: 'You are receiving this because you signed up for a PortalKit trial. Cancel anytime at ' + manageUrl
+        })
+      })
+
+      await pool.query(
+        `INSERT INTO reminders_sent (client_id, reminder_type)
+         VALUES (NULL, $1) ON CONFLICT DO NOTHING`,
+        ['trial_1day_' + user.id]
+      )
+      console.log('📧 Trial 1-day warning sent to:', user.email)
+    }
+
+  } catch (err) {
+    console.error('Trial reminder error:', err.message)
+  }
+}
+
 // Run on startup and every 24 hours (Railway restarts daily, so this effectively fires once per day)
 sendEventReminders()
-setInterval(sendEventReminders, 24 * 60 * 60 * 1000)
+sendTrialExpiryReminders()
+setInterval(() => {
+  sendEventReminders()
+  sendTrialExpiryReminders()
+}, 24 * 60 * 60 * 1000)
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization
