@@ -331,6 +331,14 @@ app.post('/api/webhooks/clerk',
 )
 
 app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+
+app.use((req, res, next) => {
+  res.setTimeout(30000, () => {
+    if (!res.headersSent) res.status(408).json({ error: 'Request timeout' })
+  })
+  next()
+})
 
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -866,6 +874,20 @@ async function initDb() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `).catch(() => {})
+
+      // Performance indexes for common lookups
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+        CREATE INDEX IF NOT EXISTS idx_contracts_user_id ON contracts(user_id);
+        CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_client_id ON messages(client_id);
+        CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
+        CREATE INDEX IF NOT EXISTS idx_files_client_id ON files(client_id);
+        CREATE INDEX IF NOT EXISTS idx_clients_portal_token ON clients(portal_token);
+        CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
+        CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON users(stripe_customer_id);
+        CREATE INDEX IF NOT EXISTS idx_users_booking_username ON users(booking_username);
+      `).catch(err => console.error('Index creation warning:', err.message))
 
       console.log('✅ Database ready')
       return
@@ -2849,7 +2871,19 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 // ── HEALTH ────────────────────────────────────────────────────
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOString() }))
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1')
+    res.json({
+      status: 'ok',
+      time: new Date().toISOString(),
+      db: 'connected',
+      version: '1.0.0',
+    })
+  } catch (err) {
+    res.status(500).json({ status: 'error', db: 'disconnected' })
+  }
+})
 
 app.get('/api/test-email', async (req, res) => {
   console.log('📧 Resend configured:', !!process.env.RESEND_API_KEY)
@@ -4075,6 +4109,13 @@ async function startServer() {
   })
   process.on('unhandledRejection', (err) => {
     console.error('Unhandled rejection:', err)
+  })
+  process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, closing gracefully...')
+    server.close(async () => {
+      await pool.end()
+      process.exit(0)
+    })
   })
 }
 

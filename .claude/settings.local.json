@@ -35,7 +35,9 @@
       "Bash(git -C /Users/dera/projects/portalkit show c254a71:index.html)",
       "Bash(curl *)",
       "Bash(psql --version)",
-      "Bash(grep -o 'portalkit-production[^\"` ]*\\\\|localhost:3001' dist/assets/app-Cf0PoCAd.js)"
+      "Bash(grep -o 'portalkit-production[^\"` ]*\\\\|localhost:3001' dist/assets/app-Cf0PoCAd.js)",
+      "Bash(npm uninstall *)",
+      "Bash(awk -F: '$1 > 418 && $1 < 900')"
     ]
   }
 }

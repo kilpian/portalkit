@@ -1131,11 +1131,10 @@
             </div>
             <nav class="p-nav">
               <div class="p-nav-item p-nav-item--active">Dashboard</div>
-              <div class="p-nav-item">Pipeline</div>
               <div class="p-nav-item">Clients</div>
               <div class="p-nav-item">Messages</div>
+              <div class="p-nav-item">Pipeline</div>
               <div class="p-nav-item">Booking</div>
-              <div class="p-nav-item">Lead Form</div>
               <div class="p-nav-item">Contracts</div>
               <div class="p-nav-item">Invoices</div>
               <div class="p-nav-item">Files</div>
@@ -1479,11 +1478,11 @@
       <h2 class="section__h animate-in" data-d="1">Simple, honest pricing.</h2>
       <p class="section__sub animate-in" data-d="2" style="max-width:480px;margin:0 auto;">14-day free trial. $0 today. Cancel anytime before day 15 and pay nothing.</p>
     </div>
-    <div class="pricing__wrap" style="max-width:780px;gap:24px;flex-wrap:wrap;align-items:stretch;">
+    <div class="pricing__wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;max-width:780px;margin:48px auto 0;align-items:stretch;">
 
       <!-- Annual (best value) -->
-      <div class="pricing-card animate-in" data-d="1" style="flex:1;min-width:300px;text-align:left;padding:40px 32px;border:2px solid #1B4332;box-shadow:0 0 0 2px var(--green),var(--shadow);">
-        <span class="pricing-card__pill" style="background:var(--green);color:var(--cream);border-color:var(--green);">MOST POPULAR &middot; BEST VALUE</span>
+      <div class="pricing-card animate-in" data-d="1" style="display:flex;flex-direction:column;text-align:left;padding:28px;background:#fff;border:2px solid #1B4332;">
+        <span class="pricing-card__pill" style="background:#1B4332;color:#fff;border-color:#1B4332;">MOST POPULAR &middot; BEST VALUE</span>
         <div class="pricing-card__name">Annual</div>
         <div class="pricing-card__price" style="justify-content:flex-start;">
           <span class="pricing-card__cur">$</span>
@@ -1505,8 +1504,8 @@
       </div>
 
       <!-- Monthly -->
-      <div class="pricing-card animate-in" data-d="2" style="flex:1;min-width:300px;text-align:left;padding:40px 32px;">
-        <span class="pricing-card__pill">14-Day Free Trial</span>
+      <div class="pricing-card animate-in" data-d="2" style="display:flex;flex-direction:column;text-align:left;padding:28px;background:#fff;border:1px solid var(--border);">
+        <span class="pricing-card__pill" style="background:var(--cream);color:#1B4332;border:1px solid #1B4332;">14-Day Free Trial</span>
         <div class="pricing-card__name">Monthly</div>
         <div class="pricing-card__price" style="justify-content:flex-start;">
           <span class="pricing-card__cur">$</span>

@@ -6,7 +6,6 @@ import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'
 import Onboarding from '../pages/dashboard/Onboarding'
 
-// FIX 4: grouped nav with section dividers
 const ICON_DASHBOARD = (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -87,30 +86,20 @@ const ICON_PROPOSALS = (
   </svg>
 )
 
-const NAV_SECTIONS: { section: string | null; items: { to: string; label: string; icon: React.ReactNode; end?: boolean }[] }[] = [
-  { section: null, items: [
-    { to: '/dashboard', end: true, label: 'Dashboard', icon: ICON_DASHBOARD },
-  ] },
-  { section: 'Clients', items: [
-    { to: '/dashboard/pipeline', label: 'Pipeline', icon: ICON_PIPELINE },
-    { to: '/dashboard/clients', label: 'Clients', icon: ICON_CLIENTS },
-    { to: '/dashboard/messages', label: 'Messages', icon: ICON_MESSAGES },
-  ] },
-  { section: 'Booking', items: [
-    { to: '/dashboard/booking', label: 'Booking', icon: ICON_BOOKING },
-    { to: '/dashboard/leads', label: 'Lead Form', icon: ICON_LEADS },
-    { to: '/dashboard/proposals', label: 'Proposals', icon: ICON_PROPOSALS },
-  ] },
-  { section: 'Work', items: [
-    { to: '/dashboard/contracts', label: 'Contracts', icon: ICON_CONTRACTS },
-    { to: '/dashboard/invoices', label: 'Invoices', icon: ICON_INVOICES },
-    { to: '/dashboard/payment-links', label: 'Payment Links', icon: ICON_PAYMENT_LINKS },
-    { to: '/dashboard/questionnaires', label: 'Questionnaires', icon: ICON_QUESTIONNAIRES },
-    { to: '/dashboard/files', label: 'Files', icon: ICON_FILES },
-  ] },
-  { section: 'Automation', items: [
-    { to: '/dashboard/workflows', label: 'Workflows', icon: ICON_WORKFLOWS },
-  ] },
+const NAV_ITEMS: { to: string; label: string; icon: React.ReactNode; end?: boolean }[] = [
+  { to: '/dashboard', end: true, label: 'Dashboard', icon: ICON_DASHBOARD },
+  { to: '/dashboard/clients', label: 'Clients', icon: ICON_CLIENTS },
+  { to: '/dashboard/messages', label: 'Messages', icon: ICON_MESSAGES },
+  { to: '/dashboard/pipeline', label: 'Pipeline', icon: ICON_PIPELINE },
+  { to: '/dashboard/booking', label: 'Booking', icon: ICON_BOOKING },
+  { to: '/dashboard/leads', label: 'Lead Form', icon: ICON_LEADS },
+  { to: '/dashboard/proposals', label: 'Proposals', icon: ICON_PROPOSALS },
+  { to: '/dashboard/contracts', label: 'Contracts', icon: ICON_CONTRACTS },
+  { to: '/dashboard/invoices', label: 'Invoices', icon: ICON_INVOICES },
+  { to: '/dashboard/payment-links', label: 'Payment Links', icon: ICON_PAYMENT_LINKS },
+  { to: '/dashboard/questionnaires', label: 'Questionnaires', icon: ICON_QUESTIONNAIRES },
+  { to: '/dashboard/files', label: 'Files', icon: ICON_FILES },
+  { to: '/dashboard/workflows', label: 'Workflows', icon: ICON_WORKFLOWS },
 ]
 
 const SETTINGS_ICON = (
@@ -302,27 +291,15 @@ export default function DashboardLayout() {
 
       {/* Main nav */}
       <nav role="navigation" aria-label="Main navigation" style={{ flex: 1, padding: isCollapsed ? '12px 8px' : '12px 10px', overflowY: 'auto' }}>
-        {NAV_SECTIONS.map((group, gi) => (
-          <div key={group.section ?? `group-${gi}`}>
-            {group.section && !isCollapsed && (
-              <div style={{ padding: '16px 16px 4px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', opacity: 0.6, textTransform: 'uppercase' }}>
-                {group.section}
-              </div>
-            )}
-            {group.section && isCollapsed && gi > 0 && (
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 6px' }} />
-            )}
-            {group.items.map(item => (
-              <NavItem
-                key={item.to}
-                {...item}
-                collapsed={isCollapsed}
-                onClick={() => setMobileOpen(false)}
-                badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
-                disabled={!onboardingComplete && item.to !== '/dashboard'}
-              />
-            ))}
-          </div>
+        {NAV_ITEMS.map(item => (
+          <NavItem
+            key={item.to}
+            {...item}
+            collapsed={isCollapsed}
+            onClick={() => setMobileOpen(false)}
+            badge={item.to === '/dashboard/messages' ? unreadCount : undefined}
+            disabled={!onboardingComplete && item.to !== '/dashboard'}
+          />
         ))}
       </nav>
 
