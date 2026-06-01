@@ -1484,7 +1484,7 @@ app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
 
     res.json({ clientSecret: setupIntent.client_secret, customerId })
   } catch (err) {
-    console.error('💳 Setup intent error:', err)
+    console.error('Setup intent error:', err.message)
     res.status(500).json({ error: err.message })
   }
 })
@@ -1512,7 +1512,8 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
     // Otherwise === onboarding flow: start the 14-day trial, plan='trial'.
     if (immediate) {
       const existingSub = req.user.stripe_subscription_id
-      if (existingSub && existingSub !== 'manual_activation') {
+      const hasRealSubscription = existingSub && existingSub !== 'manual_activation'
+      if (hasRealSubscription) {
         await stripe.subscriptions.update(existingSub, {
           default_payment_method: paymentMethodId,
         })
