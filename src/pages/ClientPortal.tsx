@@ -673,6 +673,7 @@ export function ClientPortalContent({ token }: { token: string }) {
     const photographerName = data?.photographer_business || data?.photographer_name || 'PortalKit'
 
     const html = `<html><head><title>${c.title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
     <style>
       body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; color: #333; line-height: 1.6; }
       h1 { color: #1B4332; border-bottom: 2px solid #1B4332; padding-bottom: 10px; font-size: 22px; }
@@ -696,19 +697,14 @@ export function ClientPortalContent({ token }: { token: string }) {
       <div class="signatures">
         <div class="sig-block">
           <p><strong>PHOTOGRAPHER</strong></p>
-          <p>${photographerName}</p>
-          <div class="sig-line"></div>
-          <p>Signature</p>
-          <div class="sig-line"></div>
-          <p>Date: ${c.photographer_signed_at ? new Date(c.photographer_signed_at).toLocaleDateString() : '________________'}</p>
+          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px;">${data?.photographer_business || photographerName}</div>
+          <div style="font-size: 11px; color: #666;">${data?.photographer_business || photographerName}${data?.photographer_name ? ' · ' + data.photographer_name : ''}</div>
+          <p style="margin-top:8px;">Date: ${c.photographer_signed_at ? new Date(c.photographer_signed_at).toLocaleDateString() : '________________'}</p>
         </div>
         <div class="sig-block">
           <p><strong>CLIENT</strong></p>
-          <p>${opts.signerName}</p>
-          <div class="sig-line"></div>
-          <p>Signature: ${opts.signerName} (Electronic)</p>
-          <div class="sig-line"></div>
-          <p>Date: ${opts.signedDate}</p>
+          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px; min-width: 200px;">${opts.signerName}</div>
+          <div style="font-size: 11px; color: #666;">Electronic signature${opts.signedDate ? ' · ' + opts.signedDate : ''}${opts.hash ? ' · Ref: ' + opts.hash.slice(-8).toUpperCase() : ''}</div>
         </div>
       </div>
       <div class="footer">
@@ -719,6 +715,15 @@ export function ClientPortalContent({ token }: { token: string }) {
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.print() }
   }
+
+  useEffect(() => {
+    if (document.getElementById('dancing-script-font')) return
+    const link = document.createElement('link')
+    link.id = 'dancing-script-font'
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap'
+    document.head.appendChild(link)
+  }, [])
 
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
@@ -841,9 +846,14 @@ export function ClientPortalContent({ token }: { token: string }) {
                           {isFullyExecuted ? '✓ Fully Executed' : '✓ You Signed'}
                         </span>
                       </div>
+                      {signerName && (
+                        <div style={{ fontFamily: "'Dancing Script', cursive", fontSize: 22, color: '#1B4332', marginBottom: 2 }}>
+                          {signerName}
+                        </div>
+                      )}
                       {(signerName || signedDate) && (
                         <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>
-                          {signerName && `Signed by ${signerName}`}{signerName && signedDate && ' · '}{signedDate}
+                          {signerName && 'Signed'}{signerName && signedDate && ' · '}{signedDate}
                         </p>
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
