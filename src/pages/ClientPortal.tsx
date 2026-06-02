@@ -717,7 +717,7 @@ interface PortalGalleryData {
   files: PortalGalleryFile[]
 }
 
-function PortalGallerySection({ token }: { token: string }) {
+function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasUnpaidInvoice: boolean }) {
   const [gallery, setGallery] = useState<PortalGalleryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
@@ -760,15 +760,25 @@ function PortalGallerySection({ token }: { token: string }) {
     if (!passwordInput.trim()) return
     setPasswordError('')
     try {
-      const res = await axios.get<PortalGalleryData>(`${API_URL}/api/portals/${token}/gallery`, {
-        headers: { 'x-gallery-password': passwordInput.trim() },
-      })
+      const res = await axios.get(
+        `${API_URL}/api/portals/${token}/gallery`,
+        { headers: { 'x-gallery-password': passwordInput.trim() } }
+      )
       setGallery(res.data)
-      setFavorites(new Set(res.data.files.filter(f => f.is_favorite).map(f => f.id)))
+      setFavorites(new Set(
+        (res.data.files || [])
+          .filter((f: PortalGalleryFile) => f.is_favorite)
+          .map((f: PortalGalleryFile) => f.id)
+      ))
       setNeedsPassword(false)
+      setPasswordInput('')
     } catch (err: unknown) {
       const e = err as { response?: { status: number } }
-      if (e.response?.status === 401) setPasswordError('Incorrect password. Please try again.')
+      if (e.response?.status === 401) {
+        setPasswordError('Incorrect password. Please try again.')
+      } else {
+        setPasswordError('Something went wrong. Please try again.')
+      }
     }
   }
 
@@ -827,10 +837,10 @@ function PortalGallerySection({ token }: { token: string }) {
             placeholder="Enter password..."
             value={passwordInput}
             onChange={e => setPasswordInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handlePasswordSubmit() }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handlePasswordSubmit() } }}
             style={{ flex: 1 }}
           />
-          <button onClick={handlePasswordSubmit} disabled={!passwordInput.trim()} className="btn btn-primary">
+          <button type="button" onClick={handlePasswordSubmit} disabled={!passwordInput.trim()} className="btn btn-primary">
             Unlock
           </button>
         </div>
@@ -871,6 +881,15 @@ function PortalGallerySection({ token }: { token: string }) {
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.6 }}>{gallery.description}</p>
           )}
 
+          {hasUnpaidInvoice && (
+            <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>⚠️</span>
+              <p style={{ margin: 0, fontSize: 13, color: '#92400E', fontWeight: 600 }}>
+                Please pay your outstanding invoice to enable photo downloads. You can still view and favorite your photos.
+              </p>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{files.length} photo{files.length !== 1 ? 's' : ''}</span>
@@ -878,7 +897,7 @@ function PortalGallerySection({ token }: { token: string }) {
                 <span style={{ fontSize: 13, color: '#E53E3E', fontWeight: 600 }}>♥ {favCount} favorited</span>
               )}
             </div>
-            {gallery.allow_downloads && files.length > 0 && (
+            {gallery.allow_downloads && !hasUnpaidInvoice && files.length > 0 && (
               <button onClick={handleDownloadAll} disabled={downloading} className="btn btn-ghost btn-sm">
                 {downloading ? 'Preparing…' : '↓ Download All'}
               </button>
@@ -922,7 +941,7 @@ function PortalGallerySection({ token }: { token: string }) {
                             {isFav ? '♥' : '♡'}
                           </button>
                         )}
-                        {gallery.allow_downloads && (
+                        {gallery.allow_downloads && !hasUnpaidInvoice && (
                           <a
                             href={file.storage_url}
                             download={file.original_name}
@@ -991,7 +1010,7 @@ function PortalGallerySection({ token }: { token: string }) {
                     {favorites.has(lightboxFile.id) ? '♥' : '♡'}
                   </button>
                 )}
-                {gallery.allow_downloads && (
+                {gallery.allow_downloads && !hasUnpaidInvoice && (
                   <a
                     href={lightboxFile.storage_url}
                     download={lightboxFile.original_name}
@@ -1344,7 +1363,7 @@ export function ClientPortalContent({ token }: { token: string }) {
           </SectionCard>
 
           {/* Files */}
-          <SectionCard title="Files & Galleries" icon={
+          <SectionCard title="Files" icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
@@ -1388,7 +1407,7 @@ export function ClientPortalContent({ token }: { token: string }) {
           </SectionCard>
 
           {/* Gallery */}
-          <PortalGallerySection token={token} />
+          <PortalGallerySection token={token} hasUnpaidInvoice={(data.invoices || []).some(inv => inv.status !== 'paid')} />
 
           {/* Questionnaires */}
           <PortalQuestionnaires token={token} />

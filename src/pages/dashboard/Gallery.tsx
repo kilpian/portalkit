@@ -61,6 +61,8 @@ export default function GalleryPage() {
   const [deleteGalleryId, setDeleteGalleryId] = useState<number | null>(null)
   const [deleteFileId, setDeleteFileId] = useState<number | null>(null)
   const [delivering, setDelivering] = useState(false)
+  const [deliverModal, setDeliverModal] = useState(false)
+  const [pwCopied, setPwCopied] = useState(false)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
@@ -100,7 +102,7 @@ export default function GalleryPage() {
         allow_downloads: r.data.allow_downloads,
         allow_favorites: r.data.allow_favorites,
         password_protected: r.data.password_protected,
-        password: '',
+        password: r.data.password ?? '',
       })
       setView('gallery')
     } catch { showToast('Failed to load gallery.') }
@@ -157,15 +159,17 @@ export default function GalleryPage() {
     finally { setSettingsSaving(false) }
   }
 
-  const deliverGallery = async () => {
+  const handleDeliver = async (forceEmail = false) => {
     if (!activeGallery) return
-    if (!window.confirm(`Send delivery email to ${activeGallery.client_name}?`)) return
     setDelivering(true)
     try {
-      const r = await authFetch(`/api/galleries/${activeGallery.id}`, { method: 'put', data: { status: 'delivered' } })
+      const r = await authFetch(`/api/galleries/${activeGallery.id}`, {
+        method: 'put',
+        data: { status: 'delivered', ...(forceEmail ? { force_email: true } : {}) },
+      })
       setActiveGallery(prev => prev ? { ...prev, ...r.data } : prev)
       setGalleries(prev => prev.map(g => g.id === activeGallery.id ? { ...g, ...r.data } : g))
-      showToast('Gallery delivered! Email sent to client.')
+      showToast(forceEmail ? 'Delivery email resent!' : 'Gallery delivered! Email sent to client.')
     } catch { showToast('Failed to deliver gallery.') }
     finally { setDelivering(false) }
   }
@@ -267,8 +271,8 @@ export default function GalleryPage() {
               <div key={g.id} className="card" style={{ padding: 0, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
                 onClick={() => deleteGalleryId !== g.id && openGallery(g)}>
                 <div style={{ height: 150, background: 'var(--bg-secondary)', position: 'relative', overflow: 'hidden' }}>
-                  {g.cover_url
-                    ? <img src={g.cover_url} alt={g.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                  {(g.cover_url || g.preview_url)
+                    ? <img src={g.cover_url || g.preview_url!} alt={g.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                     : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>🖼️</div>
                   }
                   <div style={{ position: 'absolute', top: 10, right: 10 }}><Badge status={g.status} /></div>
@@ -372,9 +376,16 @@ export default function GalleryPage() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{activeGallery.client_name} · {activeGallery.file_count} photo{activeGallery.file_count !== 1 ? 's' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {activeGallery.status !== 'delivered' && (
-            <button onClick={deliverGallery} disabled={delivering} className="btn btn-primary" style={{ background: '#1B4332' }}>
+          {activeGallery.status !== 'delivered' ? (
+            <button onClick={() => setDeliverModal(true)} disabled={delivering} className="btn btn-primary" style={{ background: '#1B4332' }}>
               {delivering ? 'Delivering…' : '📤 Deliver Gallery'}
+            </button>
+          ) : (
+            <button
+              onClick={() => setDeliverModal(true)}
+              style={{ fontSize: 13, color: '#1B4332', background: 'none', border: '1px solid #1B4332', padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+            >
+              Resend Email
             </button>
           )}
           <button onClick={() => setShowSettings(true)} className="btn btn-ghost btn-sm">Settings</button>
@@ -499,7 +510,25 @@ export default function GalleryPage() {
               </label>
             ))}
             {settingsForm.password_protected && (
-              <input className="input" type="password" placeholder="New password (leave blank to keep current)" value={settingsForm.password} onChange={e => setSettingsForm(f => ({ ...f, password: e.target.value }))} />
+              <div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input className="input" type="text" placeholder="Gallery password" value={settingsForm.password} onChange={e => setSettingsForm(f => ({ ...f, password: e.target.value }))} style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!settingsForm.password) return
+                      navigator.clipboard.writeText(settingsForm.password)
+                      setPwCopied(true)
+                      setTimeout(() => setPwCopied(false), 2000)
+                    }}
+                    disabled={!settingsForm.password}
+                    style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, padding: '0 12px', borderRadius: 6, border: `1px solid ${pwCopied ? 'var(--color-green-border)' : 'var(--border)'}`, background: pwCopied ? 'var(--color-green-bg)' : 'transparent', color: pwCopied ? 'var(--color-green)' : 'var(--text-dim)', cursor: 'pointer' }}
+                  >
+                    {pwCopied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Share this password with your client via message.</p>
+              </div>
             )}
             <button onClick={saveSettings} disabled={settingsSaving} className="btn btn-primary" style={{ marginTop: 8 }}>
               {settingsSaving ? 'Saving…' : 'Save Settings'}
@@ -523,6 +552,45 @@ export default function GalleryPage() {
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 10000, background: 'var(--green)', color: '#FDFAF5', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>{toast}</div>
+      )}
+
+      {/* Deliver / Resend modal */}
+      {deliverModal && activeGallery && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📸</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1B4332', marginBottom: 8 }}>
+              {activeGallery.status === 'delivered' ? 'Resend Delivery Email' : 'Deliver Gallery'}
+            </h3>
+            <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 8, lineHeight: 1.6 }}>
+              {activeGallery.status === 'delivered' ? 'Resend the delivery email to:' : 'This will send a delivery email to:'}
+            </p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+              {activeGallery.client_name}{activeGallery.client_email ? ` (${activeGallery.client_email})` : ''}
+            </p>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>
+              {activeGallery.file_count} photo{activeGallery.file_count !== 1 ? 's' : ''} will be available for download.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setDeliverModal(false)}
+                style={{ flex: 1, padding: '11px', background: 'none', border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#374151' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setDeliverModal(false)
+                  await handleDeliver(activeGallery.status === 'delivered')
+                }}
+                disabled={delivering}
+                style={{ flex: 1, padding: '11px', background: '#1B4332', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                {activeGallery.status === 'delivered' ? 'Resend Email →' : 'Send Delivery Email →'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`

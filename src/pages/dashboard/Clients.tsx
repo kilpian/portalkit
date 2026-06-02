@@ -98,6 +98,8 @@ export default function Clients() {
   const [eventForm, setEventForm] = useState(BLANK_EVENT)
   const [savingEvent, setSavingEvent] = useState(false)
   const [deleteEventConfirmId, setDeleteEventConfirmId] = useState<number | null>(null)
+  const [showSecondary, setShowSecondary] = useState(false)
+  const [showEvents, setShowEvents] = useState(false)
 
   const fetchClients = () =>
     authFetch('/api/clients', { method: 'get' })
@@ -187,6 +189,8 @@ export default function Clients() {
     setEditingClient(null)
     setForm(BLANK)
     setFormError('')
+    setShowSecondary(false)
+    setShowEvents(false)
     setInfoClient({} as Client) // truthy sentinel to open panel
   }
 
@@ -477,14 +481,48 @@ export default function Clients() {
             <label className="field-label">Phone number</label>
             <input className="input" type="tel" placeholder="+1 (555) 000-0000" {...field('phone')} />
           </div>
-          <div>
-            <label className="field-label">Event type</label>
-            <input className="input" type="text" placeholder="Wedding, Portrait, Engagement…" {...field('event_type')} />
-          </div>
-          <div>
-            <label className="field-label">Event date</label>
-            <input className="input" type="date" {...field('event_date')} />
-          </div>
+          {editingClient?.id ? (
+            <>
+              <div>
+                <label className="field-label">Event type</label>
+                <input className="input" type="text" placeholder="Wedding, Portrait, Engagement…" {...field('event_type')} />
+              </div>
+              <div>
+                <label className="field-label">Event date</label>
+                <input className="input" type="date" {...field('event_date')} />
+              </div>
+            </>
+          ) : (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowEvents(!showEvents)}
+                style={{ fontSize: 13, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: '4px 0' }}
+              >
+                {showEvents ? '− Hide event details' : '+ Add event dates'}
+              </button>
+              {showEvents && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  <div>
+                    <label className="field-label">Event type</label>
+                    <select className="input" value={form.event_type ?? ''} onChange={e => setForm(f => ({ ...f, event_type: e.target.value }))}>
+                      <option value="">Select type…</option>
+                      <option value="Wedding">Wedding</option>
+                      <option value="Engagement">Engagement</option>
+                      <option value="Portrait">Portrait</option>
+                      <option value="Elopement">Elopement</option>
+                      <option value="Anniversary">Anniversary</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Event date</label>
+                    <input className="input" type="date" {...field('event_date')} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {editingClient?.id && (
             <div>
               <label className="field-label">Pipeline stage</label>
@@ -516,21 +554,51 @@ export default function Clients() {
             </div>
           )}
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Secondary Contact</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div>
-                <label className="field-label">Name</label>
-                <input className="input" type="text" placeholder="Partner or secondary contact" value={form.secondary_name ?? ''} onChange={e => setForm(f => ({ ...f, secondary_name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="field-label">Email</label>
-                <input className="input" type="email" placeholder="partner@example.com" value={form.secondary_email ?? ''} onChange={e => setForm(f => ({ ...f, secondary_email: e.target.value }))} />
-              </div>
-              <div>
-                <label className="field-label">Phone</label>
-                <input className="input" type="tel" placeholder="+1 (555) 000-0001" value={form.secondary_phone ?? ''} onChange={e => setForm(f => ({ ...f, secondary_phone: e.target.value }))} />
-              </div>
-            </div>
+            {editingClient?.id ? (
+              <>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Secondary Contact</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <label className="field-label">Name</label>
+                    <input className="input" type="text" placeholder="Partner or secondary contact" value={form.secondary_name ?? ''} onChange={e => setForm(f => ({ ...f, secondary_name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="field-label">Email</label>
+                    <input className="input" type="email" placeholder="partner@example.com" value={form.secondary_email ?? ''} onChange={e => setForm(f => ({ ...f, secondary_email: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="field-label">Phone</label>
+                    <input className="input" type="tel" placeholder="+1 (555) 000-0001" value={form.secondary_phone ?? ''} onChange={e => setForm(f => ({ ...f, secondary_phone: e.target.value }))} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowSecondary(!showSecondary)}
+                  style={{ fontSize: 13, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: '4px 0' }}
+                >
+                  {showSecondary ? '− Hide' : '+ Add second contact'} <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(partner, spouse)</span>
+                </button>
+                {showSecondary && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                    <div>
+                      <label className="field-label">Name</label>
+                      <input className="input" type="text" placeholder="Partner or secondary contact" value={form.secondary_name ?? ''} onChange={e => setForm(f => ({ ...f, secondary_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="field-label">Email</label>
+                      <input className="input" type="email" placeholder="partner@example.com" value={form.secondary_email ?? ''} onChange={e => setForm(f => ({ ...f, secondary_email: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="field-label">Phone</label>
+                      <input className="input" type="tel" placeholder="+1 (555) 000-0001" value={form.secondary_phone ?? ''} onChange={e => setForm(f => ({ ...f, secondary_phone: e.target.value }))} />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
           {editingClient?.id && (
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>

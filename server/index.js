@@ -2558,19 +2558,30 @@ app.get('/api/galleries', requireAuth, async (req, res) => {
     const result = await pool.query(
       `SELECT g.*, COUNT(f.id)::int as file_count,
               c.name as client_name, c.portal_token, c.event_date, c.event_type,
-              cf.storage_url as cover_url, cf.storage_key as cover_storage_key
+              cf.storage_url as cover_url, cf.storage_key as cover_storage_key,
+              first_img.storage_url as preview_url, first_img.storage_key as preview_storage_key
        FROM galleries g
        JOIN clients c ON g.client_id = c.id
        LEFT JOIN files f ON f.gallery_id = g.id
        LEFT JOIN files cf ON cf.id = g.cover_file_id
+       LEFT JOIN files first_img ON first_img.id = (
+         SELECT id FROM files
+         WHERE gallery_id = g.id
+         AND mime_type LIKE 'image/%'
+         ORDER BY display_order ASC, created_at ASC
+         LIMIT 1
+       )
        WHERE g.user_id = $1
-       GROUP BY g.id, c.name, c.portal_token, c.event_date, c.event_type, cf.storage_url, cf.storage_key
+       GROUP BY g.id, c.name, c.portal_token, c.event_date, c.event_type, cf.storage_url, cf.storage_key, first_img.storage_url, first_img.storage_key
        ORDER BY g.created_at DESC`,
       [req.userId]
     )
     const rows = await Promise.all(result.rows.map(async row => {
       if (row.cover_storage_key && r2) {
         row.cover_url = await generateDownloadUrl(row.cover_storage_key).catch(() => row.cover_url)
+      }
+      if (row.preview_storage_key && r2) {
+        row.preview_url = await generateDownloadUrl(row.preview_storage_key).catch(() => row.preview_url)
       }
       return row
     }))
@@ -2637,7 +2648,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
     const prev = current.rows[0]
 
     const { name, description, status, allow_downloads, allow_favorites, password_protected, password, cover_file_id } = req.body
-    const delivering = status === 'delivered' && prev.status !== 'delivered'
+    const delivering = (status === 'delivered' && prev.status !== 'delivered') || req.body.force_email === true
 
     const result = await pool.query(
       `UPDATE galleries SET
@@ -2895,7 +2906,7 @@ app.get('/api/portals/:token', async (req, res) => {
         [client.id]
       ),
       pool.query(
-        `SELECT id, original_name, mime_type, size_bytes, storage_url, storage_key, created_at FROM files WHERE client_id=$1 ORDER BY created_at DESC`,
+        `SELECT id, original_name, mime_type, size_bytes, storage_url, storage_key, created_at FROM files WHERE client_id=$1 AND gallery_id IS NULL ORDER BY created_at DESC`,
         [client.id]
       ),
     ])

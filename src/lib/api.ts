@@ -352,6 +352,7 @@ export interface Gallery {
   user_id: number
   client_id: number
   client_name: string
+  client_email?: string | null
   portal_token: string
   event_date: string | null
   event_type: string | null
@@ -363,9 +364,11 @@ export interface Gallery {
   allow_favorites: boolean
   cover_file_id: number | null
   cover_url: string | null
+  preview_url: string | null
   file_count: number
   delivered_at: string | null
   created_at: string
+  password?: string | null
 }
 
 export interface GalleryFile {
