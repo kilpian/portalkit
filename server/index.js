@@ -274,6 +274,35 @@ app.post('/api/stripe/webhook',
               [invoiceId]
             ).catch(e => console.error('Invoice paid update failed:', e))
             console.log(`💳 Invoice ${invoiceId} marked as paid via Stripe Connect`)
+
+            const clientEmail = pi.metadata?.client_email
+            if (clientEmail && resend) {
+              try {
+                const amountStr = (pi.amount / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+                const photographerName = pi.metadata?.photographer_name || 'Your photographer'
+                const invoiceRef = pi.metadata?.invoice_number ? `Invoice #${pi.metadata.invoice_number}` : 'Photography services'
+                const portalToken = pi.metadata?.portal_token
+                const portalUrl = portalToken
+                  ? `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${portalToken}`
+                  : 'https://getportalkit.com'
+                await resend.emails.send({
+                  from: 'PortalKit <hello@mail.getportalkit.com>',
+                  to: clientEmail,
+                  subject: `Payment receipt — ${amountStr}`,
+                  html: emailTemplate({
+                    title: 'Payment Receipt',
+                    preheader: `Your ${amountStr} payment to ${photographerName} was successful.`,
+                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment received ✓</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Thank you — your payment was successful. Here are the details for your records:</p><table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:14px;color:#2D2416;"><tr><td style="padding:6px 0;color:#9C8E7A;">Amount paid</td><td style="padding:6px 0;text-align:right;font-weight:700;">${amountStr}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Paid to</td><td style="padding:6px 0;text-align:right;">${photographerName}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Reference</td><td style="padding:6px 0;text-align:right;">${invoiceRef}</td></tr></table><p style="color:#9C8E7A;font-size:13px;margin:0;">This receipt confirms your payment. No further action is needed.</p>`,
+                    ctaText: 'View your portal →',
+                    ctaUrl: portalUrl,
+                    footerNote: 'PortalKit by Kilpian LLC',
+                  }),
+                })
+                console.log(`📧 Payment receipt sent to ${clientEmail}`)
+              } catch (emailErr) {
+                console.error('Receipt email failed:', emailErr)
+              }
+            }
           }
           break
         }
@@ -2487,7 +2516,7 @@ app.get('/api/portals/:token', async (req, res) => {
               c.gallery_url, c.secondary_name,
               u.full_name as photographer_name, u.business_name as photographer_business,
               u.logo_url as photographer_logo, u.brand_color as photographer_brand_color,
-              u.stripe_connect_enabled as payments_enabled
+              (u.stripe_connect_enabled = TRUE AND u.stripe_connect_id IS NOT NULL) as payments_enabled
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
@@ -2781,10 +2810,28 @@ app.post('/api/portals/:token/messages', async (req, res) => {
   }
 })
 
+const paymentAttempts = new Map()
+
 app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
   try {
+    // Rate limit: max 5 payment attempts per portal token per hour
+    const attempts = (paymentAttempts.get(req.params.token) || [])
+      .filter(t => Date.now() - t < 3600000)
+    if (attempts.length >= 5) {
+      return res.status(429).json({ error: 'Too many payment attempts. Try again later.' })
+    }
+    paymentAttempts.set(req.params.token, [...attempts, Date.now()])
+
+    console.log('💳 Payment attempt:', {
+      token: req.params.token.slice(0, 8) + '...',
+      invoiceId: req.params.invoiceId,
+      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      time: new Date().toISOString(),
+    })
+
     const clientResult = await pool.query(
-      `SELECT c.*, u.stripe_connect_id, u.stripe_connect_enabled
+      `SELECT c.*, u.stripe_connect_id, u.stripe_connect_enabled,
+              u.business_name as photographer_business, u.full_name as photographer_name
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
@@ -2796,25 +2843,42 @@ app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
       return res.status(400).json({ error: 'Photographer has not set up payments yet' })
     }
 
+    // Invoice must belong to THIS client (prevents cross-portal payment)
     const invoiceResult = await pool.query(
-      "SELECT * FROM invoices WHERE id=$1 AND client_id=$2 AND status != 'paid'",
+      'SELECT * FROM invoices WHERE id=$1 AND client_id=$2',
       [req.params.invoiceId, client.id]
     )
     if (!invoiceResult.rows.length) return res.status(404).json({ error: 'Invoice not found' })
     const invoice = invoiceResult.rows[0]
 
+    if (invoice.status === 'paid') {
+      return res.status(400).json({ error: 'This invoice has already been paid.' })
+    }
+
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
 
+    // Amount is ALWAYS taken from the database, never from the request body
     const applicationFeeAmount = Math.round(invoice.amount_cents * 0.02)
+    const idempotencyKey = `invoice_${req.params.invoiceId}_${req.params.token.slice(0, 8)}`
     const paymentIntent = await stripe.paymentIntents.create({
       amount: invoice.amount_cents,
       currency: 'usd',
       application_fee_amount: applicationFeeAmount,
       transfer_data: { destination: client.stripe_connect_id },
-      metadata: { invoice_id: String(invoice.id), client_id: String(client.id) },
-    })
+      metadata: {
+        invoice_id: String(invoice.id),
+        client_id: String(client.id),
+        invoice_number: invoice.invoice_number || '',
+        client_email: client.email || '',
+        portal_token: req.params.token,
+        photographer_name: client.photographer_business || client.photographer_name || 'Your photographer',
+      },
+    }, { idempotencyKey })
 
-    res.json({ clientSecret: paymentIntent.client_secret })
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+    })
   } catch (err) {
     console.error('Portal payment intent error:', err)
     res.status(500).json({ error: err.message })

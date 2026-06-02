@@ -3,11 +3,7 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import posthog from 'posthog-js'
 import { loadStripe } from '@stripe/stripe-js'
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
-
-const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
-  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string)
-  : null
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
@@ -212,79 +208,139 @@ function PortalMessages({ token }: { token: string }) {
 }
 
 // ── Invoice Payment ───────────────────────────────────────────
-function PaymentForm({ invoiceId, token, amount, onPaid, onCancel }: {
-  invoiceId: number; token: string; amount: number; onPaid: () => void; onCancel: () => void
+function CheckoutForm({ amount, brandColor, onSuccess }: {
+  amount: number; brandColor: string; onSuccess: () => void
 }) {
   const stripe = useStripe()
   const elements = useElements()
-  const [processing, setProcessing] = useState(false)
+  const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
+  const [succeeded, setSucceeded] = useState(false)
 
   const handlePay = async () => {
     if (!stripe || !elements) return
-    const card = elements.getElement(CardElement)
-    if (!card) return
-    setProcessing(true)
+    setPaying(true)
     setError('')
-    try {
-      const res = await axios.post(`${API_URL}/api/portals/${token}/invoices/${invoiceId}/pay`)
-      const { error: confirmError } = await stripe.confirmCardPayment(res.data.clientSecret, {
-        payment_method: { card },
-      })
-      if (confirmError) {
-        setError(confirmError.message || 'Payment failed')
-      } else {
-        onPaid()
-      }
-    } catch {
-      setError('Payment failed. Please try again.')
-    } finally {
-      setProcessing(false)
+    const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    })
+    if (stripeError) {
+      setError(stripeError.message || 'Payment failed')
+      setPaying(false)
+    } else if (paymentIntent?.status === 'succeeded') {
+      setSucceeded(true)
+      setTimeout(onSuccess, 1500)
+    } else {
+      setPaying(false)
     }
   }
 
+  if (succeeded) {
+    return (
+      <div style={{ textAlign: 'center', padding: '20px 0' }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>✓</div>
+        <p style={{ fontWeight: 700, color: '#059669', fontSize: 16, margin: 0 }}>Payment successful!</p>
+        <p style={{ color: '#6B7280', fontSize: 13, margin: '4px 0 0' }}>Your receipt will be emailed to you.</p>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginTop: 10, background: 'var(--bg-secondary)' }}>
-      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>Enter card details</p>
-      <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', background: '#fff', marginBottom: 10 }}>
-        <CardElement options={{ style: { base: { fontSize: '14px', color: '#2D2416', '::placeholder': { color: '#9CA3AF' } } } }} />
-      </div>
-      {error && <p style={{ fontSize: 12, color: '#DC2626', marginBottom: 8 }}>{error}</p>}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onCancel} style={{ flex: 1, fontSize: 13, fontWeight: 500, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)' }}>Cancel</button>
-        <button
-          onClick={handlePay}
-          disabled={processing || !stripe}
-          className="btn btn-primary btn-sm"
-          style={{ flex: 2 }}
-        >
-          {processing ? 'Processing…' : `Pay ${formatCents(amount)}`}
-        </button>
-      </div>
+    <div>
+      <PaymentElement options={{ layout: 'tabs', paymentMethodOrder: ['card', 'apple_pay', 'google_pay'] }} />
+      {error && <p style={{ color: '#A32D2D', fontSize: 12, marginTop: 8 }}>{error}</p>}
+      <button
+        onClick={handlePay}
+        disabled={paying || !stripe}
+        style={{
+          width: '100%', marginTop: 16,
+          background: brandColor || '#1B4332',
+          color: 'white', border: 'none',
+          padding: '14px', borderRadius: 8,
+          fontSize: 15, fontWeight: 700,
+          cursor: paying ? 'not-allowed' : 'pointer',
+          opacity: paying ? 0.7 : 1,
+        }}
+      >
+        {paying ? 'Processing…' : `Pay ${formatCents(amount)}`}
+      </button>
     </div>
   )
 }
 
-function InvoicePayment({ invoiceId, token, amount, onPaid }: {
-  invoiceId: number; token: string; amount: number; onPaid: () => void
+function PaymentModal({ invoice, token, photographerName, brandColor, onSuccess, onClose }: {
+  invoice: Invoice; token: string; photographerName: string; brandColor: string; onSuccess: () => void; onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  if (!stripePromise) return null
-  if (!open) {
-    return (
-      <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>Pay Now</button>
-    )
-  }
+  const [clientSecret, setClientSecret] = useState('')
+  const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    axios.post(`${API_URL}/api/portals/${token}/invoices/${invoice.id}/pay`)
+      .then(res => {
+        setClientSecret(res.data.clientSecret)
+        setStripePromise(loadStripe(res.data.publishableKey))
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(err.response?.data?.error || 'Payment not available. Please contact your photographer.')
+        setLoading(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <Elements stripe={stripePromise}>
-      <PaymentForm
-        invoiceId={invoiceId}
-        token={token}
-        amount={amount}
-        onPaid={() => { setOpen(false); onPaid() }}
-        onCancel={() => setOpen(false)}
-      />
-    </Elements>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ position: 'relative', background: 'white', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}
+      >
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9CA3AF' }}>✕</button>
+
+        <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
+          <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 4px' }}>Paying {photographerName}</p>
+          <p style={{ fontSize: 24, fontWeight: 800, color: '#111827', margin: 0 }}>{formatCents(invoice.amount_cents)}</p>
+          <p style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 0' }}>
+            {invoice.invoice_number ? `Invoice #${invoice.invoice_number}` : 'Photography Services'}
+            {invoice.due_date ? ` · Due ${formatDate(invoice.due_date)}` : ''}
+          </p>
+        </div>
+
+        {loading && <p style={{ textAlign: 'center', color: '#6B7280', padding: 20 }}>Loading payment form…</p>}
+        {error && <p style={{ color: '#A32D2D', fontSize: 13, textAlign: 'center', padding: 12 }}>{error}</p>}
+
+        {!loading && !error && clientSecret && stripePromise && (
+          <Elements
+            stripe={stripePromise}
+            options={{
+              clientSecret,
+              appearance: {
+                theme: 'stripe',
+                variables: {
+                  colorPrimary: brandColor || '#1B4332',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  borderRadius: '8px',
+                },
+              },
+            }}
+          >
+            <CheckoutForm amount={invoice.amount_cents} brandColor={brandColor} onSuccess={onSuccess} />
+          </Elements>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 }}>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>🔒 Secured by Stripe</span>
+          <span style={{ color: '#E5E7EB' }}>·</span>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>256-bit encryption</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -648,7 +704,8 @@ export function ClientPortalContent({ token }: { token: string }) {
   const [signing, setSigning] = useState<number | null>(null)
   const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string; hash: string | null; content: string | null }>>({})
   const [lightboxFile, setLightboxFile] = useState<PortalFile | null>(null)
-  const [paidInvoices, setPaidInvoices] = useState<Record<number, boolean>>({})
+  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null)
+  const [toast, setToast] = useState('')
 
   const handleSign = async (contract: Contract) => {
     const name = signerNames[contract.id]?.trim()
@@ -936,7 +993,9 @@ export function ClientPortalContent({ token }: { token: string }) {
           }>
             {data.invoices.length === 0
               ? <EmptySection message="No invoices yet — your photographer will share them here." />
-              : data.invoices.map(inv => (
+              : data.invoices.map(inv => {
+                const isPaid = inv.status === 'paid'
+                return (
                 <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', gap: 16, flexWrap: 'wrap' }}>
                   <div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{inv.invoice_number ? `Invoice #${inv.invoice_number}` : 'Invoice'}</p>
@@ -944,20 +1003,21 @@ export function ClientPortalContent({ token }: { token: string }) {
                     {inv.due_date && <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Due {formatDate(inv.due_date)}</p>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: (inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green-bg)' : 'var(--color-yellow-bg)', color: (inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green)' : 'var(--color-yellow)', border: `1px solid ${(inv.status === 'paid' || paidInvoices[inv.id]) ? 'var(--color-green-border)' : 'var(--color-yellow-border)'}` }}>
-                      {(inv.status === 'paid' || paidInvoices[inv.id]) ? 'Paid' : 'Unpaid'}
-                    </span>
-                    {inv.status !== 'paid' && !paidInvoices[inv.id] && data?.payments_enabled && (
-                      <InvoicePayment
-                        invoiceId={inv.id}
-                        token={token}
-                        amount={inv.amount_cents}
-                        onPaid={() => setPaidInvoices(prev => ({ ...prev, [inv.id]: true }))}
-                      />
+                    {isPaid ? (
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99, background: 'var(--color-green-bg)', color: 'var(--color-green)', border: '1px solid var(--color-green-border)' }}>
+                        ✓ Paid
+                      </span>
+                    ) : data.payments_enabled ? (
+                      <button className="btn btn-primary btn-sm" onClick={() => setPayingInvoice(inv)}>Pay Now</button>
+                    ) : (
+                      <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0, textAlign: 'right', maxWidth: 220 }}>
+                        To pay this invoice, contact your photographer directly.
+                      </p>
                     )}
                   </div>
                 </div>
-              ))
+                )
+              })
             }
           </SectionCard>
 
@@ -1055,6 +1115,34 @@ export function ClientPortalContent({ token }: { token: string }) {
                 </a>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Payment Modal */}
+        {payingInvoice && (
+          <PaymentModal
+            invoice={payingInvoice}
+            token={token}
+            photographerName={businessName}
+            brandColor={data.photographer_brand_color || '#1B4332'}
+            onClose={() => setPayingInvoice(null)}
+            onSuccess={() => {
+              const paidId = payingInvoice.id
+              setData(prev => prev ? {
+                ...prev,
+                invoices: prev.invoices.map(inv => inv.id === paidId ? { ...inv, status: 'paid' } : inv),
+              } : prev)
+              setPayingInvoice(null)
+              setToast('✓ Payment received')
+              setTimeout(() => setToast(''), 3000)
+            }}
+          />
+        )}
+
+        {/* Success toast */}
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#1B4332', color: '#fff', padding: '12px 24px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', zIndex: 10000 }}>
+            {toast}
           </div>
         )}
 
