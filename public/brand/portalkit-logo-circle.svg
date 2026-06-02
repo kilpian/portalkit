@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="110" height="110" viewBox="0 0 110 110" role="img" aria-label="PortalKit logo">
+  <circle cx="55" cy="55" r="55" fill="#1B4332"/>
+  <text x="55" y="57" text-anchor="middle" dominant-baseline="central"
+        font-family="'Helvetica Neue', Arial, sans-serif" font-size="58" font-weight="700"
+        letter-spacing="-2">
+    <tspan fill="#FDFAF5">P</tspan><tspan fill="#C9A84C">K</tspan>
+  </text>
+</svg>

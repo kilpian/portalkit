@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500" role="img" aria-label="PortalKit banner">
+  <rect width="1500" height="500" fill="#1B4332"/>
+  <rect x="24" y="24" width="1452" height="452" rx="24" fill="none" stroke="#C9A84C" stroke-width="2" opacity="0.5"/>
+
+  <!-- PK mark -->
+  <g transform="translate(150, 130)">
+    <rect width="240" height="240" rx="48" fill="#FDFAF5"/>
+    <text x="120" y="124" text-anchor="middle" dominant-baseline="central"
+          font-family="'Helvetica Neue', Arial, sans-serif" font-size="120" font-weight="700"
+          letter-spacing="-4">
+      <tspan fill="#1B4332">P</tspan><tspan fill="#C9A84C">K</tspan>
+    </text>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <text x="470" y="230" font-family="'Helvetica Neue', Arial, sans-serif" font-size="120" font-weight="700" letter-spacing="-3">
+    <tspan fill="#FDFAF5">Portal</tspan><tspan fill="#C9A84C">Kit</tspan>
+  </text>
+  <text x="474" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-size="44" font-weight="400" fill="#FDFAF5" opacity="0.85" letter-spacing="0.5">
+    Client portals for photographers
+  </text>
+  <rect x="476" y="358" width="120" height="4" rx="2" fill="#C9A84C"/>
+</svg>

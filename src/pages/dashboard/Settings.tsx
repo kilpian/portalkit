@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useClerk } from '@clerk/clerk-react'
+import { loadConnectAndInitialize } from '@stripe/connect-js'
+import type { StripeConnectInstance } from '@stripe/connect-js'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
@@ -60,6 +62,12 @@ export default function Settings() {
   }>({ connected: false, enabled: false })
   const [connectLoading, setConnectLoading] = useState(false)
   const [connectMsg, setConnectMsg] = useState('')
+
+  // Embedded Stripe Connect onboarding
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [stripeConnectInstance, setStripeConnectInstance] = useState<StripeConnectInstance | null>(null)
+  const [onboardingLoading, setOnboardingLoading] = useState(false)
+  const onboardingContainerRef = useRef<HTMLDivElement>(null)
 
   const days = trialDaysLeft(user)
   const isActive = user?.plan === 'active'
@@ -177,17 +185,62 @@ export default function Settings() {
     }
   }
 
+  const refreshConnectStatus = (notifyEnabled = false) => {
+    authFetch('/api/stripe/connect/status', { method: 'get' })
+      .then(res => {
+        setConnectStatus(res.data)
+        if (notifyEnabled && res.data.enabled) {
+          setConnectMsg('✓ Stripe account connected! Clients can now pay invoices online.')
+        }
+      })
+      .catch(() => {})
+  }
+
   const handleConnectStripe = async () => {
-    setConnectLoading(true)
+    setOnboardingLoading(true)
     try {
-      const res = await authFetch('/api/stripe/connect/onboard', { method: 'post' })
-      window.location.href = res.data.url
+      const instance = loadConnectAndInitialize({
+        publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string,
+        fetchClientSecret: async () => {
+          const res = await authFetch('/api/stripe/connect/account-session', { method: 'post' })
+          return res.data.client_secret
+        },
+        appearance: {
+          overlays: 'dialog',
+          variables: {
+            colorPrimary: '#1B4332',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            borderRadius: '8px',
+            colorBackground: '#FDFAF5',
+          },
+        },
+      })
+      setStripeConnectInstance(instance)
+      setShowOnboarding(true)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-      alert('Failed to start Stripe Connect: ' + (msg || 'Please try again'))
-      setConnectLoading(false)
+      console.error('Connect error:', err)
+      alert('Failed to start Stripe setup. Please try again.')
+    } finally {
+      setOnboardingLoading(false)
     }
   }
+
+  const closeOnboarding = (notifyEnabled = false) => {
+    setShowOnboarding(false)
+    setStripeConnectInstance(null)
+    refreshConnectStatus(notifyEnabled)
+  }
+
+  // Mount the embedded onboarding component once the instance is ready
+  useEffect(() => {
+    if (!showOnboarding || !stripeConnectInstance || !onboardingContainerRef.current) return
+    const container = onboardingContainerRef.current
+    const onboarding = stripeConnectInstance.create('account-onboarding')
+    onboarding.setOnExit(() => closeOnboarding(true))
+    container.appendChild(onboarding)
+    return () => { container.innerHTML = '' }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOnboarding, stripeConnectInstance])
 
   const handleDisconnect = async () => {
     if (!window.confirm('Disconnect your payment account? Clients will no longer be able to pay invoices online.')) return
@@ -222,6 +275,51 @@ export default function Settings() {
     <div style={{ padding: '32px 32px 64px', maxWidth: 680, margin: '0 auto' }}>
       {showUpgradeModal && (
         <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+      )}
+
+      {showOnboarding && stripeConnectInstance && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          zIndex: 9999,
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 16,
+            padding: 24, maxWidth: 560, width: '100%',
+            maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.2)',
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: 20,
+            }}>
+              <div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1B4332', margin: 0 }}>
+                  Connect your Stripe account
+                </h3>
+                <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0' }}>
+                  Payments go directly to your bank. PortalKit never touches your money.
+                </p>
+              </div>
+              <button
+                onClick={() => closeOnboarding(false)}
+                style={{
+                  background: 'none', border: 'none',
+                  fontSize: 22, cursor: 'pointer',
+                  color: '#9CA3AF', flexShrink: 0, marginLeft: 12,
+                }}
+              >✕</button>
+            </div>
+
+            <div ref={onboardingContainerRef} style={{ minHeight: 400 }} />
+
+            <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 16 }}>
+              🔒 Secured by Stripe · Your banking info is handled directly by Stripe
+            </p>
+          </div>
+        </div>
       )}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>
@@ -419,19 +517,19 @@ export default function Settings() {
               </div>
               <button
                 onClick={handleConnectStripe}
-                disabled={connectLoading}
-                style={{ fontSize: 13, color: 'white', background: '#635BFF', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: connectLoading ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: connectLoading ? 0.7 : 1 }}
+                disabled={onboardingLoading}
+                style={{ fontSize: 13, color: 'white', background: '#635BFF', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: onboardingLoading ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: onboardingLoading ? 0.7 : 1 }}
               >
-                {connectLoading ? 'Loading…' : 'Continue Verification →'}
+                {onboardingLoading ? 'Setting up…' : 'Continue Verification →'}
               </button>
             </div>
           ) : (
             <button
               onClick={handleConnectStripe}
-              disabled={connectLoading}
-              style={{ background: '#635BFF', color: 'white', border: 'none', padding: '11px 22px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: connectLoading ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, opacity: connectLoading ? 0.7 : 1 }}
+              disabled={onboardingLoading}
+              style={{ background: '#635BFF', color: 'white', border: 'none', padding: '12px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: onboardingLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, opacity: onboardingLoading ? 0.7 : 1 }}
             >
-              {connectLoading ? 'Loading…' : '⚡ Connect with Stripe →'}
+              {onboardingLoading ? 'Setting up…' : '⚡ Connect with Stripe →'}
             </button>
           )}
         </div>

@@ -22,6 +22,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1053.0",
     "@clerk/backend": "^3.4.7",
     "@clerk/clerk-react": "^5.61.6",
+    "@stripe/connect-js": "^3.4.5",
     "@stripe/react-stripe-js": "^6.4.0",
     "@stripe/stripe-js": "^9.6.0",
     "axios": "^1.16.0",

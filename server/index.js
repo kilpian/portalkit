@@ -1623,6 +1623,45 @@ app.post('/api/stripe/connect/disconnect', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/api/stripe/connect/account-session', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+
+    if (!req.user.stripe_connect_id) {
+      const account = await stripe.accounts.create({
+        type: 'express',
+        email: req.user.email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        business_type: 'individual',
+        metadata: { user_id: String(req.user.id) },
+      })
+      await pool.query(
+        'UPDATE users SET stripe_connect_id=$1 WHERE id=$2',
+        [account.id, req.user.id]
+      )
+      req.user.stripe_connect_id = account.id
+    }
+
+    const accountSession = await stripe.accountSessions.create({
+      account: req.user.stripe_connect_id,
+      components: {
+        account_onboarding: { enabled: true },
+      },
+    })
+
+    res.json({
+      client_secret: accountSession.client_secret,
+      account_id: req.user.stripe_connect_id,
+    })
+  } catch (err) {
+    console.error('Account session error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
   try {
     const { billingCycle = 'monthly' } = req.body

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="PortalKit logo">
+  <rect width="140" height="140" rx="28" fill="#FDFAF5"/>
+  <rect x="6" y="6" width="128" height="128" rx="23" fill="none" stroke="#1B4332" stroke-width="2"/>
+  <text x="70" y="70" text-anchor="middle" dominant-baseline="central"
+        font-family="'Helvetica Neue', Arial, sans-serif" font-size="62" font-weight="700"
+        letter-spacing="-2">
+    <tspan fill="#1B4332">P</tspan><tspan fill="#C9A84C">K</tspan>
+  </text>
+</svg>
