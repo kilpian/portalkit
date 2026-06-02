@@ -909,6 +909,41 @@ async function initDb() {
         )
       `).catch(() => {})
 
+      // ── Feature: Gallery Delivery System ─────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS galleries (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          name TEXT NOT NULL DEFAULT 'Wedding Gallery',
+          description TEXT,
+          status TEXT DEFAULT 'hidden' CHECK (status IN ('hidden','preview','delivered')),
+          password TEXT,
+          password_protected BOOLEAN DEFAULT FALSE,
+          allow_downloads BOOLEAN DEFAULT TRUE,
+          allow_favorites BOOLEAN DEFAULT TRUE,
+          cover_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+          delivered_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`ALTER TABLE files ADD COLUMN IF NOT EXISTS gallery_id INTEGER REFERENCES galleries(id) ON DELETE SET NULL;`).catch(() => {})
+      await pool.query(`ALTER TABLE files ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;`).catch(() => {})
+      await pool.query(`ALTER TABLE files ADD COLUMN IF NOT EXISTS caption TEXT;`).catch(() => {})
+      await pool.query(`ALTER TABLE files ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;`).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS gallery_favorites (
+          id SERIAL PRIMARY KEY,
+          gallery_id INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+          file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+          client_token TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(gallery_id, file_id, client_token)
+        );
+      `).catch(() => {})
+
       // Performance indexes for common lookups
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
@@ -921,6 +956,8 @@ async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
         CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON users(stripe_customer_id);
         CREATE INDEX IF NOT EXISTS idx_users_booking_username ON users(booking_username);
+        CREATE INDEX IF NOT EXISTS idx_files_gallery_id ON files(gallery_id);
+        CREATE INDEX IF NOT EXISTS idx_galleries_client_id ON galleries(client_id);
       `).catch(err => console.error('Index creation warning:', err.message))
 
       console.log('✅ Database ready')
@@ -2415,8 +2452,15 @@ async function generateDownloadUrl(storageKey) {
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' })
-    const client_id = req.body.client_id ? parseInt(req.body.client_id) : null
-    if (client_id) {
+    let client_id = req.body.client_id ? parseInt(req.body.client_id) : null
+    const gallery_id = req.body.gallery_id ? parseInt(req.body.gallery_id) : null
+
+    if (gallery_id) {
+      // Derive client_id from gallery, verify ownership
+      const galleryCheck = await pool.query('SELECT client_id FROM galleries WHERE id=$1 AND user_id=$2', [gallery_id, req.userId])
+      if (!galleryCheck.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+      client_id = galleryCheck.rows[0].client_id
+    } else if (client_id) {
       const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
       if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
     }
@@ -2439,9 +2483,9 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
     }
 
     const result = await pool.query(
-      `INSERT INTO files (user_id, client_id, filename, original_name, mime_type, size_bytes, storage_url, storage_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [req.userId, client_id || null, storageKey, req.file.originalname, req.file.mimetype, req.file.size, storageUrl, storageKey]
+      `INSERT INTO files (user_id, client_id, gallery_id, filename, original_name, mime_type, size_bytes, storage_url, storage_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [req.userId, client_id || null, gallery_id || null, storageKey, req.file.originalname, req.file.mimetype, req.file.size, storageUrl, storageKey]
     )
     res.json(result.rows[0])
   } catch (err) {
@@ -2503,6 +2547,323 @@ app.patch('/api/files/:id/assign', requireAuth, async (req, res) => {
     res.json(result.rows[0])
   } catch (err) {
     console.error('Assign file error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── GALLERY DELIVERY SYSTEM ───────────────────────────────────
+
+app.get('/api/galleries', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT g.*, COUNT(f.id)::int as file_count,
+              c.name as client_name, c.portal_token, c.event_date, c.event_type,
+              cf.storage_url as cover_url, cf.storage_key as cover_storage_key
+       FROM galleries g
+       JOIN clients c ON g.client_id = c.id
+       LEFT JOIN files f ON f.gallery_id = g.id
+       LEFT JOIN files cf ON cf.id = g.cover_file_id
+       WHERE g.user_id = $1
+       GROUP BY g.id, c.name, c.portal_token, c.event_date, c.event_type, cf.storage_url, cf.storage_key
+       ORDER BY g.created_at DESC`,
+      [req.userId]
+    )
+    const rows = await Promise.all(result.rows.map(async row => {
+      if (row.cover_storage_key && r2) {
+        row.cover_url = await generateDownloadUrl(row.cover_storage_key).catch(() => row.cover_url)
+      }
+      return row
+    }))
+    res.json(rows)
+  } catch (err) {
+    console.error('Get galleries error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/galleries/:id', requireAuth, async (req, res) => {
+  try {
+    const galleryResult = await pool.query(
+      `SELECT g.*, c.name as client_name, c.portal_token, c.event_date, c.event_type, c.email as client_email
+       FROM galleries g JOIN clients c ON g.client_id = c.id
+       WHERE g.id=$1 AND g.user_id=$2`,
+      [req.params.id, req.userId]
+    )
+    if (!galleryResult.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    const gallery = galleryResult.rows[0]
+
+    const filesResult = await pool.query(
+      `SELECT * FROM files WHERE gallery_id=$1 ORDER BY display_order ASC, created_at ASC`,
+      [gallery.id]
+    )
+    const files = await Promise.all(filesResult.rows.map(async f => {
+      if (f.storage_key && r2) f.storage_url = await generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
+      return f
+    }))
+    res.json({ ...gallery, files })
+  } catch (err) {
+    console.error('Get gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/galleries', requireAuth, async (req, res) => {
+  try {
+    const { client_id, name, description, allow_downloads = true, allow_favorites = true, password_protected = false, password } = req.body
+    if (!client_id) return res.status(400).json({ error: 'client_id is required' })
+    const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
+    if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const result = await pool.query(
+      `INSERT INTO galleries (user_id, client_id, name, description, allow_downloads, allow_favorites, password_protected, password)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.userId, client_id, name || 'Wedding Gallery', description || null, allow_downloads, allow_favorites, password_protected, password_protected ? password : null]
+    )
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Create gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.put('/api/galleries/:id', requireAuth, async (req, res) => {
+  try {
+    const current = await pool.query(
+      `SELECT g.*, c.name as client_name, c.email as client_email, c.portal_token
+       FROM galleries g JOIN clients c ON g.client_id = c.id
+       WHERE g.id=$1 AND g.user_id=$2`,
+      [req.params.id, req.userId]
+    )
+    if (!current.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    const prev = current.rows[0]
+
+    const { name, description, status, allow_downloads, allow_favorites, password_protected, password, cover_file_id } = req.body
+    const delivering = status === 'delivered' && prev.status !== 'delivered'
+
+    const result = await pool.query(
+      `UPDATE galleries SET
+        name = COALESCE($1, name),
+        description = COALESCE($2, description),
+        status = COALESCE($3, status),
+        allow_downloads = COALESCE($4, allow_downloads),
+        allow_favorites = COALESCE($5, allow_favorites),
+        password_protected = COALESCE($6, password_protected),
+        password = CASE WHEN $6 = TRUE THEN COALESCE($7, password) ELSE NULL END,
+        cover_file_id = COALESCE($8, cover_file_id),
+        delivered_at = CASE WHEN $3 = 'delivered' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END
+       WHERE id=$9 AND user_id=$10 RETURNING *`,
+      [name ?? null, description ?? null, status ?? null, allow_downloads ?? null, allow_favorites ?? null, password_protected ?? null, password ?? null, cover_file_id ?? null, req.params.id, req.userId]
+    )
+
+    if (delivering && resend && prev.client_email) {
+      try {
+        const photoCount = (await pool.query('SELECT COUNT(*) FROM files WHERE gallery_id=$1', [req.params.id])).rows[0].count
+        const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${prev.portal_token}`
+        const userResult = await pool.query('SELECT business_name, full_name FROM users WHERE id=$1', [req.userId])
+        const bizName = userResult.rows[0]?.business_name || userResult.rows[0]?.full_name || 'Your photographer'
+        const clientFirst = prev.client_name?.split(' ')[0] || 'there'
+        await resend.emails.send({
+          from: 'PortalKit <hello@mail.getportalkit.com>',
+          to: prev.client_email,
+          subject: 'Your wedding photos are ready! 📸',
+          html: emailTemplate({
+            title: 'Your photos are ready!',
+            preheader: `Your wedding gallery from ${bizName} is ready to view`,
+            body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Hi ${clientFirst}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your wedding photos from <strong>${bizName}</strong> are ready to view and download.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${photoCount} photo${photoCount == 1 ? '' : 's'}</strong> are waiting for you in your private gallery.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can view, favorite, and download your photos directly from your client portal.</p>`,
+            ctaText: 'View Your Gallery →',
+            ctaUrl: portalLink,
+            footerNote: `Delivered by ${bizName} via PortalKit`,
+          }),
+        })
+        console.log(`📧 Gallery delivery email sent to ${prev.client_email}`)
+      } catch (emailErr) {
+        console.error('Gallery delivery email failed:', emailErr)
+      }
+    }
+
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Update gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.delete('/api/galleries/:id', requireAuth, async (req, res) => {
+  try {
+    const galleryCheck = await pool.query('SELECT id FROM galleries WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!galleryCheck.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    // Delete all R2 files in gallery
+    const filesResult = await pool.query('SELECT storage_key FROM files WHERE gallery_id=$1 AND user_id=$2', [req.params.id, req.userId])
+    await Promise.all(filesResult.rows.map(f => f.storage_key && r2
+      ? r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: f.storage_key })).catch(() => {})
+      : Promise.resolve()
+    ))
+    await pool.query('DELETE FROM galleries WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/galleries/:id/add-files', requireAuth, async (req, res) => {
+  try {
+    const { file_ids } = req.body
+    if (!Array.isArray(file_ids) || file_ids.length === 0) return res.status(400).json({ error: 'file_ids required' })
+    const galleryCheck = await pool.query('SELECT id FROM galleries WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!galleryCheck.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    await pool.query(
+      'UPDATE files SET gallery_id=$1 WHERE id = ANY($2::int[]) AND user_id=$3',
+      [req.params.id, file_ids, req.userId]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Add files to gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.patch('/api/files/:id/gallery-order', requireAuth, async (req, res) => {
+  try {
+    const { display_order } = req.body
+    if (display_order === undefined) return res.status(400).json({ error: 'display_order required' })
+    const result = await pool.query(
+      'UPDATE files SET display_order=$1 WHERE id=$2 AND user_id=$3 RETURNING id, display_order',
+      [display_order, req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'File not found' })
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error('Gallery order error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── PUBLIC GALLERY ROUTES ─────────────────────────────────────
+
+app.get('/api/portals/:token/gallery', async (req, res) => {
+  try {
+    const clientResult = await pool.query(
+      `SELECT c.id FROM clients c WHERE c.portal_token=$1`,
+      [req.params.token]
+    )
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const client_id = clientResult.rows[0].id
+
+    const galleryResult = await pool.query(
+      `SELECT g.*, COUNT(f.id)::int as file_count FROM galleries g
+       LEFT JOIN files f ON f.gallery_id = g.id
+       WHERE g.client_id=$1 AND g.status != 'hidden'
+       GROUP BY g.id ORDER BY g.created_at DESC LIMIT 1`,
+      [client_id]
+    )
+    if (!galleryResult.rows.length) return res.status(404).json({ error: 'No gallery available' })
+    const gallery = galleryResult.rows[0]
+
+    if (gallery.password_protected) {
+      const provided = req.headers['x-gallery-password']
+      if (!provided || provided !== gallery.password) {
+        return res.status(401).json({ error: 'incorrect_password' })
+      }
+    }
+
+    const filesResult = await pool.query(
+      `SELECT id, original_name, mime_type, size_bytes, storage_url, storage_key, caption, display_order, is_favorite, created_at
+       FROM files WHERE gallery_id=$1 ORDER BY display_order ASC, created_at ASC`,
+      [gallery.id]
+    )
+    const files = await Promise.all(filesResult.rows.map(async f => {
+      if (f.storage_key && r2) f.storage_url = await generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
+      return f
+    }))
+
+    res.json({ ...gallery, password: undefined, files })
+  } catch (err) {
+    console.error('Portal gallery error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/portals/:token/gallery/favorites', async (req, res) => {
+  try {
+    const clientResult = await pool.query(`SELECT c.id FROM clients c WHERE c.portal_token=$1`, [req.params.token])
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const galleryResult = await pool.query(`SELECT g.id FROM galleries g WHERE g.client_id=$1 AND g.status != 'hidden' LIMIT 1`, [clientResult.rows[0].id])
+    if (!galleryResult.rows.length) return res.json([])
+    const favs = await pool.query(
+      `SELECT file_id FROM gallery_favorites WHERE gallery_id=$1 AND client_token=$2`,
+      [galleryResult.rows[0].id, req.params.token]
+    )
+    res.json(favs.rows.map(r => r.file_id))
+  } catch (err) {
+    console.error('Gallery favorites error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/portals/:token/gallery/favorite/:fileId', async (req, res) => {
+  try {
+    const clientResult = await pool.query(`SELECT c.id FROM clients c WHERE c.portal_token=$1`, [req.params.token])
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const galleryResult = await pool.query(`SELECT g.id FROM galleries g WHERE g.client_id=$1 AND g.allow_favorites=TRUE AND g.status != 'hidden' LIMIT 1`, [clientResult.rows[0].id])
+    if (!galleryResult.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    const gallery_id = galleryResult.rows[0].id
+    const file_id = parseInt(req.params.fileId)
+    const existing = await pool.query(`SELECT id FROM gallery_favorites WHERE gallery_id=$1 AND file_id=$2 AND client_token=$3`, [gallery_id, file_id, req.params.token])
+    if (existing.rows.length) {
+      await pool.query(`DELETE FROM gallery_favorites WHERE gallery_id=$1 AND file_id=$2 AND client_token=$3`, [gallery_id, file_id, req.params.token])
+      res.json({ favorited: false })
+    } else {
+      await pool.query(`INSERT INTO gallery_favorites (gallery_id, file_id, client_token) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [gallery_id, file_id, req.params.token])
+      res.json({ favorited: true })
+    }
+  } catch (err) {
+    console.error('Gallery favorite error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/portals/:token/gallery/download-request', async (req, res) => {
+  try {
+    const clientResult = await pool.query(
+      `SELECT c.id, c.name, c.portal_token, u.email as photographer_email, u.business_name, u.full_name
+       FROM clients c JOIN users u ON c.user_id = u.id
+       WHERE c.portal_token=$1`,
+      [req.params.token]
+    )
+    if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
+    const c = clientResult.rows[0]
+    const galleryResult = await pool.query(`SELECT id FROM galleries g WHERE g.client_id=$1 AND g.status='delivered' LIMIT 1`, [c.id])
+    if (!galleryResult.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+
+    const filesResult = await pool.query(
+      `SELECT storage_url, storage_key FROM files WHERE gallery_id=$1 AND mime_type LIKE 'image/%' ORDER BY display_order ASC, created_at ASC`,
+      [galleryResult.rows[0].id]
+    )
+    const urls = await Promise.all(filesResult.rows.map(async f => {
+      if (f.storage_key && r2) return generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
+      return f.storage_url
+    }))
+
+    if (resend && c.photographer_email) {
+      const bizName = c.business_name || c.full_name || 'Your photographer'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: c.photographer_email,
+        subject: `${c.name} has downloaded their gallery`,
+        html: emailTemplate({
+          title: 'Gallery Download',
+          preheader: `${c.name} has downloaded their gallery`,
+          body: `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${c.name}</strong> just downloaded their gallery from their client portal.</p>`,
+          ctaText: 'View client →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${c.portal_token}`,
+          footerNote: bizName,
+        }),
+      }).catch(() => {})
+    }
+
+    res.json({ download_urls: urls.filter(Boolean) })
+  } catch (err) {
+    console.error('Download request error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

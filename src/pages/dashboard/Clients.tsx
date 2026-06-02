@@ -509,10 +509,12 @@ export default function Clients() {
               style={{ resize: 'vertical', minHeight: 80 }}
             />
           </div>
-          <div>
-            <label className="field-label">Gallery URL</label>
-            <input className="input" type="url" placeholder="https://gallery.example.com/..." value={form.gallery_url ?? ''} onChange={e => setForm(f => ({ ...f, gallery_url: e.target.value }))} />
-          </div>
+          {editingClient?.id && (
+            <div>
+              <label className="field-label">Gallery URL <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 11 }}>(external link)</span></label>
+              <input className="input" type="url" placeholder="https://gallery.example.com/..." value={form.gallery_url ?? ''} onChange={e => setForm(f => ({ ...f, gallery_url: e.target.value }))} />
+            </div>
+          )}
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Secondary Contact</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

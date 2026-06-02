@@ -25,6 +25,7 @@ import Workflows from './pages/dashboard/Workflows'
 import LeadForm from './pages/dashboard/LeadForm'
 import PaymentLinks from './pages/dashboard/PaymentLinks'
 import Proposals from './pages/dashboard/Proposals'
+import Gallery from './pages/dashboard/Gallery'
 import InquiryPage from './pages/InquiryPage'
 import PaymentLinkPage from './pages/PaymentLinkPage'
 import ProposalPage from './pages/ProposalPage'
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="invoices" element={<Invoices />} />
             <Route path="booking" element={<Booking />} />
             <Route path="files" element={<Files />} />
+            <Route path="gallery" element={<Gallery />} />
             <Route path="workflows" element={<Workflows />} />
             <Route path="leads" element={<LeadForm />} />
             <Route path="payment-links" element={<PaymentLinks />} />

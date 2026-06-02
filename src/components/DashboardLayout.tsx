@@ -99,6 +99,11 @@ const NAV_ITEMS: { to: string; label: string; icon: React.ReactNode; end?: boole
   { to: '/dashboard/payment-links', label: 'Payment Links', icon: ICON_PAYMENT_LINKS },
   { to: '/dashboard/questionnaires', label: 'Questionnaires', icon: ICON_QUESTIONNAIRES },
   { to: '/dashboard/files', label: 'Files', icon: ICON_FILES },
+  { to: '/dashboard/gallery', label: 'Gallery', icon: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+    </svg>
+  ) },
   { to: '/dashboard/workflows', label: 'Workflows', icon: ICON_WORKFLOWS },
 ]
 

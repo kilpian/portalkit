@@ -340,6 +340,44 @@ export interface UploadedFile {
   mime_type: string | null
   storage_url: string
   size_bytes: number
+  gallery_id: number | null
+  is_favorite: boolean | null
+  caption: string | null
+  display_order: number | null
+  created_at: string
+}
+
+export interface Gallery {
+  id: number
+  user_id: number
+  client_id: number
+  client_name: string
+  portal_token: string
+  event_date: string | null
+  event_type: string | null
+  name: string
+  description: string | null
+  status: 'hidden' | 'preview' | 'delivered'
+  password_protected: boolean
+  allow_downloads: boolean
+  allow_favorites: boolean
+  cover_file_id: number | null
+  cover_url: string | null
+  file_count: number
+  delivered_at: string | null
+  created_at: string
+}
+
+export interface GalleryFile {
+  id: number
+  original_name: string
+  mime_type: string | null
+  storage_url: string
+  size_bytes: number
+  gallery_id: number
+  caption: string | null
+  display_order: number
+  is_favorite: boolean
   created_at: string
 }
 

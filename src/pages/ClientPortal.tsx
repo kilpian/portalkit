@@ -694,6 +694,328 @@ function PortalTimeline({ token }: { token: string }) {
   )
 }
 
+// ── Portal Gallery ────────────────────────────────────────────
+interface PortalGalleryFile {
+  id: number
+  original_name: string
+  mime_type: string | null
+  storage_url: string
+  caption: string | null
+  display_order: number
+  is_favorite: boolean
+}
+
+interface PortalGalleryData {
+  id: number
+  name: string
+  description: string | null
+  status: 'hidden' | 'preview' | 'delivered'
+  password_protected: boolean
+  allow_downloads: boolean
+  allow_favorites: boolean
+  file_count: number
+  files: PortalGalleryFile[]
+}
+
+function PortalGallerySection({ token }: { token: string }) {
+  const [gallery, setGallery] = useState<PortalGalleryData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [needsPassword, setNeedsPassword] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [favorites, setFavorites] = useState<Set<number>>(new Set())
+  const [togglingFav, setTogglingFav] = useState<Set<number>>(new Set())
+  const [hoveredPhotoId, setHoveredPhotoId] = useState<number | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [dlToast, setDlToast] = useState('')
+
+  useEffect(() => {
+    axios.get<PortalGalleryData>(`${API_URL}/api/portals/${token}/gallery`)
+      .then(res => {
+        setGallery(res.data)
+        setFavorites(new Set(res.data.files.filter(f => f.is_favorite).map(f => f.id)))
+      })
+      .catch((err: unknown) => {
+        const e = err as { response?: { status: number } }
+        if (e.response?.status === 401) setNeedsPassword(true)
+      })
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (lightboxIndex === null || !gallery) return
+    const files = gallery.files
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIndex(null)
+      else if (e.key === 'ArrowLeft' && lightboxIndex > 0) setLightboxIndex(lightboxIndex - 1)
+      else if (e.key === 'ArrowRight' && lightboxIndex < files.length - 1) setLightboxIndex(lightboxIndex + 1)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [lightboxIndex, gallery])
+
+  const handlePasswordSubmit = async () => {
+    if (!passwordInput.trim()) return
+    setPasswordError('')
+    try {
+      const res = await axios.get<PortalGalleryData>(`${API_URL}/api/portals/${token}/gallery`, {
+        headers: { 'x-gallery-password': passwordInput.trim() },
+      })
+      setGallery(res.data)
+      setFavorites(new Set(res.data.files.filter(f => f.is_favorite).map(f => f.id)))
+      setNeedsPassword(false)
+    } catch (err: unknown) {
+      const e = err as { response?: { status: number } }
+      if (e.response?.status === 401) setPasswordError('Incorrect password. Please try again.')
+    }
+  }
+
+  const toggleFav = async (fileId: number) => {
+    if (togglingFav.has(fileId)) return
+    setTogglingFav(prev => new Set([...prev, fileId]))
+    try {
+      await axios.post(`${API_URL}/api/portals/${token}/gallery/favorite/${fileId}`)
+      setFavorites(prev => {
+        const next = new Set(prev)
+        if (next.has(fileId)) next.delete(fileId)
+        else next.add(fileId)
+        return next
+      })
+    } catch {} finally {
+      setTogglingFav(prev => { const next = new Set(prev); next.delete(fileId); return next })
+    }
+  }
+
+  const handleDownloadAll = async () => {
+    setDownloading(true)
+    try {
+      const res = await axios.post<{ download_urls: string[] }>(`${API_URL}/api/portals/${token}/gallery/download-request`)
+      for (const url of (res.data.download_urls || [])) {
+        const a = document.createElement('a')
+        a.href = url
+        a.setAttribute('download', '')
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        await new Promise(r => setTimeout(r, 200))
+      }
+      setDlToast('Downloads started!')
+    } catch {
+      setDlToast('Download failed. Please try again.')
+    } finally {
+      setDownloading(false)
+      setTimeout(() => setDlToast(''), 3000)
+    }
+  }
+
+  if (loading) return null
+  if (!gallery && !needsPassword) return null
+
+  if (needsPassword && !gallery) {
+    return (
+      <div className="card" style={{ padding: '32px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Gallery Password Required</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>This gallery is password protected. Enter the password your photographer provided.</p>
+        {passwordError && <p style={{ fontSize: 13, color: '#A32D2D', marginBottom: 10 }}>{passwordError}</p>}
+        <div style={{ display: 'flex', gap: 8, maxWidth: 320, margin: '0 auto' }}>
+          <input
+            className="input"
+            type="password"
+            placeholder="Enter password..."
+            value={passwordInput}
+            onChange={e => setPasswordInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handlePasswordSubmit() }}
+            style={{ flex: 1 }}
+          />
+          <button onClick={handlePasswordSubmit} disabled={!passwordInput.trim()} className="btn btn-primary">
+            Unlock
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!gallery) return null
+
+  const files = gallery.files || []
+  const lightboxFile = lightboxIndex !== null ? files[lightboxIndex] : null
+  const favCount = favorites.size
+
+  return (
+    <>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
+          <span style={{ color: 'var(--gold)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </span>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', flex: 1, margin: 0 }}>
+            {gallery.name}
+          </h2>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 99,
+            background: gallery.status === 'delivered' ? 'var(--color-green-bg)' : 'var(--color-yellow-bg)',
+            color: gallery.status === 'delivered' ? 'var(--color-green)' : 'var(--color-yellow)',
+            border: `1px solid ${gallery.status === 'delivered' ? 'var(--color-green-border)' : 'var(--color-yellow-border)'}`,
+          }}>
+            {gallery.status === 'delivered' ? '✓ Delivered' : 'Preview'}
+          </span>
+        </div>
+
+        <div style={{ padding: '16px 20px' }}>
+          {gallery.description && (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.6 }}>{gallery.description}</p>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{files.length} photo{files.length !== 1 ? 's' : ''}</span>
+              {gallery.allow_favorites && favCount > 0 && (
+                <span style={{ fontSize: 13, color: '#E53E3E', fontWeight: 600 }}>♥ {favCount} favorited</span>
+              )}
+            </div>
+            {gallery.allow_downloads && files.length > 0 && (
+              <button onClick={handleDownloadAll} disabled={downloading} className="btn btn-ghost btn-sm">
+                {downloading ? 'Preparing…' : '↓ Download All'}
+              </button>
+            )}
+          </div>
+
+          {files.length === 0 ? (
+            <p style={{ fontSize: 14, color: 'var(--text-dim)', textAlign: 'center', padding: '20px 0' }}>
+              Your photos are being prepared and will appear here soon.
+            </p>
+          ) : (
+            <div style={{ columns: '3 140px', columnGap: 8 }}>
+              {files.map((file, idx) => {
+                const isFav = favorites.has(file.id)
+                const isHovered = hoveredPhotoId === file.id
+                return (
+                  <div
+                    key={file.id}
+                    style={{ breakInside: 'avoid', marginBottom: 8, position: 'relative', borderRadius: 8, overflow: 'hidden', cursor: 'pointer' }}
+                    onClick={() => setLightboxIndex(idx)}
+                    onMouseEnter={() => setHoveredPhotoId(file.id)}
+                    onMouseLeave={() => setHoveredPhotoId(null)}
+                  >
+                    <img
+                      src={file.storage_url}
+                      alt={file.caption || file.original_name}
+                      loading="lazy"
+                      style={{ width: '100%', display: 'block', borderRadius: 8 }}
+                    />
+                    {isHovered && (gallery.allow_favorites || gallery.allow_downloads) && (
+                      <div
+                        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.28)', borderRadius: 8, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 6, gap: 5 }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {gallery.allow_favorites && (
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleFav(file.id) }}
+                            title={isFav ? 'Remove favorite' : 'Add to favorites'}
+                            style={{ background: 'rgba(255,255,255,0.92)', border: 'none', borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 15, color: isFav ? '#E53E3E' : '#9CA3AF' }}
+                          >
+                            {isFav ? '♥' : '♡'}
+                          </button>
+                        )}
+                        {gallery.allow_downloads && (
+                          <a
+                            href={file.storage_url}
+                            download={file.original_name}
+                            onClick={e => e.stopPropagation()}
+                            style={{ background: 'rgba(255,255,255,0.92)', borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#374151', textDecoration: 'none', fontWeight: 700 }}
+                          >
+                            ↓
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {lightboxFile !== null && lightboxIndex !== null && (
+        <div
+          onClick={() => setLightboxIndex(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <button
+            onClick={() => setLightboxIndex(null)}
+            style={{ position: 'fixed', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', width: 40, height: 40, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}
+          >✕</button>
+
+          <div style={{ position: 'fixed', top: 22, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.7)', fontSize: 13, zIndex: 10001, pointerEvents: 'none' }}>
+            {lightboxIndex + 1} / {files.length}
+          </div>
+
+          {lightboxIndex > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex - 1) }}
+              style={{ position: 'fixed', left: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', width: 44, height: 44, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}
+            >‹</button>
+          )}
+
+          {lightboxIndex < files.length - 1 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1) }}
+              style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', width: 44, height: 44, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}
+            >›</button>
+          )}
+
+          <div onClick={e => e.stopPropagation()} style={{ maxWidth: '88vw', maxHeight: '88vh', position: 'relative' }}>
+            <img
+              src={lightboxFile.storage_url}
+              alt={lightboxFile.caption || lightboxFile.original_name}
+              style={{ maxWidth: '88vw', maxHeight: '80vh', borderRadius: 6, display: 'block', objectFit: 'contain' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 12 }}>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {lightboxFile.caption || lightboxFile.original_name}
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {gallery.allow_favorites && (
+                  <button
+                    onClick={() => toggleFav(lightboxFile.id)}
+                    disabled={togglingFav.has(lightboxFile.id)}
+                    style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: favorites.has(lightboxFile.id) ? '#FC8181' : 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', width: 36, height: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {favorites.has(lightboxFile.id) ? '♥' : '♡'}
+                  </button>
+                )}
+                {gallery.allow_downloads && (
+                  <a
+                    href={lightboxFile.storage_url}
+                    download={lightboxFile.original_name}
+                    onClick={e => e.stopPropagation()}
+                    style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600, padding: '0 14px', height: 36, borderRadius: 6, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    ↓ Download
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dlToast && (
+        <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1B4332', color: '#fff', padding: '12px 24px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', zIndex: 10000, whiteSpace: 'nowrap' }}>
+          {dlToast}
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── ClientPortalContent (exported for preview modal) ──────────
 export function ClientPortalContent({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null>(null)
@@ -1064,6 +1386,9 @@ export function ClientPortalContent({ token }: { token: string }) {
                 })()
             }
           </SectionCard>
+
+          {/* Gallery */}
+          <PortalGallerySection token={token} />
 
           {/* Questionnaires */}
           <PortalQuestionnaires token={token} />
