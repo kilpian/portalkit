@@ -67,7 +67,7 @@ export default function Settings() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [stripeConnectInstance, setStripeConnectInstance] = useState<StripeConnectInstance | null>(null)
   const [onboardingLoading, setOnboardingLoading] = useState(false)
-  const onboardingContainerRef = useRef<HTMLDivElement>(null)
+  const stripeContainerRef = useRef<HTMLDivElement>(null)
 
   const days = trialDaysLeft(user)
   const isActive = user?.plan === 'active'
@@ -185,12 +185,15 @@ export default function Settings() {
     }
   }
 
-  const refreshConnectStatus = (notifyEnabled = false) => {
+  const refreshConnectStatus = (notify = false) => {
     authFetch('/api/stripe/connect/status', { method: 'get' })
       .then(res => {
         setConnectStatus(res.data)
-        if (notifyEnabled && res.data.enabled) {
-          setConnectMsg('✓ Stripe account connected! Clients can now pay invoices online.')
+        if (notify) {
+          setConnectMsg(res.data.enabled
+            ? '✓ Stripe account connected! Clients can now pay invoices.'
+            : 'Verification started — complete it to enable payments.'
+          )
         }
       })
       .catch(() => {})
@@ -203,6 +206,10 @@ export default function Settings() {
         publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string,
         fetchClientSecret: async () => {
           const res = await authFetch('/api/stripe/connect/account-session', { method: 'post' })
+          console.log('Account session response:', res.data)
+          if (!res.data?.client_secret) {
+            throw new Error('No client secret returned from server')
+          }
           return res.data.client_secret
         },
         appearance: {
@@ -233,14 +240,26 @@ export default function Settings() {
 
   // Mount the embedded onboarding component once the instance is ready
   useEffect(() => {
-    if (!showOnboarding || !stripeConnectInstance || !onboardingContainerRef.current) return
-    const container = onboardingContainerRef.current
-    const onboarding = stripeConnectInstance.create('account-onboarding')
-    onboarding.setOnExit(() => closeOnboarding(true))
-    container.appendChild(onboarding)
+    if (!stripeConnectInstance || !showOnboarding) return
+    if (!stripeContainerRef.current) return
+    const container = stripeContainerRef.current
+
+    // Clear any previous content
+    container.innerHTML = ''
+
+    try {
+      const onboarding = stripeConnectInstance.create('account-onboarding')
+      onboarding.setOnExit(() => closeOnboarding(true))
+      container.appendChild(onboarding)
+    } catch (err) {
+      console.error('Stripe Connect mount error:', err)
+      setShowOnboarding(false)
+      alert('Failed to load Stripe onboarding. Please try again.')
+    }
+
     return () => { container.innerHTML = '' }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOnboarding, stripeConnectInstance])
+  }, [stripeConnectInstance, showOnboarding])
 
   const handleDisconnect = async () => {
     if (!window.confirm('Disconnect your payment account? Clients will no longer be able to pay invoices online.')) return
@@ -313,7 +332,7 @@ export default function Settings() {
               >✕</button>
             </div>
 
-            <div ref={onboardingContainerRef} style={{ minHeight: 400 }} />
+            <div ref={stripeContainerRef} style={{ minHeight: 400 }} />
 
             <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 16 }}>
               🔒 Secured by Stripe · Your banking info is handled directly by Stripe
