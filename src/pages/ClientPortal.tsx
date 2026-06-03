@@ -773,11 +773,17 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
       setNeedsPassword(false)
       setPasswordInput('')
     } catch (err: unknown) {
-      const e = err as { response?: { status: number } }
+      const e = err as { response?: { status: number; data?: { error: string } } }
+      console.log('Gallery unlock error:', e.response?.status, e.response?.data)
       if (e.response?.status === 401) {
         setPasswordError('Incorrect password. Please try again.')
+      } else if (e.response?.status === 404) {
+        setPasswordError('Gallery not found.')
       } else {
-        setPasswordError('Something went wrong. Please try again.')
+        setPasswordError(
+          `Error ${e.response?.status || 'unknown'}: ` +
+          (e.response?.data?.error || 'Please try again.')
+        )
       }
     }
   }
@@ -849,6 +855,8 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
   }
 
   if (!gallery) return null
+
+  const isVideo = (mime: string | null) => !!mime?.startsWith('video/')
 
   const files = gallery.files || []
   const visibleFiles = hasUnpaidInvoice ? files.slice(0, 3) : files
@@ -927,12 +935,14 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
                     onMouseEnter={() => setHoveredPhotoId(file.id)}
                     onMouseLeave={() => setHoveredPhotoId(null)}
                   >
-                    <img
-                      src={file.storage_url}
-                      alt={file.caption || file.original_name}
-                      loading="lazy"
-                      style={{ width: '100%', display: 'block', borderRadius: 8 }}
-                    />
+                    {isVideo(file.mime_type) ? (
+                      <div style={{ width: '100%', background: '#000', borderRadius: 8, position: 'relative', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        <video src={file.storage_url} style={{ width: '100%', borderRadius: 8, objectFit: 'cover', maxHeight: 200 }} preload="metadata" muted />
+                        <div style={{ position: 'absolute', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, pointerEvents: 'none' }}>▶</div>
+                      </div>
+                    ) : (
+                      <img src={file.storage_url} alt={file.caption || file.original_name} loading="lazy" style={{ width: '100%', display: 'block', borderRadius: 8 }} />
+                    )}
                     {isHovered && (gallery.allow_favorites || gallery.allow_downloads) && (
                       <div
                         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.28)', borderRadius: 8, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 6, gap: 5 }}
@@ -1004,11 +1014,11 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
           )}
 
           <div onClick={e => e.stopPropagation()} style={{ maxWidth: '88vw', maxHeight: '88vh', position: 'relative' }}>
-            <img
-              src={lightboxFile.storage_url}
-              alt={lightboxFile.caption || lightboxFile.original_name}
-              style={{ maxWidth: '88vw', maxHeight: '80vh', borderRadius: 6, display: 'block', objectFit: 'contain' }}
-            />
+            {isVideo(lightboxFile.mime_type) ? (
+              <video src={lightboxFile.storage_url} controls autoPlay style={{ maxWidth: '88vw', maxHeight: '80vh', borderRadius: 6, display: 'block' }} />
+            ) : (
+              <img src={lightboxFile.storage_url} alt={lightboxFile.caption || lightboxFile.original_name} style={{ maxWidth: '88vw', maxHeight: '80vh', borderRadius: 6, display: 'block', objectFit: 'contain' }} />
+            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 12 }}>
               <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {lightboxFile.caption || lightboxFile.original_name}

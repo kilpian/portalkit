@@ -28,6 +28,7 @@ export default function BookingPage() {
   const [slots, setSlots] = useState<AvailabilitySlot[]>(defaultSlots)
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsSaved, setSlotsSaved] = useState(false)
+  const [slotsFromDb, setSlotsFromDb] = useState(false)
 
   // Bookings
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -49,7 +50,10 @@ export default function BookingPage() {
   const fetchAvailability = async () => {
     try {
       const res = await authFetch('/api/availability')
-      if (res.data.length > 0) setSlots(res.data)
+      if (res.data.length > 0) {
+        setSlots(res.data)
+        setSlotsFromDb(true)
+      }
     } catch {}
   }
 
@@ -93,6 +97,7 @@ export default function BookingPage() {
     try {
       await authFetch('/api/availability', { method: 'put', data: { slots } })
       setSlotsSaved(true)
+      setSlotsFromDb(true)
       setTimeout(() => setSlotsSaved(false), 2000)
     } catch {} finally {
       setSlotsLoading(false)
@@ -290,6 +295,15 @@ export default function BookingPage() {
       {/* Availability */}
       {tab === 'availability' && (
         <div>
+          {!slotsFromDb && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 18 }}>⚠️</span>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', margin: '0 0 2px' }}>Availability not saved yet</p>
+                <p style={{ fontSize: 12, color: '#B45309', margin: 0 }}>Set your weekly hours below and click "Save Availability" so clients can book with you.</p>
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ fontSize: 17, fontWeight: 600, color: '#111827', margin: 0 }}>Weekly Availability</h2>
             <button

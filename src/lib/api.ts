@@ -145,6 +145,7 @@ export interface LeadSubmission {
   event_date: string | null
   message: string | null
   source: string
+  stage?: string
   created_at: string
 }
 

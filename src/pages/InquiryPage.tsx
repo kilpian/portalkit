@@ -135,7 +135,7 @@ export default function InquiryPage() {
 
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Event Date</label>
-            <input type="date" value={values.event_date || ''} onChange={e => set('event_date', e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+            <input type="date" value={values.event_date || ''} onChange={e => set('event_date', e.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
           </div>
 
           <div>

@@ -234,6 +234,16 @@ export default function GalleryPage() {
     } catch { showToast('Failed to delete.') }
   }
 
+  const handleSetCover = async (fileId: number) => {
+    if (!activeGallery) return
+    try {
+      await authFetch(`/api/galleries/${activeGallery.id}`, { method: 'put', data: { cover_file_id: fileId } })
+      setActiveGallery(prev => prev ? { ...prev, cover_file_id: fileId } : prev)
+      setGalleries(prev => prev.map(g => g.id === activeGallery.id ? { ...g, cover_file_id: fileId } : g))
+      showToast('Cover photo updated.')
+    } catch { showToast('Failed to update cover.') }
+  }
+
   const deleteGallery = async (id: number) => {
     try {
       await authFetch(`/api/galleries/${id}`, { method: 'delete' })
@@ -470,6 +480,9 @@ export default function GalleryPage() {
             >
               <img src={f.storage_url} alt={f.original_name} style={{ width: '100%', display: 'block', borderRadius: 8 }} loading="lazy" />
               <div className="gallery-thumb-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', transition: 'background 0.15s', borderRadius: 8 }}>
+                {activeGallery && f.id === activeGallery.cover_file_id && (
+                  <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(201,168,76,0.9)', borderRadius: 4, padding: '2px 6px', fontSize: 11, color: '#fff', fontWeight: 700, pointerEvents: 'none', zIndex: 1 }}>★ Cover</div>
+                )}
                 <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}>
                   {deleteFileId === f.id ? (
                     <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.7)', borderRadius: 6, padding: '3px 6px' }} onClick={e => e.stopPropagation()}>
@@ -478,7 +491,10 @@ export default function GalleryPage() {
                       <button onClick={() => setDeleteFileId(null)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer' }}>No</button>
                     </div>
                   ) : (
-                    <button onClick={e => { e.stopPropagation(); setDeleteFileId(f.id) }} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: 'rgba(220,38,38,0.8)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 600 }} className="gallery-action-btn">✕</button>
+                    <>
+                      <button onClick={e => { e.stopPropagation(); handleSetCover(f.id) }} title="Set as cover" className="gallery-action-btn" style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: activeGallery && f.id === activeGallery.cover_file_id ? 'rgba(201,168,76,0.9)' : 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>★</button>
+                      <button onClick={e => { e.stopPropagation(); setDeleteFileId(f.id) }} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: 'rgba(220,38,38,0.8)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 600 }} className="gallery-action-btn">✕</button>
+                    </>
                   )}
                 </div>
                 {f.caption && (

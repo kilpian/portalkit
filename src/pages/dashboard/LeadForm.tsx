@@ -56,6 +56,21 @@ export default function LeadFormPage() {
     } catch {} finally { setSaving(false) }
   }
 
+  const handleDeleteLead = async (id: number) => {
+    if (!confirm('Delete this lead?')) return
+    try {
+      await authFetch(`/api/lead-submissions/${id}`, { method: 'delete' })
+      setLeads(prev => prev.filter(l => l.id !== id))
+    } catch {}
+  }
+
+  const handleLeadStage = async (id: number, stage: string) => {
+    try {
+      await authFetch(`/api/lead-submissions/${id}/stage`, { method: 'patch', data: { stage } })
+      setLeads(prev => prev.map(l => l.id === id ? { ...l, stage } : l))
+    } catch {}
+  }
+
   const username = user?.booking_username || ''
   const embedCode = `<script src="${API_BASE.replace('/api', '')}/embed.js" data-username="${username}"></script>\n<div id="portalkit-form"></div>`
   const publicUrl = `${window.location.origin}/inquire/${username}`
@@ -166,7 +181,20 @@ export default function LeadFormPage() {
                 <div key={lead.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '16px 20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <p style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0 }}>{lead.name}</p>
-                    <span style={{ fontSize: 11, color: '#9CA3AF' }}>{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <select
+                        value={lead.stage || 'inquiry'}
+                        onChange={e => handleLeadStage(lead.id, e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#F9FAFB', color: '#374151', cursor: 'pointer' }}
+                      >
+                        <option value="inquiry">Inquiry</option>
+                        <option value="consultation">Consultation</option>
+                        <option value="booked">Booked</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                      <span style={{ fontSize: 11, color: '#9CA3AF' }}>{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <button onClick={() => handleDeleteLead(lead.id)} style={{ fontSize: 11, padding: '2px 6px', borderRadius: 5, background: 'none', border: '1px solid #E5E7EB', color: '#EF4444', cursor: 'pointer' }}>✕</button>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: '#6B7280' }}>
                     {lead.email && <span>✉ {lead.email}</span>}

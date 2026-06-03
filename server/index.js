@@ -775,6 +775,8 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`ALTER TABLE lead_submissions ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'inquiry';`).catch(() => {})
+
       // ── Feature: Payment Links ────────────────────────────────
       await pool.query(`
         CREATE TABLE IF NOT EXISTS payment_links (
@@ -2650,19 +2652,38 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
     const { name, description, status, allow_downloads, allow_favorites, password_protected, password, cover_file_id } = req.body
     const delivering = (status === 'delivered' && prev.status !== 'delivered') || req.body.force_email === true
 
+    const updates = []
+    const vals = []
+    let idx = 1
+
+    if (name !== undefined) { updates.push(`name=$${idx++}`); vals.push(name) }
+    if (description !== undefined) { updates.push(`description=$${idx++}`); vals.push(description) }
+    if (status !== undefined) {
+      updates.push(`status=$${idx++}`)
+      vals.push(status)
+      if (status === 'delivered' && prev.status !== 'delivered') updates.push(`delivered_at=NOW()`)
+    }
+    if (allow_downloads !== undefined) { updates.push(`allow_downloads=$${idx++}`); vals.push(allow_downloads) }
+    if (allow_favorites !== undefined) { updates.push(`allow_favorites=$${idx++}`); vals.push(allow_favorites) }
+    if (password_protected !== undefined) { updates.push(`password_protected=$${idx++}`); vals.push(password_protected) }
+    if (password !== undefined && password !== null && password !== '') {
+      updates.push(`password=$${idx++}`)
+      vals.push(password)
+    } else if (password_protected === false) {
+      updates.push(`password=NULL`)
+    }
+    if (cover_file_id !== undefined) { updates.push(`cover_file_id=$${idx++}`); vals.push(cover_file_id) }
+
+    console.log('Gallery password save:', { id: req.params.id, password_protected, password_set: !!(password !== undefined && password !== null && password !== ''), updates })
+
+    if (updates.length === 0) return res.json(prev)
+
+    vals.push(req.params.id, req.userId)
+    const idIdx = idx; const uidIdx = idx + 1
+
     const result = await pool.query(
-      `UPDATE galleries SET
-        name = COALESCE($1, name),
-        description = COALESCE($2, description),
-        status = COALESCE($3, status),
-        allow_downloads = COALESCE($4, allow_downloads),
-        allow_favorites = COALESCE($5, allow_favorites),
-        password_protected = COALESCE($6, password_protected),
-        password = CASE WHEN $6 IS NOT NULL AND $6 = TRUE THEN COALESCE($7, password) WHEN $6 IS NOT NULL AND $6 = FALSE THEN NULL ELSE password END,
-        cover_file_id = COALESCE($8, cover_file_id),
-        delivered_at = CASE WHEN $3 = 'delivered' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END
-       WHERE id=$9 AND user_id=$10 RETURNING *`,
-      [name ?? null, description ?? null, status ?? null, allow_downloads ?? null, allow_favorites ?? null, password_protected ?? null, password ?? null, cover_file_id ?? null, req.params.id, req.userId]
+      `UPDATE galleries SET ${updates.join(', ')} WHERE id=$${idIdx} AND user_id=$${uidIdx} RETURNING *`,
+      vals
     )
 
     if (delivering && resend && prev.client_email) {
@@ -2772,9 +2793,16 @@ app.get('/api/portals/:token/gallery', async (req, res) => {
     const gallery = galleryResult.rows[0]
 
     if (gallery.password_protected) {
-      const provided = req.headers['x-gallery-password']
-      console.log(`Gallery ${gallery.id} password_protected=${gallery.password_protected}, provided=${!!provided}, match=${provided === gallery.password}`)
-      if (!provided || provided !== gallery.password) {
+      const provided = (req.headers['x-gallery-password'] || '').trim()
+      const stored = (gallery.password || '').trim()
+      console.log('Gallery auth check:', {
+        gallery_id: gallery.id,
+        password_protected: gallery.password_protected,
+        stored_password: stored ? '[HAS PASSWORD]' : '[NULL/EMPTY]',
+        provided_header: provided ? '[PROVIDED]' : '[NONE]',
+        match: provided === stored,
+      })
+      if (!provided || provided !== stored) {
         return res.status(401).json({ error: 'incorrect_password' })
       }
     }
@@ -3935,6 +3963,7 @@ app.get('/api/book/:username/availability', async (req, res) => {
     const dayOfWeek = dateObj.getDay()
 
     const slotRes = await pool.query('SELECT * FROM availability_slots WHERE user_id=$1 AND day_of_week=$2 AND active=TRUE', [userId, dayOfWeek])
+    console.log('Availability check:', { date, dayOfWeek, slotsFound: slotRes.rows.length, slotRows: slotRes.rows })
     if (!slotRes.rows.length) return res.json({ available: false, slots: [] })
     const avail = slotRes.rows[0]
 
@@ -4086,6 +4115,28 @@ app.get('/api/lead-submissions', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
+app.delete('/api/lead-submissions/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM lead_submissions WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete lead error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.patch('/api/lead-submissions/:id/stage', requireAuth, async (req, res) => {
+  const { stage } = req.body
+  if (!stage) return res.status(400).json({ error: 'stage required' })
+  try {
+    await pool.query('UPDATE lead_submissions SET stage=$1 WHERE id=$2 AND user_id=$3', [stage, req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Lead stage error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 app.options('/api/lead/:username', publicCors)
 app.get('/api/lead/:username', publicCors, async (req, res) => {
   try {
@@ -4107,6 +4158,8 @@ app.get('/api/lead/:username', publicCors, async (req, res) => {
 
 app.options('/api/lead/:username/submit', publicCors)
 app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
+  console.log('Lead form submission:', req.body)
+  console.log('event_date received:', req.body.event_date)
   const { name, email, phone, event_type, event_date, message } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
   try {

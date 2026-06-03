@@ -237,7 +237,12 @@ export default function BookingPage() {
               {slotsLoading ? (
                 <p style={{ color: '#9CA3AF', fontSize: 14 }}>Loading available times...</p>
               ) : availableSlots.length === 0 ? (
-                <p style={{ color: '#9CA3AF', fontSize: 14 }}>No available times on this date. Please choose another date.</p>
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📅</div>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: '#374151', margin: '0 0 6px' }}>No times available on this date</p>
+                  <p style={{ fontSize: 13, color: '#9CA3AF', margin: '0 0 16px' }}>Try a different date — or reach out directly to {photographer?.business_name || photographer?.full_name}.</p>
+                  <button onClick={() => setStep('date')} style={{ padding: '8px 20px', background: accentColor, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Try another date</button>
+                </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {availableSlots.map(slot => (
