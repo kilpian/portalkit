@@ -57,6 +57,8 @@ export default function GalleryPage() {
   // Lightbox
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
+  const [listMode, setListMode] = useState<'grid' | 'list'>('grid')
+
   // Delete confirm
   const [deleteGalleryId, setDeleteGalleryId] = useState<number | null>(null)
   const [deleteFileId, setDeleteFileId] = useState<number | null>(null)
@@ -251,7 +253,13 @@ export default function GalleryPage() {
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px,3vw,26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Gallery</h1>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Deliver photos to clients without leaving PortalKit.</p>
           </div>
-          <button onClick={() => setShowNew(true)} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>+ New Gallery</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
+              <button onClick={() => setListMode('grid')} style={{ padding: '6px 11px', border: 'none', cursor: 'pointer', background: listMode === 'grid' ? 'var(--green)' : 'transparent', color: listMode === 'grid' ? '#fff' : 'var(--text-dim)', fontSize: 14, lineHeight: 1 }} title="Grid view">⊞</button>
+              <button onClick={() => setListMode('list')} style={{ padding: '6px 11px', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', background: listMode === 'list' ? 'var(--green)' : 'transparent', color: listMode === 'list' ? '#fff' : 'var(--text-dim)', fontSize: 14, lineHeight: 1 }} title="List view">☰</button>
+            </div>
+            <button onClick={() => setShowNew(true)} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>+ New Gallery</button>
+          </div>
         </div>
 
         {loading ? (
@@ -265,7 +273,7 @@ export default function GalleryPage() {
             <p style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 20 }}>Create your first gallery to start delivering photos to clients.</p>
             <button onClick={() => setShowNew(true)} className="btn btn-primary">Create Gallery →</button>
           </div>
-        ) : (
+        ) : listMode === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16 }}>
             {galleries.map(g => (
               <div key={g.id} className="card" style={{ padding: 0, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
@@ -293,6 +301,39 @@ export default function GalleryPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {galleries.map((g, i) => (
+              <div key={g.id} onClick={() => deleteGalleryId !== g.id && openGallery(g)}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', cursor: 'pointer', borderBottom: i < galleries.length - 1 ? '1px solid var(--border-subtle)' : 'none', transition: 'background 0.1s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}
+              >
+                <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', flexShrink: 0 }}>
+                  {(g.cover_url || g.preview_url)
+                    ? <img src={g.cover_url || g.preview_url!} alt={g.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🖼️</div>
+                  }
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{g.name}</p>
+                    <Badge status={g.status} />
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{g.client_name}{g.event_date ? ` · ${formatDate(g.event_date)}` : ''} · {g.file_count} photo{g.file_count !== 1 ? 's' : ''}</p>
+                </div>
+                {deleteGalleryId === g.id ? (
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                    <span style={{ fontSize: 11, color: '#A32D2D' }}>Delete?</span>
+                    <button onClick={() => deleteGallery(g.id)} style={{ fontSize: 11, background: '#A32D2D', color: '#fff', border: 'none', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                    <button onClick={() => setDeleteGalleryId(null)} style={{ fontSize: 11, background: 'none', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', color: 'var(--text-dim)' }}>No</button>
+                  </div>
+                ) : (
+                  <button onClick={e => { e.stopPropagation(); setDeleteGalleryId(g.id) }} style={{ fontSize: 11, color: '#A32D2D', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', flexShrink: 0 }}>Delete</button>
+                )}
               </div>
             ))}
           </div>

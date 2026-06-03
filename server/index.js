@@ -2556,23 +2556,22 @@ app.patch('/api/files/:id/assign', requireAuth, async (req, res) => {
 app.get('/api/galleries', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT g.*, COUNT(f.id)::int as file_count,
+      `SELECT g.*,
+              (SELECT COUNT(*) FROM files WHERE gallery_id = g.id)::int as file_count,
               c.name as client_name, c.portal_token, c.event_date, c.event_type,
               cf.storage_url as cover_url, cf.storage_key as cover_storage_key,
               first_img.storage_url as preview_url, first_img.storage_key as preview_storage_key
        FROM galleries g
        JOIN clients c ON g.client_id = c.id
-       LEFT JOIN files f ON f.gallery_id = g.id
        LEFT JOIN files cf ON cf.id = g.cover_file_id
-       LEFT JOIN files first_img ON first_img.id = (
-         SELECT id FROM files
-         WHERE gallery_id = g.id
-         AND mime_type LIKE 'image/%'
+       LEFT JOIN LATERAL (
+         SELECT storage_url, storage_key
+         FROM files
+         WHERE gallery_id = g.id AND mime_type LIKE 'image/%'
          ORDER BY display_order ASC, created_at ASC
          LIMIT 1
-       )
+       ) first_img ON true
        WHERE g.user_id = $1
-       GROUP BY g.id, c.name, c.portal_token, c.event_date, c.event_type, cf.storage_url, cf.storage_key, first_img.storage_url, first_img.storage_key
        ORDER BY g.created_at DESC`,
       [req.userId]
     )
@@ -2638,6 +2637,7 @@ app.post('/api/galleries', requireAuth, async (req, res) => {
 
 app.put('/api/galleries/:id', requireAuth, async (req, res) => {
   try {
+    console.log(`PUT /api/galleries/${req.params.id} body:`, JSON.stringify(req.body))
     const current = await pool.query(
       `SELECT g.*, c.name as client_name, c.email as client_email, c.portal_token
        FROM galleries g JOIN clients c ON g.client_id = c.id
@@ -2658,7 +2658,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
         allow_downloads = COALESCE($4, allow_downloads),
         allow_favorites = COALESCE($5, allow_favorites),
         password_protected = COALESCE($6, password_protected),
-        password = CASE WHEN $6 = TRUE THEN COALESCE($7, password) ELSE NULL END,
+        password = CASE WHEN $6 IS NOT NULL AND $6 = TRUE THEN COALESCE($7, password) WHEN $6 IS NOT NULL AND $6 = FALSE THEN NULL ELSE password END,
         cover_file_id = COALESCE($8, cover_file_id),
         delivered_at = CASE WHEN $3 = 'delivered' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END
        WHERE id=$9 AND user_id=$10 RETURNING *`,
@@ -2753,6 +2753,7 @@ app.patch('/api/files/:id/gallery-order', requireAuth, async (req, res) => {
 
 app.get('/api/portals/:token/gallery', async (req, res) => {
   try {
+    console.log(`GET /api/portals/${req.params.token}/gallery password-header:`, req.headers['x-gallery-password'] ? 'provided' : 'none')
     const clientResult = await pool.query(
       `SELECT c.id FROM clients c WHERE c.portal_token=$1`,
       [req.params.token]
@@ -2772,6 +2773,7 @@ app.get('/api/portals/:token/gallery', async (req, res) => {
 
     if (gallery.password_protected) {
       const provided = req.headers['x-gallery-password']
+      console.log(`Gallery ${gallery.id} password_protected=${gallery.password_protected}, provided=${!!provided}, match=${provided === gallery.password}`)
       if (!provided || provided !== gallery.password) {
         return res.status(401).json({ error: 'incorrect_password' })
       }

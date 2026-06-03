@@ -851,7 +851,9 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
   if (!gallery) return null
 
   const files = gallery.files || []
-  const lightboxFile = lightboxIndex !== null ? files[lightboxIndex] : null
+  const visibleFiles = hasUnpaidInvoice ? files.slice(0, 3) : files
+  const lockedCount = hasUnpaidInvoice ? Math.max(0, files.length - 3) : 0
+  const lightboxFile = lightboxIndex !== null ? visibleFiles[lightboxIndex] : null
   const favCount = favorites.size
 
   return (
@@ -881,12 +883,16 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.6 }}>{gallery.description}</p>
           )}
 
-          {hasUnpaidInvoice && (
-            <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>⚠️</span>
-              <p style={{ margin: 0, fontSize: 13, color: '#92400E', fontWeight: 600 }}>
-                Please pay your outstanding invoice to enable photo downloads. You can still view and favorite your photos.
-              </p>
+          {hasUnpaidInvoice && files.length > 0 && (
+            <div style={{ background: '#FAFAF9', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>🔒</span>
+                <div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827' }}>Full gallery locked</p>
+                  <p style={{ margin: 0, fontSize: 12, color: '#6B7280', marginTop: 2 }}>Pay your invoice to unlock all {files.length} photos and downloads.</p>
+                </div>
+              </div>
+              <a href="#invoices" style={{ fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, background: 'var(--green)', color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>View Invoice →</a>
             </div>
           )}
 
@@ -910,7 +916,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
             </p>
           ) : (
             <div style={{ columns: '3 140px', columnGap: 8 }}>
-              {files.map((file, idx) => {
+              {visibleFiles.map((file, idx) => {
                 const isFav = favorites.has(file.id)
                 const isHovered = hoveredPhotoId === file.id
                 return (
@@ -956,6 +962,13 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
                   </div>
                 )
               })}
+              {lockedCount > 0 && (
+                <div style={{ breakInside: 'avoid', marginBottom: 8, borderRadius: 8, background: 'var(--bg-secondary)', border: '2px dashed var(--border)', minHeight: 120, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '16px 8px' }}>
+                  <span style={{ fontSize: 22 }}>🔒</span>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>+{lockedCount} more</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-dim)', margin: 0, textAlign: 'center' }}>Pay invoice to unlock</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -973,7 +986,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
           >✕</button>
 
           <div style={{ position: 'fixed', top: 22, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.7)', fontSize: 13, zIndex: 10001, pointerEvents: 'none' }}>
-            {lightboxIndex + 1} / {files.length}
+            {lightboxIndex + 1} / {visibleFiles.length}
           </div>
 
           {lightboxIndex > 0 && (
@@ -983,7 +996,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
             >‹</button>
           )}
 
-          {lightboxIndex < files.length - 1 && (
+          {lightboxIndex < visibleFiles.length - 1 && (
             <button
               onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1) }}
               style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', width: 44, height: 44, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}
@@ -1044,9 +1057,22 @@ export function ClientPortalContent({ token }: { token: string }) {
   const [signerNames, setSignerNames] = useState<Record<number, string>>({})
   const [signing, setSigning] = useState<number | null>(null)
   const [signedContracts, setSignedContracts] = useState<Record<number, { name: string; date: string; hash: string | null; content: string | null }>>({})
-  const [lightboxFile, setLightboxFile] = useState<PortalFile | null>(null)
+  const [filePreviewIdx, setFilePreviewIdx] = useState<number | null>(null)
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null)
   const [toast, setToast] = useState('')
+
+  const allImageFiles = (data?.files ?? []).filter(f => f.mime_type?.startsWith('image/'))
+
+  useEffect(() => {
+    if (filePreviewIdx === null) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFilePreviewIdx(null)
+      else if (e.key === 'ArrowLeft' && filePreviewIdx > 0) setFilePreviewIdx(filePreviewIdx - 1)
+      else if (e.key === 'ArrowRight' && filePreviewIdx < allImageFiles.length - 1) setFilePreviewIdx(filePreviewIdx + 1)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [filePreviewIdx, allImageFiles.length])
 
   const handleSign = async (contract: Contract) => {
     const name = signerNames[contract.id]?.trim()
@@ -1377,8 +1403,8 @@ export function ClientPortalContent({ token }: { token: string }) {
                     <>
                       {imageFiles.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: otherFiles.length > 0 ? 16 : 0 }}>
-                          {imageFiles.map(f => (
-                            <div key={f.id} onClick={() => setLightboxFile(f)} style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', cursor: 'pointer' }}>
+                          {imageFiles.map((f, idx) => (
+                            <div key={f.id} onClick={() => setFilePreviewIdx(idx)} style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', cursor: 'pointer' }}>
                               <img src={f.storage_url ?? ''} alt={f.original_name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
                             </div>
                           ))}
@@ -1431,36 +1457,34 @@ export function ClientPortalContent({ token }: { token: string }) {
           </SectionCard>
         </div>
 
-        {/* Lightbox */}
-        {lightboxFile && (
-          <div
-            onClick={() => setLightboxFile(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          >
-            <div onClick={e => e.stopPropagation()} style={{ maxWidth: '92vw', maxHeight: '92vh', position: 'relative' }}>
-              <button
-                onClick={() => setLightboxFile(null)}
-                style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}
-              >✕</button>
-              <img
-                src={lightboxFile.storage_url ?? ''}
-                alt={lightboxFile.original_name}
-                style={{ maxWidth: '92vw', maxHeight: '82vh', borderRadius: 8, display: 'block', objectFit: 'contain' }}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 16 }}>
-                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, margin: 0 }}>{lightboxFile.original_name}</p>
-                <a
-                  href={lightboxFile.storage_url ?? ''}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 12, padding: '5px 14px', borderRadius: 6, background: 'rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}
-                >
-                  Download
-                </a>
+        {/* File lightbox with nav arrows */}
+        {filePreviewIdx !== null && allImageFiles[filePreviewIdx] && (() => {
+          const lf = allImageFiles[filePreviewIdx]
+          return (
+            <div
+              onClick={() => setFilePreviewIdx(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <button onClick={() => setFilePreviewIdx(null)} style={{ position: 'fixed', top: 18, right: 18, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 38, height: 38, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}>✕</button>
+              <div style={{ position: 'fixed', top: 22, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.6)', fontSize: 13, zIndex: 10001, pointerEvents: 'none' }}>
+                {filePreviewIdx + 1} / {allImageFiles.length}
+              </div>
+              {filePreviewIdx > 0 && (
+                <button onClick={e => { e.stopPropagation(); setFilePreviewIdx(filePreviewIdx - 1) }} style={{ position: 'fixed', left: 14, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 26, width: 44, height: 44, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}>‹</button>
+              )}
+              {filePreviewIdx < allImageFiles.length - 1 && (
+                <button onClick={e => { e.stopPropagation(); setFilePreviewIdx(filePreviewIdx + 1) }} style={{ position: 'fixed', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 26, width: 44, height: 44, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}>›</button>
+              )}
+              <div onClick={e => e.stopPropagation()} style={{ maxWidth: '88vw', maxHeight: '88vh', position: 'relative' }}>
+                <img src={lf.storage_url ?? ''} alt={lf.original_name} style={{ maxWidth: '88vw', maxHeight: '80vh', borderRadius: 6, display: 'block', objectFit: 'contain' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 16 }}>
+                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lf.original_name}</p>
+                  <a href={lf.storage_url ?? ''} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, padding: '5px 14px', borderRadius: 6, background: 'rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}>Download</a>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Payment Modal */}
         {payingInvoice && (
