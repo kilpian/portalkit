@@ -256,12 +256,13 @@ export default function DashboardLayout() {
     return <Onboarding onComplete={refreshUser} />
   }
 
-  // FIX 3: derive display info directly from Clerk
-  const displayName = clerkUser?.fullName || clerkUser?.firstName || clerkUser?.emailAddresses?.[0]?.emailAddress || 'User'
-  const displayEmail = clerkUser?.emailAddresses?.[0]?.emailAddress || portalUser?.email || ''
+  const displayName = portalUser?.full_name || portalUser?.business_name || clerkUser?.fullName || clerkUser?.firstName || portalUser?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || 'Account'
+  const displaySub = (portalUser?.full_name && portalUser?.business_name)
+    ? portalUser.business_name
+    : (portalUser?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || '')
   const avatarUrl = clerkUser?.imageUrl
   const rawInitials = ((clerkUser?.firstName?.[0] ?? '') + (clerkUser?.lastName?.[0] ?? '')).toUpperCase()
-  const initials = rawInitials || displayEmail[0]?.toUpperCase() || '?'
+  const initials = rawInitials || displayName[0]?.toUpperCase() || '?'
 
   const handleSignOut = () => {
     signOut()
@@ -390,7 +391,7 @@ export default function DashboardLayout() {
                   {displayName}
                 </p>
                 <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {displayEmail}
+                  {displaySub}
                 </p>
               </div>
             </div>
