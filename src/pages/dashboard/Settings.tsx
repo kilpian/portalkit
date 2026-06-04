@@ -67,6 +67,7 @@ export default function Settings() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [stripeConnectInstance, setStripeConnectInstance] = useState<StripeConnectInstance | null>(null)
   const [onboardingLoading, setOnboardingLoading] = useState(false)
+  const [connectError, setConnectError] = useState('')
   const stripeContainerRef = useRef<HTMLDivElement>(null)
 
   const days = trialDaysLeft(user)
@@ -201,17 +202,15 @@ export default function Settings() {
 
   const handleConnectStripe = async () => {
     setOnboardingLoading(true)
+    setConnectError('')
     try {
+      const res = await authFetch('/api/stripe/connect/account-session', { method: 'post' })
+      if (!res.data?.client_secret) throw new Error('No client secret returned')
+      const clientSecret = res.data.client_secret
+
       const instance = loadConnectAndInitialize({
         publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string,
-        fetchClientSecret: async () => {
-          const res = await authFetch('/api/stripe/connect/account-session', { method: 'post' })
-          console.log('Account session response:', res.data)
-          if (!res.data?.client_secret) {
-            throw new Error('No client secret returned from server')
-          }
-          return res.data.client_secret
-        },
+        fetchClientSecret: async () => clientSecret,
         appearance: {
           overlays: 'dialog',
           variables: {
@@ -224,11 +223,11 @@ export default function Settings() {
       })
       setStripeConnectInstance(instance)
       setShowOnboarding(true)
-    } catch (err: unknown) {
-      console.error('Connect error:', err)
-      alert('Failed to start Stripe setup. Please try again.')
-    } finally {
       setOnboardingLoading(false)
+    } catch (err: unknown) {
+      console.error('Stripe Connect init error:', err)
+      setOnboardingLoading(false)
+      setConnectError('Could not load Stripe setup. Please refresh and try again.')
     }
   }
 
@@ -243,18 +242,27 @@ export default function Settings() {
     if (!stripeConnectInstance || !showOnboarding) return
     if (!stripeContainerRef.current) return
     const container = stripeContainerRef.current
-
-    // Clear any previous content
     container.innerHTML = ''
 
     try {
       const onboarding = stripeConnectInstance.create('account-onboarding')
-      onboarding.setOnExit(() => closeOnboarding(true))
+      if (!onboarding) throw new Error('Failed to create onboarding component')
+
+      onboarding.setOnExit(async () => {
+        setShowOnboarding(false)
+        setStripeConnectInstance(null)
+        try {
+          const statusRes = await authFetch('/api/stripe/connect/status')
+          setConnectStatus(statusRes.data)
+        } catch {}
+      })
+
       container.appendChild(onboarding)
     } catch (err) {
-      console.error('Stripe Connect mount error:', err)
+      console.error('Stripe component mount error:', err)
       setShowOnboarding(false)
-      alert('Failed to load Stripe onboarding. Please try again.')
+      setStripeConnectInstance(null)
+      setConnectError('Could not load Stripe setup. Please try again.')
     }
 
     return () => { container.innerHTML = '' }
@@ -511,6 +519,7 @@ export default function Settings() {
           </p>
 
           {connectMsg && <div className="alert alert-success" style={{ marginBottom: 14 }}>{connectMsg}</div>}
+          {connectError && <p style={{ fontSize: 13, color: '#A32D2D', marginBottom: 10 }}>{connectError}</p>}
 
           {connectStatus.enabled ? (
             <div>

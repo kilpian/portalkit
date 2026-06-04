@@ -2,6 +2,7 @@ import express from 'express'
 import pkg from 'pg'
 import cors from 'cors'
 import helmet from 'helmet'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
 import { Resend } from 'resend'
@@ -60,9 +61,12 @@ if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY environment
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
+  ssl: process.env.DATABASE_URL?.includes('railway')
     ? { rejectUnauthorized: false }
     : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 })
 
 const allowedOrigins = [
@@ -359,6 +363,7 @@ app.post('/api/webhooks/clerk',
   }
 )
 
+app.use(compression())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
@@ -376,7 +381,10 @@ app.use(helmet({
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   next()
 })
 
@@ -960,6 +968,13 @@ async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_users_booking_username ON users(booking_username);
         CREATE INDEX IF NOT EXISTS idx_files_gallery_id ON files(gallery_id);
         CREATE INDEX IF NOT EXISTS idx_galleries_client_id ON galleries(client_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
+        CREATE INDEX IF NOT EXISTS idx_reminders_sent_client_id ON reminders_sent(client_id);
+        CREATE INDEX IF NOT EXISTS idx_gallery_favorites_gallery_id ON gallery_favorites(gallery_id);
+        CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);
+        CREATE INDEX IF NOT EXISTS idx_proposals_user_id ON proposals(user_id);
+        CREATE INDEX IF NOT EXISTS idx_contracts_client_id ON contracts(client_id);
+        CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
       `).catch(err => console.error('Index creation warning:', err.message))
 
       console.log('✅ Database ready')
@@ -1673,6 +1688,7 @@ app.get('/api/stripe/connect/status', requireAuth, async (req, res) => {
       enabled,
       charges_enabled: account.charges_enabled,
       payouts_enabled: account.payouts_enabled,
+      details_submitted: account.details_submitted,
       account_id: account.id,
     })
   } catch (err) {
@@ -1725,8 +1741,8 @@ app.post('/api/stripe/connect/account-session', requireAuth, async (req, res) =>
       account_id: req.user.stripe_connect_id,
     })
   } catch (err) {
-    console.error('Account session error:', err)
-    res.status(500).json({ error: err.message })
+    console.error('Account session error:', { message: err.message, type: err.type, code: err.code })
+    res.status(500).json({ error: err.message || 'Failed to create account session' })
   }
 })
 
@@ -1954,8 +1970,22 @@ app.get('/api/clients', requireAuth, async (req, res) => {
       }))
       return res.json(placeholders)
     }
+    if (req.query.page !== undefined) {
+      const page = parseInt(req.query.page) || 1
+      const limit = parseInt(req.query.limit) || 50
+      const offset = (page - 1) * limit
+      const [result, countRes] = await Promise.all([
+        pool.query(
+          'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
+          [req.userId, limit, offset]
+        ),
+        pool.query('SELECT COUNT(*) as total FROM clients WHERE user_id=$1', [req.userId])
+      ])
+      const total = parseInt(countRes.rows[0].total)
+      return res.json({ clients: result.rows, total, page, pages: Math.ceil(total / limit) })
+    }
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200',
       [req.userId]
     )
     res.json(result.rows)
@@ -2446,9 +2476,25 @@ const upload = multer({
   },
 })
 
+const presignedUrlCache = new Map()
+
 async function generateDownloadUrl(storageKey) {
   if (!r2 || !storageKey) return null
-  return getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: storageKey }), { expiresIn: 7 * 24 * 60 * 60 })
+  const cached = presignedUrlCache.get(storageKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.url
+
+  const url = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: storageKey }), { expiresIn: 3600 })
+
+  presignedUrlCache.set(storageKey, { url, expiresAt: Date.now() + 50 * 60 * 1000 })
+
+  if (presignedUrlCache.size > 1000) {
+    const now = Date.now()
+    for (const [k, v] of presignedUrlCache.entries()) {
+      if (v.expiresAt < now) presignedUrlCache.delete(k)
+    }
+  }
+
+  return url
 }
 
 app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, res) => {
@@ -2499,11 +2545,14 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
     if (req.trialExpired) return res.json([])
+    const page = req.query.page !== undefined ? parseInt(req.query.page) || 1 : null
+    const limit = parseInt(req.query.limit) || 50
+    const offset = page ? (page - 1) * limit : 0
     const result = await pool.query(
       `SELECT f.*, cl.name as client_name FROM files f
        LEFT JOIN clients cl ON cl.id = f.client_id
-       WHERE f.user_id=$1 ORDER BY f.created_at DESC`,
-      [req.userId]
+       WHERE f.user_id=$1 ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
+      [req.userId, limit, offset]
     )
     // Refresh presigned URLs for R2 files
     const rows = await Promise.all(result.rows.map(async f => {
@@ -2574,7 +2623,8 @@ app.get('/api/galleries', requireAuth, async (req, res) => {
          LIMIT 1
        ) first_img ON true
        WHERE g.user_id = $1
-       ORDER BY g.created_at DESC`,
+       ORDER BY g.created_at DESC
+       LIMIT 100`,
       [req.userId]
     )
     const rows = await Promise.all(result.rows.map(async row => {
@@ -3520,15 +3570,18 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1')
+    const dbCheck = await pool.query('SELECT NOW()')
     res.json({
       status: 'ok',
       time: new Date().toISOString(),
       db: 'connected',
+      dbTime: dbCheck.rows[0].now,
+      uptime: process.uptime(),
+      memory: process.memoryUsage().heapUsed,
       version: '1.0.0',
     })
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'disconnected' })
+    res.status(500).json({ status: 'error', db: 'disconnected', error: err.message })
   }
 })
 
@@ -4784,6 +4837,13 @@ async function startServer() {
   })
   process.on('SIGTERM', async () => {
     console.log('SIGTERM received, closing gracefully...')
+    server.close(async () => {
+      await pool.end()
+      process.exit(0)
+    })
+  })
+  process.on('SIGINT', async () => {
+    console.log('SIGINT received, closing gracefully...')
     server.close(async () => {
       await pool.end()
       process.exit(0)
