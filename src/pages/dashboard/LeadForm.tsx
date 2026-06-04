@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useApi } from '../../lib/api'
 import type { LeadForm, LeadSubmission } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
+import ConfirmModal from '../../components/ConfirmModal'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
@@ -30,6 +31,7 @@ export default function LeadFormPage() {
   const [saved, setSaved] = useState(false)
   const [loadingLeads, setLoadingLeads] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [deleteLeadId, setDeleteLeadId] = useState<number | null>(null)
 
   useEffect(() => {
     authFetch('/api/lead-form')
@@ -57,11 +59,11 @@ export default function LeadFormPage() {
   }
 
   const handleDeleteLead = async (id: number) => {
-    if (!confirm('Delete this lead?')) return
     try {
       await authFetch(`/api/lead-submissions/${id}`, { method: 'delete' })
       setLeads(prev => prev.filter(l => l.id !== id))
     } catch {}
+    setDeleteLeadId(null)
   }
 
   const handleLeadStage = async (id: number, stage: string) => {
@@ -81,6 +83,15 @@ export default function LeadFormPage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 24px' }}>
+      <ConfirmModal
+        open={deleteLeadId !== null}
+        title="Delete lead?"
+        message="This lead will be permanently deleted and cannot be recovered."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => deleteLeadId !== null && handleDeleteLead(deleteLeadId)}
+        onCancel={() => setDeleteLeadId(null)}
+      />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: 0 }}>Lead Form</h1>
@@ -193,7 +204,7 @@ export default function LeadFormPage() {
                         <option value="archived">Archived</option>
                       </select>
                       <span style={{ fontSize: 11, color: '#9CA3AF' }}>{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      <button onClick={() => handleDeleteLead(lead.id)} style={{ fontSize: 11, padding: '2px 6px', borderRadius: 5, background: 'none', border: '1px solid #E5E7EB', color: '#EF4444', cursor: 'pointer' }}>✕</button>
+                      <button onClick={() => setDeleteLeadId(lead.id)} style={{ fontSize: 11, padding: '2px 6px', borderRadius: 5, background: 'none', border: '1px solid #E5E7EB', color: '#EF4444', cursor: 'pointer' }}>✕</button>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: '#6B7280' }}>

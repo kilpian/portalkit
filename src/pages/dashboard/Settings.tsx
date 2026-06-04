@@ -7,6 +7,7 @@ import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
+import ConfirmModal from '../../components/ConfirmModal'
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -51,6 +52,10 @@ export default function Settings() {
   const [deleteComment, setDeleteComment] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
+
+  // Confirm modals
+  const [showSwitchAnnualModal, setShowSwitchAnnualModal] = useState(false)
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false)
 
   // Stripe Connect
   const [connectStatus, setConnectStatus] = useState<{
@@ -171,7 +176,6 @@ export default function Settings() {
   }
 
   const handleSwitchToAnnual = async () => {
-    if (!window.confirm('Switch to annual billing? You\'ll be charged the prorated annual amount today and save $120/year going forward.')) return
     setSwitchingAnnual(true)
     setSwitchMsg('')
     try {
@@ -270,7 +274,6 @@ export default function Settings() {
   }, [stripeConnectInstance, showOnboarding])
 
   const handleDisconnect = async () => {
-    if (!window.confirm('Disconnect your payment account? Clients will no longer be able to pay invoices online.')) return
     setConnectLoading(true)
     try {
       await authFetch('/api/stripe/connect/disconnect', { method: 'post' })
@@ -303,6 +306,24 @@ export default function Settings() {
       {showUpgradeModal && (
         <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
       )}
+
+      <ConfirmModal
+        open={showSwitchAnnualModal}
+        title="Switch to annual billing?"
+        message="You'll be charged the prorated annual amount today and save $120/year going forward."
+        confirmLabel="Switch to Annual"
+        onConfirm={() => { setShowSwitchAnnualModal(false); handleSwitchToAnnual() }}
+        onCancel={() => setShowSwitchAnnualModal(false)}
+      />
+      <ConfirmModal
+        open={showDisconnectModal}
+        title="Disconnect payment account?"
+        message="Clients will no longer be able to pay invoices online."
+        confirmLabel="Disconnect"
+        danger
+        onConfirm={() => { setShowDisconnectModal(false); handleDisconnect() }}
+        onCancel={() => setShowDisconnectModal(false)}
+      />
 
       {showOnboarding && stripeConnectInstance && (
         <div style={{
@@ -451,7 +472,7 @@ export default function Settings() {
                   </p>
                   {user?.billing_cycle !== 'annual' && (
                     <button
-                      onClick={handleSwitchToAnnual}
+                      onClick={() => setShowSwitchAnnualModal(true)}
                       disabled={switchingAnnual}
                       style={{
                         marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -530,7 +551,7 @@ export default function Settings() {
                   <p style={{ fontSize: 11, color: 'var(--text-dim)', margin: 0 }}>Clients can pay invoices from their portal</p>
                 </div>
               </div>
-              <button onClick={handleDisconnect} disabled={connectLoading} style={{ fontSize: 12, color: '#A32D2D', background: 'none', border: '1px solid #A32D2D', padding: '5px 12px', borderRadius: 6, cursor: connectLoading ? 'not-allowed' : 'pointer', opacity: connectLoading ? 0.6 : 1 }}>
+              <button onClick={() => setShowDisconnectModal(true)} disabled={connectLoading} style={{ fontSize: 12, color: '#A32D2D', background: 'none', border: '1px solid #A32D2D', padding: '5px 12px', borderRadius: 6, cursor: connectLoading ? 'not-allowed' : 'pointer', opacity: connectLoading ? 0.6 : 1 }}>
                 {connectLoading ? 'Disconnecting…' : 'Disconnect'}
               </button>
             </div>

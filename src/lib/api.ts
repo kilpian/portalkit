@@ -138,6 +138,7 @@ export interface LeadForm {
 export interface LeadSubmission {
   id: number
   user_id: number
+  client_id?: number | null
   name: string
   email: string | null
   phone: string | null

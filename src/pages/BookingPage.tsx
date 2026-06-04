@@ -28,6 +28,7 @@ export default function BookingPage() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
   const [submitting, setSubmitting] = useState(false)
   const [booked, setBooked] = useState(false)
+  const [bookingError, setBookingError] = useState('')
 
   useEffect(() => {
     axios.get(`${API_BASE}/api/book/${username}`)
@@ -62,10 +63,11 @@ export default function BookingPage() {
   const handleBook = async () => {
     if (!form.name || !form.email) return
     setSubmitting(true)
+    setBookingError('')
     try {
       await axios.post(`${API_BASE}/api/book/${username}/book`, {
         session_type_id: selectedType!.id,
-        booking_date: selectedDate,
+        date: selectedDate,
         start_time: selectedTime,
         client_name: form.name,
         client_email: form.email,
@@ -73,7 +75,10 @@ export default function BookingPage() {
         notes: form.notes || null,
       })
       setBooked(true)
-    } catch {} finally {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setBookingError(msg || 'Something went wrong. Please try again.')
+    } finally {
       setSubmitting(false)
     }
   }
@@ -112,8 +117,8 @@ export default function BookingPage() {
           <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>You're booked!</h2>
           <p style={{ color: '#6B7280', fontSize: 14, lineHeight: 1.6 }}>
-            Your session with <strong>{photographer.business_name || photographer.full_name}</strong> has been requested.<br />
-            You'll receive a confirmation email at {form.email} once it's confirmed.
+            Your session with <strong>{photographer.business_name || photographer.full_name}</strong> is confirmed.<br />
+            A confirmation email has been sent to {form.email}.
           </p>
           <div style={{ marginTop: 20, background: '#F9FAFB', borderRadius: 10, padding: 16, textAlign: 'left' }}>
             <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}><strong>{selectedType?.name}</strong></div>
@@ -321,8 +326,11 @@ export default function BookingPage() {
                     opacity: (!form.name || !form.email) ? 0.5 : 1,
                   }}
                 >
-                  {submitting ? 'Requesting...' : 'Request Booking'}
+                  {submitting ? 'Booking...' : 'Confirm Booking'}
                 </button>
+                {bookingError && (
+                  <p style={{ fontSize: 13, color: '#DC2626', margin: '4px 0 0', textAlign: 'center' }}>{bookingError}</p>
+                )}
               </div>
             </div>
           )}

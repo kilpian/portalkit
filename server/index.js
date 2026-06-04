@@ -784,6 +784,7 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`ALTER TABLE lead_submissions ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'inquiry';`).catch(() => {})
+      await pool.query(`ALTER TABLE lead_submissions ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL;`).catch(() => {})
 
       // ── Feature: Payment Links ────────────────────────────────
       await pool.query(`
@@ -4182,7 +4183,11 @@ app.patch('/api/lead-submissions/:id/stage', requireAuth, async (req, res) => {
   const { stage } = req.body
   if (!stage) return res.status(400).json({ error: 'stage required' })
   try {
-    await pool.query('UPDATE lead_submissions SET stage=$1 WHERE id=$2 AND user_id=$3', [stage, req.params.id, req.userId])
+    const result = await pool.query('UPDATE lead_submissions SET stage=$1 WHERE id=$2 AND user_id=$3 RETURNING client_id', [stage, req.params.id, req.userId])
+    const clientId = result.rows[0]?.client_id
+    if (clientId) {
+      await pool.query('UPDATE clients SET stage=$1, stage_changed_at=NOW(), updated_at=NOW() WHERE id=$2 AND user_id=$3', [stage, clientId, req.userId]).catch(() => {})
+    }
     res.json({ success: true })
   } catch (err) {
     console.error('Lead stage error:', err)
@@ -4220,10 +4225,32 @@ app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
     if (!userRes.rows.length) return res.status(404).json({ error: 'Not found' })
     const photographer = userRes.rows[0]
 
-    await pool.query(
-      'INSERT INTO lead_submissions (user_id, name, email, phone, event_type, event_date, message) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    const leadRes = await pool.query(
+      'INSERT INTO lead_submissions (user_id, name, email, phone, event_type, event_date, message) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
       [photographer.id, sanitize(name), email || null, sanitize(phone) || null, sanitize(event_type) || null, event_date || null, sanitize(message) || null]
     )
+    const leadId = leadRes.rows[0].id
+
+    // Create or find a corresponding client so the lead appears in the pipeline
+    try {
+      let clientId = null
+      if (email) {
+        const existingClient = await pool.query('SELECT id FROM clients WHERE user_id=$1 AND email=$2', [photographer.id, email])
+        clientId = existingClient.rows[0]?.id || null
+      }
+      if (!clientId) {
+        const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+        const newClient = await pool.query(
+          `INSERT INTO clients (user_id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inquiry',NOW()) RETURNING id`,
+          [photographer.id, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(message) || null, portalToken]
+        )
+        clientId = newClient.rows[0].id
+      }
+      await pool.query('UPDATE lead_submissions SET client_id=$1 WHERE id=$2', [clientId, leadId])
+    } catch (clientErr) {
+      console.error('Lead→client link error:', clientErr)
+    }
 
     if (photographer.email && resend) {
       const biz = photographer.business_name || photographer.full_name || 'You'
