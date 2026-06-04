@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useApi } from '../../lib/api'
 import type { SessionType, AvailabilitySlot, Booking } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
+import ConfirmModal from '../../components/ConfirmModal'
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const COLORS = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#BE185D']
@@ -33,6 +34,8 @@ export default function BookingPage() {
   // Bookings
   const [bookings, setBookings] = useState<Booking[]>([])
   const [bookingsLoading, setBookingsLoading] = useState(false)
+  const [deleteBookingId, setDeleteBookingId] = useState<number | null>(null)
+  const [deleteSessionTypeId, setDeleteSessionTypeId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchSessionTypes()
@@ -85,11 +88,21 @@ export default function BookingPage() {
   }
 
   const deleteSessionType = async (id: number) => {
-    if (!confirm('Deactivate this session type?')) return
     try {
       await authFetch(`/api/session-types/${id}`, { method: 'delete' })
       await fetchSessionTypes()
     } catch {}
+    setDeleteSessionTypeId(null)
+  }
+
+  const handleDeleteBooking = async (id: number) => {
+    try {
+      await authFetch(`/api/bookings/${id}`, { method: 'delete' })
+      setBookings(prev => prev.filter(b => b.id !== id))
+    } catch (err) {
+      console.error('Delete booking error:', err)
+    }
+    setDeleteBookingId(null)
   }
 
   const saveAvailability = async () => {
@@ -142,6 +155,24 @@ export default function BookingPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
+      <ConfirmModal
+        open={deleteBookingId !== null}
+        title="Cancel this booking?"
+        message="This will permanently remove the booking. The client record will remain in your dashboard."
+        confirmLabel="Cancel Booking"
+        danger
+        onConfirm={() => deleteBookingId !== null && handleDeleteBooking(deleteBookingId)}
+        onCancel={() => setDeleteBookingId(null)}
+      />
+      <ConfirmModal
+        open={deleteSessionTypeId !== null}
+        title="Remove this session type?"
+        message="This session type will be deactivated and won't appear on your booking page."
+        confirmLabel="Remove"
+        danger
+        onConfirm={() => deleteSessionTypeId !== null && deleteSessionType(deleteSessionTypeId)}
+        onCancel={() => setDeleteSessionTypeId(null)}
+      />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: 0 }}>Booking</h1>
         {bookingLink && (
@@ -279,7 +310,7 @@ export default function BookingPage() {
                       Edit
                     </button>
                     <button
-                      onClick={() => deleteSessionType(t.id)}
+                      onClick={() => setDeleteSessionTypeId(t.id)}
                       style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid #FECACA', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
                     >
                       Remove
@@ -389,13 +420,15 @@ export default function BookingPage() {
                         >
                           Confirm
                         </button>
-                        <button
-                          onClick={() => updateBookingStatus(b.id, 'cancelled')}
-                          style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid #FECACA', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-                        >
-                          Decline
-                        </button>
                       </>
+                    )}
+                    {b.status !== 'cancelled' && (
+                      <button
+                        onClick={() => setDeleteBookingId(b.id)}
+                        style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FCA5A5', borderRadius: 6, background: 'white', color: '#A32D2D', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Cancel
+                      </button>
                     )}
                   </div>
                 </div>

@@ -3993,6 +3993,20 @@ app.patch('/api/bookings/:id/status', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
+app.delete('/api/bookings/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM bookings WHERE id=$1 AND user_id=$2 RETURNING id',
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Booking not found' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete booking error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── PUBLIC BOOKING ROUTES ─────────────────────────────────────
 
 app.get('/api/book/:username', async (req, res) => {
@@ -4086,14 +4100,38 @@ app.post('/api/book/:username/book', async (req, res) => {
     )
     if (existingCheck.rows.length) return res.status(409).json({ error: 'This time slot is no longer available' })
 
-    const clientRes = await pool.query('SELECT id FROM clients WHERE user_id=$1 AND email=$2', [photographer.id, client_email])
-    const clientId = clientRes.rows[0]?.id || null
+    // Find or create client record so booking appears in pipeline
+    let clientId = null
+    let clientCreated = false
+    try {
+      const existingClient = await pool.query('SELECT id FROM clients WHERE user_id=$1 AND email=$2', [photographer.id, client_email])
+      if (existingClient.rows.length > 0) {
+        clientId = existingClient.rows[0].id
+        await pool.query(
+          `UPDATE clients SET stage='booked', stage_changed_at=NOW(), updated_at=NOW() WHERE id=$1 AND stage IN ('inquiry','consultation')`,
+          [clientId]
+        )
+      } else {
+        const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+        const newClient = await pool.query(
+          `INSERT INTO clients (user_id, name, email, phone, stage, stage_changed_at, portal_token)
+           VALUES ($1,$2,$3,$4,'booked',NOW(),$5) RETURNING id`,
+          [photographer.id, sanitize(client_name), client_email, sanitize(client_phone) || null, portalToken]
+        )
+        clientId = newClient.rows[0].id
+        clientCreated = true
+      }
+    } catch (clientErr) {
+      console.error('Booking client link error:', clientErr)
+    }
 
     const booking = await pool.query(
       `INSERT INTO bookings (user_id, client_id, session_type_id, booking_date, start_time, end_time, client_name, client_email, client_phone, notes, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmed') RETURNING *`,
       [photographer.id, clientId, session_type_id || null, date, start_time, end_time, sanitize(client_name), client_email, sanitize(client_phone) || null, sanitize(notes) || null]
     )
+
+    console.log('Booking created:', { booking_id: booking.rows[0].id, client_id: clientId, client_created: clientCreated })
 
     const biz = photographer.business_name || photographer.full_name || 'Your photographer'
     const dateDisplay = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -4246,6 +4284,9 @@ app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
           [photographer.id, sanitize(name), email || null, sanitize(phone) || null, event_date || null, sanitize(event_type) || null, sanitize(message) || null, portalToken]
         )
         clientId = newClient.rows[0].id
+        console.log('Lead client created:', { client_id: clientId, lead_id: leadId })
+      } else {
+        console.log('Lead linked to existing client:', { client_id: clientId, lead_id: leadId })
       }
       await pool.query('UPDATE lead_submissions SET client_id=$1 WHERE id=$2', [clientId, leadId])
     } catch (clientErr) {
