@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import posthog from 'posthog-js'
+import { useClerk } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 
@@ -96,6 +97,7 @@ function CardForm({ onSuccess, onError, billingCycle }: { onSuccess: () => void;
 }
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
+  const { signOut } = useClerk()
   const { setUser } = usePortalAuth()
   const { authFetch } = useApi()
   const [step, setStep] = useState(1)
@@ -169,8 +171,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   })
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)', padding: '24px 16px' }}>
-      <div style={{ width: '100%', maxWidth: 480 }}>
+    <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 24px 80px rgba(0,0,0,0.3)', maxWidth: 480, width: '100%', padding: 32, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button
+          onClick={() => signOut(() => { window.location.href = '/' })}
+          style={{ background: 'none', border: 'none', fontSize: 12, color: '#9CA3AF', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
+        >
+          Sign out / use different account
+        </button>
+      </div>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.04em', marginBottom: 6 }}>
@@ -179,7 +188,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <p style={{ fontSize: 14, color: 'var(--text-dim)' }}>Let's set up your account</p>
         </div>
 
-        <div className="card" style={{ padding: '40px 36px' }}>
+        <div style={{ padding: '8px 0' }}>
 
           {step === 1 && (
             <>
@@ -370,7 +379,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           )}
 
         </div>
-      </div>
     </div>
   )
 }

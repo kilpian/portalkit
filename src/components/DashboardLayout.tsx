@@ -249,13 +249,6 @@ export default function DashboardLayout() {
   const isPaid = portalUser?.plan === 'active'
   const onboardingComplete = !portalUser || portalUser.onboarding_completed === true
 
-  // FIX 5: block the entire dashboard until onboarding is done — no sidebar, no
-  // content, no route is reachable. This prevents bypassing onboarding by typing
-  // a /dashboard/* URL directly. All hooks above run unconditionally first.
-  if (portalUser && !portalUser.onboarding_completed) {
-    return <Onboarding onComplete={refreshUser} />
-  }
-
   const displayName = portalUser?.full_name || portalUser?.business_name || clerkUser?.fullName || clerkUser?.firstName || portalUser?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || 'Account'
   const displaySub = (portalUser?.full_name && portalUser?.business_name)
     ? portalUser.business_name
@@ -437,6 +430,40 @@ export default function DashboardLayout() {
       </div>
     </>
   )
+
+  if (portalUser && !portalUser.onboarding_completed) {
+    return (
+      <>
+        {/* Dashboard visible in background — blurred, non-interactive teaser */}
+        <div style={{ position: 'fixed', inset: 0, filter: 'blur(3px)', transform: 'scale(1.02)', pointerEvents: 'none', userSelect: 'none', opacity: 0.6, overflow: 'hidden', display: 'flex', height: '100vh' }}>
+          <aside style={{ width: 240, flexShrink: 0, background: '#1B4332', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {renderSidebar(false, false)}
+          </aside>
+          <div style={{ flex: 1, background: 'var(--bg-primary)', padding: 32 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+              {['Clients', 'Contracts', 'Invoices', 'Revenue'].map(label => (
+                <div key={label} style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>{label}</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#1B4332' }}>—</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, height: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: 14 }}>
+              Your client pipeline will appear here
+            </div>
+          </div>
+        </div>
+
+        {/* Backdrop — blocks all interaction with background */}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(2px)', zIndex: 100, pointerEvents: 'all' }} />
+
+        {/* Onboarding modal on top */}
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <Onboarding onComplete={refreshUser} />
+        </div>
+      </>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}>
