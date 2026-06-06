@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { usePortalAuth } from '../../context/AuthContext'
-import { useApi, usePolling, type DashboardStats, type Client } from '../../lib/api'
+import { useApi, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
 
@@ -91,16 +91,18 @@ export default function Dashboard() {
       .catch(console.error)
       .finally(() => setLoading(false))
 
+  // Gate all data fetching and polling behind onboarding_completed.
+  // This prevents spurious 402/403 responses from triggering the upgrade modal
+  // during the race where portalUser hasn't loaded yet.
   useEffect(() => {
+    if (!user?.onboarding_completed) return
     fetchStats()
+    const interval = setInterval(fetchStats, 60_000)
+    return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user?.onboarding_completed])
 
-  usePolling(fetchStats, 60000)
-
-  // Open the embedded upgrade modal whenever a blocked (402) request fires.
-  // Only listen after onboarding is done — non-onboarded users can hit 402 routes
-  // (e.g. if they had plan='expired') and we must never show paywall during setup.
+  // Only listen for 402 events after onboarding is done.
   useEffect(() => {
     const handler = () => {
       if (user?.onboarding_completed) setShowUpgradeModal(true)
@@ -108,6 +110,30 @@ export default function Dashboard() {
     window.addEventListener('pk:upgrade-required', handler)
     return () => window.removeEventListener('pk:upgrade-required', handler)
   }, [user?.onboarding_completed])
+
+  // Explicit check order — log every render so we can trace what's happening
+  const trialExpired = user?.plan === 'trial' &&
+    !!user?.trial_ends_at &&
+    new Date() > new Date(user.trial_ends_at)
+
+  console.log('Dashboard state:', {
+    plan: user?.plan,
+    onboarding_completed: user?.onboarding_completed,
+    trial_ends_at: user?.trial_ends_at,
+    trialExpired,
+    showOnboarding: !user?.onboarding_completed,
+    showUpgrade: !!user?.onboarding_completed && trialExpired,
+  })
+
+  // RULE 1: Onboarding always wins — render nothing until user is loaded and onboarded.
+  // DashboardLayout handles the onboarding UI; we just bail out here to prevent
+  // any API calls or upgrade modals from firing during the loading race.
+  if (!user?.onboarding_completed) {
+    console.log('→ Waiting for onboarding (DashboardLayout handles UI)')
+    return null
+  }
+
+  console.log('→ Showing dashboard')
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -121,8 +147,7 @@ export default function Dashboard() {
   // Trial that has run out → soft teaser (blurred data + bottom bar), data stays loaded.
   const isTrialTeaser = user?.plan === 'trial' && days === 0
   // Non-paying / cancelled / grace → hard overlay, no data behind it.
-  // Require onboarding_completed to avoid flashing this overlay during setup.
-  const isHardBlocked = user?.onboarding_completed === true && (user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free')
+  const isHardBlocked = user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   const blockedHeading = user?.plan === 'cancelled'

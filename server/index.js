@@ -1346,35 +1346,43 @@ async function requireAuth(req, res, next) {
       skipJwksCache: true,
     })
 
-    const result = await pool.query('SELECT * FROM users WHERE clerk_id = $1', [payload.sub])
+    const clerkId = payload.sub
+    const clerkUser = await clerk.users.getUser(clerkId)
+    const email = clerkUser.emailAddresses[0]?.emailAddress
+    const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'User'
 
-    if (result.rows.length === 0) {
-      const clerkUser = await clerk.users.getUser(payload.sub)
-      const email = clerkUser.emailAddresses[0]?.emailAddress
-      const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'User'
+    console.log('Auth/me called:', { clerkId, email, hasClerkRecord: false, hasEmailRecord: false })
 
-      const existingByEmail = email ? await pool.query('SELECT * FROM users WHERE email = $1', [email]) : { rows: [] }
+    const byClerk = await pool.query('SELECT * FROM users WHERE clerk_id=$1', [clerkId])
+    console.log('By clerk:', byClerk.rows.length, 'records')
 
-      if (existingByEmail.rows.length > 0) {
+    if (byClerk.rows.length > 0) {
+      console.log('Returning user found:', byClerk.rows[0].plan, 'onboarding:', byClerk.rows[0].onboarding_completed)
+      req.user = byClerk.rows[0]
+    } else {
+      const byEmail = email ? await pool.query('SELECT * FROM users WHERE email=$1', [email]) : { rows: [] }
+      console.log('By email:', byEmail.rows.length, 'records found')
+
+      if (byEmail.rows.length > 0) {
+        console.log('Re-signup detected - resetting account')
         const updated = await pool.query(
-          `UPDATE users SET clerk_id=$1, plan='trial', trial_ends_at=NOW() + INTERVAL '14 days',
-           onboarding_completed=false, stripe_subscription_id=NULL, stripe_customer_id=NULL
-           WHERE email=$2 RETURNING *`,
-          [payload.sub, email]
+          `UPDATE users SET
+            clerk_id = $1,
+            plan = 'trial',
+            trial_ends_at = NOW() + INTERVAL '14 days',
+            onboarding_completed = FALSE,
+            stripe_subscription_id = NULL,
+            stripe_customer_id = NULL,
+            stripe_connect_id = NULL,
+            stripe_connect_enabled = FALSE
+          WHERE email = $2
+          RETURNING *`,
+          [clerkId, email]
         )
+        console.log('Account reset:', updated.rows[0]?.plan, 'onboarding:', updated.rows[0]?.onboarding_completed)
         req.user = updated.rows[0]
-        console.log(`🔗 Re-signup: fresh trial for existing account: ${req.user.id}`)
       } else {
-        const trialUsed = email ? await pool.query('SELECT * FROM trials_used WHERE email = $1', [email]) : { rows: [] }
-        const plan = trialUsed.rows.length > 0 ? 'expired' : 'trial'
-        const trialEndsAt = trialUsed.rows.length > 0
-          ? new Date().toISOString()
-          : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-
-        if (trialUsed.rows.length === 0 && email) {
-          await pool.query('INSERT INTO trials_used (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
-        }
-
+        console.log('Creating new user')
         const base = ((email || '').split('@')[0]).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'photographer'
         let bookingUsername = base
         const taken = await pool.query('SELECT 1 FROM users WHERE booking_username=$1', [base])
@@ -1382,16 +1390,14 @@ async function requireAuth(req, res, next) {
           bookingUsername = base.slice(0, 24) + Math.floor(Math.random() * 9000 + 1000)
         }
         const newUser = await pool.query(
-          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, booking_username)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, onboarding_completed, booking_username)
+           VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days', FALSE, $4)
            RETURNING *`,
-          [payload.sub, email, fullName, plan, trialEndsAt, bookingUsername]
+          [clerkId, email, fullName, bookingUsername]
         )
+        console.log('New user created:', newUser.rows[0].id)
         req.user = newUser.rows[0]
-        console.log(`${plan === 'expired' ? '🚫 Repeat trial blocked' : '🆕 New user created'}: ${req.user.id}`)
       }
-    } else {
-      req.user = result.rows[0]
     }
 
     req.userId = String(req.user.id)
@@ -4880,6 +4886,34 @@ app.post('/api/admin/activate-account', async (req, res) => {
   )
   if (!result.rows[0]) return res.status(404).json({ error: 'User not found' })
   res.json({ success: true, user: result.rows[0] })
+})
+
+app.post('/api/admin/reset-account', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  const { email } = req.body
+  try {
+    const result = await pool.query(
+      `UPDATE users SET
+        plan = 'trial',
+        trial_ends_at = NOW() + INTERVAL '14 days',
+        onboarding_completed = FALSE,
+        stripe_subscription_id = NULL,
+        stripe_customer_id = NULL
+      WHERE email = $1
+      RETURNING id, email, plan, onboarding_completed, trial_ends_at`,
+      [email]
+    )
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json({ success: true, user: result.rows[0] })
+  } catch (err) {
+    console.error('Reset account error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 app.use((err, req, res, next) => {
