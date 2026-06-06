@@ -99,11 +99,15 @@ export default function Dashboard() {
   usePolling(fetchStats, 60000)
 
   // Open the embedded upgrade modal whenever a blocked (402) request fires.
+  // Only listen after onboarding is done — non-onboarded users can hit 402 routes
+  // (e.g. if they had plan='expired') and we must never show paywall during setup.
   useEffect(() => {
-    const handler = () => setShowUpgradeModal(true)
+    const handler = () => {
+      if (user?.onboarding_completed) setShowUpgradeModal(true)
+    }
     window.addEventListener('pk:upgrade-required', handler)
     return () => window.removeEventListener('pk:upgrade-required', handler)
-  }, [])
+  }, [user?.onboarding_completed])
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -117,7 +121,8 @@ export default function Dashboard() {
   // Trial that has run out → soft teaser (blurred data + bottom bar), data stays loaded.
   const isTrialTeaser = user?.plan === 'trial' && days === 0
   // Non-paying / cancelled / grace → hard overlay, no data behind it.
-  const isHardBlocked = user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free'
+  // Require onboarding_completed to avoid flashing this overlay during setup.
+  const isHardBlocked = user?.onboarding_completed === true && (user?.plan === 'expired' || user?.plan === 'cancelled' || user?.plan === 'grace' || user?.plan === 'free')
   const showRedBanner = user?.plan === 'trial' && days > 0 && days <= 3
 
   const blockedHeading = user?.plan === 'cancelled'

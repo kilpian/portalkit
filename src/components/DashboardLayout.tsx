@@ -223,8 +223,12 @@ export default function DashboardLayout() {
 
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
-  // Fetch unread count on mount and every 60s
+  const onboardingDone = portalUser?.onboarding_completed === true
+
+  // Only poll unread count once onboarding is complete — avoids spurious 402s
+  // that would trigger the upgrade modal before the user has finished setup.
   useEffect(() => {
+    if (!onboardingDone) return
     const fetchUnread = () => {
       authFetch('/api/messages/unread-count', { method: 'get' })
         .then(res => setUnreadCount((res.data as { count: number }).count ?? 0))
@@ -234,7 +238,7 @@ export default function DashboardLayout() {
     const interval = setInterval(fetchUnread, 60_000)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onboardingDone])
 
   // FIX 1: stable toggle callback
   const toggleCollapsed = useCallback(() => {

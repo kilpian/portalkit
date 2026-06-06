@@ -1357,11 +1357,13 @@ async function requireAuth(req, res, next) {
 
       if (existingByEmail.rows.length > 0) {
         const updated = await pool.query(
-          'UPDATE users SET clerk_id = $1 WHERE email = $2 RETURNING *',
+          `UPDATE users SET clerk_id=$1, plan='trial', trial_ends_at=NOW() + INTERVAL '14 days',
+           onboarding_completed=false, stripe_subscription_id=NULL, stripe_customer_id=NULL
+           WHERE email=$2 RETURNING *`,
           [payload.sub, email]
         )
         req.user = updated.rows[0]
-        console.log(`🔗 Linked clerk_id to existing account: ${req.user.id}`)
+        console.log(`🔗 Re-signup: fresh trial for existing account: ${req.user.id}`)
       } else {
         const trialUsed = email ? await pool.query('SELECT * FROM trials_used WHERE email = $1', [email]) : { rows: [] }
         const plan = trialUsed.rows.length > 0 ? 'expired' : 'trial'
@@ -1396,6 +1398,19 @@ async function requireAuth(req, res, next) {
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`${req.method} ${req.path} — user ${req.user?.id}`)
+    }
+
+    // Onboarding must come first — a non-onboarded user (including re-signups
+    // with plan='expired') must never hit the paywall before completing setup.
+    const ONBOARDING_EXEMPT = ['/api/auth/me', '/api/users/me', '/api/stripe/', '/api/health', '/api/debug/']
+    if (!req.user.onboarding_completed) {
+      if (ONBOARDING_EXEMPT.some(r => req.path.startsWith(r))) {
+        return next() // Let stripe/auth routes through so onboarding can proceed
+      }
+      return res.status(403).json({
+        error: 'onboarding_required',
+        message: 'Please complete onboarding first',
+      })
     }
 
     const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/stripe/create-setup-intent', '/api/stripe/confirm-setup', '/api/health']
@@ -1438,16 +1453,6 @@ async function requireAuth(req, res, next) {
             upgradeRequired: true,
           })
         }
-      }
-    }
-
-    const ONBOARDING_EXEMPT = ['/api/auth/me', '/api/users/me', '/api/stripe/', '/api/health', '/api/debug/']
-    if (!req.user.onboarding_completed) {
-      if (!ONBOARDING_EXEMPT.some(r => req.path.startsWith(r))) {
-        return res.status(403).json({
-          error: 'onboarding_required',
-          message: 'Please complete onboarding first',
-        })
       }
     }
 

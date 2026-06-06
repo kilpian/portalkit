@@ -281,6 +281,20 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </>
           )}
 
+          {step === 2 && !clientSecret && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ color: '#A32D2D', fontSize: 13, marginBottom: 12 }}>
+                Could not load payment form. Please refresh the page.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                style={{ background: '#1B4332', color: 'white', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Refresh and Try Again
+              </button>
+            </div>
+          )}
+
           {step === 2 && clientSecret && (
             <>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--green)', marginBottom: 6 }}>Secure your account</h1>
