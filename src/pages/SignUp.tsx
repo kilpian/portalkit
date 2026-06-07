@@ -4,8 +4,11 @@ import { SignUp } from '@clerk/clerk-react'
 
 export default function SignUpPage() {
   useEffect(() => {
-    const ref = new URLSearchParams(window.location.search).get('ref')
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
     if (ref) localStorage.setItem('portalkit_ref', ref)
+    const aff = params.get('aff')
+    if (aff) localStorage.setItem('pk_affiliate', aff)
   }, [])
 
   return (

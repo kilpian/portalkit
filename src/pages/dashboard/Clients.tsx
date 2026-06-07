@@ -31,7 +31,49 @@ interface ClientEvent {
   created_at: string
 }
 
+interface ShotItem {
+  id: string
+  category: string
+  description: string
+  priority: 'must_have' | 'if_possible' | 'skip'
+}
+
+interface ShotList {
+  id: number
+  client_id: number
+  user_id: number
+  shots: ShotItem[]
+  client_notes: string | null
+  photographer_notes: string | null
+  status: 'pending' | 'submitted' | 'confirmed'
+  submitted_at: string | null
+  confirmed_at: string | null
+}
+
 const BLANK_EVENT = { event_name: '', event_date: '', event_type: '' }
+
+const SHOT_CATEGORIES = [
+  { key: 'ceremony',      label: 'Ceremony' },
+  { key: 'reception',     label: 'Reception' },
+  { key: 'portraits',     label: 'Portraits' },
+  { key: 'details',       label: 'Details' },
+  { key: 'family',        label: 'Family' },
+  { key: 'getting_ready', label: 'Getting Ready' },
+]
+
+function PriorityBadge({ priority }: { priority: ShotItem['priority'] }) {
+  const map = {
+    must_have:   { label: 'Must', bg: '#FEE2E2', color: '#DC2626' },
+    if_possible: { label: 'If possible', bg: '#FEF3C7', color: '#D97706' },
+    skip:        { label: 'Skip', bg: '#F3F4F6', color: '#6B7280' },
+  }
+  const s = map[priority] ?? map.if_possible
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: s.bg, color: s.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
+      {s.label}
+    </span>
+  )
+}
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -101,6 +143,14 @@ export default function Clients() {
   const [showSecondary, setShowSecondary] = useState(false)
   const [showEvents, setShowEvents] = useState(false)
 
+  const [shotList, setShotList] = useState<ShotList | null>(null)
+  const [shotListLoading, setShotListLoading] = useState(false)
+  const [confirmingShots, setConfirmingShots] = useState(false)
+  const [newShotDesc, setNewShotDesc] = useState('')
+  const [newShotCat, setNewShotCat] = useState('ceremony')
+  const [newShotPrio, setNewShotPrio] = useState<ShotItem['priority']>('must_have')
+  const [savingShot, setSavingShot] = useState(false)
+
   const fetchClients = () =>
     authFetch('/api/clients', { method: 'get' })
       .then(res => setClients(Array.isArray(res.data) ? res.data : []))
@@ -121,6 +171,18 @@ export default function Clients() {
     authFetch(`/api/clients/${editingClient.id}/events`, { method: 'get' })
       .then(res => setClientEvents(Array.isArray(res.data) ? res.data : []))
       .catch(() => setClientEvents([]))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingClient?.id])
+
+  useEffect(() => {
+    setShotList(null)
+    setNewShotDesc('')
+    if (!editingClient?.id) return
+    setShotListLoading(true)
+    authFetch(`/api/clients/${editingClient.id}/shot-list`, { method: 'get' })
+      .then(res => setShotList(res.data))
+      .catch(() => setShotList(null))
+      .finally(() => setShotListLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingClient?.id])
 
@@ -657,6 +719,147 @@ export default function Clients() {
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {editingClient?.id && (
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Shot List</p>
+                {shotList?.status === 'submitted' && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D60' }}>
+                    ● Submitted
+                  </span>
+                )}
+                {shotList?.status === 'confirmed' && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)' }}>
+                    ✓ Confirmed
+                  </span>
+                )}
+              </div>
+
+              {shotListLoading ? (
+                <div className="skeleton" style={{ height: 60, borderRadius: 8 }} />
+              ) : !shotList || shotList.status === 'pending' && !shotList.shots?.length ? (
+                <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 6, lineHeight: 1.4 }}>
+                    No shots added yet. Share the portal link so your client can request specific shots.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => copyLink(editingClient)}
+                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Copy portal link →
+                  </button>
+                </div>
+              ) : shotList.status === 'submitted' ? (
+                <>
+                  <div style={{ padding: '10px 12px', background: '#FFFBEB', border: '1px solid #FCD34D50', borderRadius: 8, marginBottom: 10 }}>
+                    <p style={{ fontSize: 12, color: '#92400E', margin: 0, fontWeight: 600 }}>● Shot list submitted — review below</p>
+                    {shotList.client_notes && (
+                      <p style={{ fontSize: 12, color: '#92400E', margin: '4px 0 0', opacity: 0.8, lineHeight: 1.4 }}>"{shotList.client_notes}"</p>
+                    )}
+                  </div>
+                  {SHOT_CATEGORIES.map(cat => {
+                    const catShots = (shotList.shots || []).filter(s => s.category === cat.key)
+                    if (!catShots.length) return null
+                    return (
+                      <div key={cat.key} style={{ marginBottom: 10 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{cat.label}</p>
+                        {catShots.map(shot => (
+                          <div key={shot.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                            <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>{shot.description}</span>
+                            <PriorityBadge priority={shot.priority} />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setConfirmingShots(true)
+                      try {
+                        const res = await authFetch(`/api/clients/${editingClient.id}/shot-list/confirm`, { method: 'post' })
+                        setShotList(res.data)
+                        setClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, shot_list_status: 'confirmed' } : c))
+                        showToast('Shot list confirmed!')
+                      } catch {
+                        showToast('Failed to confirm shot list.')
+                      } finally {
+                        setConfirmingShots(false)
+                      }
+                    }}
+                    disabled={confirmingShots}
+                    className="btn btn-primary"
+                    style={{ width: '100%', marginTop: 4 }}
+                  >
+                    {confirmingShots ? 'Confirming…' : 'Confirm Shot List ✓'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {SHOT_CATEGORIES.map(cat => {
+                    const catShots = (shotList.shots || []).filter(s => s.category === cat.key)
+                    if (!catShots.length) return null
+                    return (
+                      <div key={cat.key} style={{ marginBottom: 10 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{cat.label}</p>
+                        {catShots.map(shot => (
+                          <div key={shot.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                            <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>{shot.description}</span>
+                            <PriorityBadge priority={shot.priority} />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                  <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add your own shots</p>
+                    <input
+                      className="input"
+                      placeholder="Shot description"
+                      value={newShotDesc}
+                      onChange={e => setNewShotDesc(e.target.value)}
+                      style={{ marginBottom: 6, fontSize: 13 }}
+                    />
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <select className="input" value={newShotCat} onChange={e => setNewShotCat(e.target.value)} style={{ fontSize: 12, flex: 1, padding: '6px 8px' }}>
+                        {SHOT_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      </select>
+                      <select className="input" value={newShotPrio} onChange={e => setNewShotPrio(e.target.value as ShotItem['priority'])} style={{ fontSize: 12, flex: 1, padding: '6px 8px' }}>
+                        <option value="must_have">Must have</option>
+                        <option value="if_possible">If possible</option>
+                        <option value="skip">Skip</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newShotDesc.trim()) return
+                        setSavingShot(true)
+                        try {
+                          const newShot: ShotItem = { id: Date.now().toString(), category: newShotCat, description: newShotDesc.trim(), priority: newShotPrio }
+                          const updatedShots = [...(shotList.shots || []), newShot]
+                          const res = await authFetch(`/api/clients/${editingClient.id}/shot-list`, { method: 'put', data: { shots: updatedShots, photographer_notes: shotList.photographer_notes } })
+                          setShotList(res.data)
+                          setNewShotDesc('')
+                        } catch {
+                          showToast('Failed to add shot.')
+                        } finally {
+                          setSavingShot(false)
+                        }
+                      }}
+                      disabled={savingShot || !newShotDesc.trim()}
+                      className="btn btn-primary btn-sm"
+                      style={{ width: '100%' }}
+                    >
+                      {savingShot ? 'Adding…' : '+ Add Shot'}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           )}

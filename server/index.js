@@ -249,6 +249,33 @@ app.post('/api/stripe/webhook',
                 console.error('Referral conversion error:', refErr.message)
               }
             }
+
+            // Handle affiliate commission on first subscription payment
+            if (u) {
+              try {
+                const affRow = await pool.query(
+                  'SELECT a.id, a.commission_percent FROM affiliates a JOIN users usr ON usr.affiliate_id=a.id WHERE usr.id=$1',
+                  [u.id]
+                )
+                if (affRow.rows.length > 0) {
+                  const aff = affRow.rows[0]
+                  const amountCents = inv.amount_paid || 0
+                  const commissionCents = Math.round(amountCents * aff.commission_percent / 100)
+                  await pool.query(
+                    `INSERT INTO affiliate_conversions (affiliate_id, user_id, amount_cents, commission_cents)
+                     VALUES ($1, $2, $3, $4)`,
+                    [aff.id, u.id, amountCents, commissionCents]
+                  )
+                  await pool.query(
+                    'UPDATE affiliates SET total_earned_cents=total_earned_cents+$1 WHERE id=$2',
+                    [commissionCents, aff.id]
+                  )
+                  console.log(`💸 Affiliate commission: ${commissionCents}¢ for affiliate ${aff.id}`)
+                }
+              } catch (affErr) {
+                console.error('Affiliate commission error:', affErr.message)
+              }
+            }
           }
           break
         }
@@ -1048,6 +1075,34 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE`).catch(() => {})
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_id INTEGER`).catch(() => {})
+
+      // ── Feature: Affiliate System ─────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS affiliates (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          affiliate_code TEXT NOT NULL UNIQUE,
+          commission_percent INTEGER DEFAULT 20,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','active','paused')),
+          total_referrals INTEGER DEFAULT 0,
+          total_earned_cents INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS affiliate_conversions (
+          id SERIAL PRIMARY KEY,
+          affiliate_id INTEGER REFERENCES affiliates(id),
+          user_id INTEGER REFERENCES users(id),
+          amount_cents INTEGER NOT NULL,
+          commission_cents INTEGER NOT NULL,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','paid','cancelled')),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
 
       // Backfill referral codes for existing users without one
       await pool.query(`
@@ -1800,7 +1855,7 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 
 // Track referral code after signup (called by frontend once with ref from localStorage)
 app.post('/api/auth/me', requireAuth, async (req, res) => {
-  const { ref } = req.body || {}
+  const { ref, affiliate_code } = req.body || {}
   if (ref && typeof ref === 'string' && ref.length <= 20) {
     try {
       const referrer = await pool.query('SELECT id, email FROM users WHERE referral_code=$1', [ref.toUpperCase()])
@@ -1815,6 +1870,18 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
       }
     } catch (refErr) {
       console.error('Referral tracking error:', refErr.message)
+    }
+  }
+  if (affiliate_code && typeof affiliate_code === 'string' && affiliate_code.length <= 50) {
+    try {
+      const aff = await pool.query("SELECT id FROM affiliates WHERE affiliate_code=$1 AND status='active'", [affiliate_code.trim()])
+      if (aff.rows.length > 0) {
+        await pool.query('UPDATE users SET affiliate_id=$1 WHERE id=$2 AND affiliate_id IS NULL', [aff.rows[0].id, req.user.id])
+        await pool.query('UPDATE affiliates SET total_referrals=total_referrals+1 WHERE id=$1', [aff.rows[0].id])
+        console.log(`🤝 Affiliate tracked: user ${req.user.id} from affiliate ${affiliate_code}`)
+      }
+    } catch (affErr) {
+      console.error('Affiliate tracking error:', affErr.message)
     }
   }
   res.json(req.user)
@@ -5400,6 +5467,52 @@ app.post('/api/admin/reset-account', async (req, res) => {
     console.error('Reset account error:', err)
     res.status(500).json({ error: 'Server error' })
   }
+})
+
+// ── ADMIN: AFFILIATES ─────────────────────────────────────────
+
+app.get('/api/admin/affiliates', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    const result = await pool.query('SELECT * FROM affiliates ORDER BY created_at DESC')
+    const conversions = await pool.query('SELECT affiliate_id, COUNT(*) as count, SUM(commission_cents) as total FROM affiliate_conversions GROUP BY affiliate_id')
+    const convMap = {}
+    conversions.rows.forEach(r => { convMap[r.affiliate_id] = r })
+    const affiliates = result.rows.map(a => ({
+      ...a,
+      conversions: parseInt(convMap[a.id]?.count || 0),
+      total_earned_dollars: ((convMap[a.id]?.total || 0) / 100).toFixed(2),
+    }))
+    res.json(affiliates)
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/admin/affiliates', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  const { name, email, affiliate_code, commission_percent } = req.body
+  if (!name || !email || !affiliate_code) return res.status(400).json({ error: 'name, email, and affiliate_code are required' })
+  try {
+    const result = await pool.query(
+      `INSERT INTO affiliates (name, email, affiliate_code, commission_percent)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET name=$1, affiliate_code=$3, commission_percent=$4, status='active'
+       RETURNING *`,
+      [name, email, affiliate_code.trim().toUpperCase(), commission_percent || 20]
+    )
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.patch('/api/admin/affiliates/:id', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  const { status } = req.body
+  try {
+    const result = await pool.query('UPDATE affiliates SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
+    res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
 app.use((err, req, res, next) => {

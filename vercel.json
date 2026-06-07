@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    {"source": "/blog", "destination": "/blog/index.html"},
+    {"source": "/blog/wedding-shot-list-guide", "destination": "/blog/wedding-shot-list-guide.html"},
+    {"source": "/blog/wedding-photography-client-management", "destination": "/blog/wedding-photography-client-management.html"},
+    {"source": "/blog/wedding-photographer-tools", "destination": "/blog/wedding-photographer-tools.html"},
     {"source": "/tools/shot-list", "destination": "/tools/shot-list.html"},
     {"source": "/tools/timeline", "destination": "/tools/timeline.html"},
     {"source": "/tools/questionnaire", "destination": "/tools/questionnaire.html"},

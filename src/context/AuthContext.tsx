@@ -39,13 +39,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         // Track referral code if present (stored at signup from ?ref= URL param)
         const refCode = localStorage.getItem('portalkit_ref')
-        if (refCode) {
+        const affCode = localStorage.getItem('pk_affiliate')
+        if (refCode || affCode) {
           fetch(`${API_BASE}/api/auth/me`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ref: refCode }),
+            body: JSON.stringify({
+              ...(refCode ? { ref: refCode } : {}),
+              ...(affCode ? { affiliate_code: affCode } : {}),
+            }),
           }).catch(() => {})
-          localStorage.removeItem('portalkit_ref')
+          if (refCode) localStorage.removeItem('portalkit_ref')
+          if (affCode) localStorage.removeItem('pk_affiliate')
         }
       } else if (retries > 0) {
         setTimeout(() => fetchUser(retries - 1), 1000)
