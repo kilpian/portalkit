@@ -22,6 +22,7 @@
     label:first-child { margin-top: 0; }
     input, select, textarea { width: 100%; padding: 10px 14px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; background: white; }
     input:focus, select:focus, textarea:focus { outline: 3px solid var(--green); outline-offset: 2px; }
+    .form-error { display: none; background: #FEE2E2; border: 1px solid #FCA5A5; border-radius: 8px; padding: 10px 14px; color: #A32D2D; font-size: 13px; margin-bottom: 12px; }
     .btn { display: block; width: 100%; padding: 14px; background: var(--green); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; transition: opacity 0.2s; }
     .btn:hover { opacity: 0.9; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -29,12 +30,19 @@
     .result-card.visible { display: block; }
     .result-content { white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #374151; }
     .copy-btn { margin-top: 16px; padding: 10px 20px; background: var(--green); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .copy-btn.copied { background: #059669; }
     .upsell { background: var(--green); color: white; border-radius: 12px; padding: 20px 24px; margin-top: 24px; text-align: center; }
     .upsell h3 { font-size: 17px; margin-bottom: 6px; }
     .upsell p { font-size: 13px; opacity: 0.85; margin-bottom: 14px; }
     .upsell a { display: inline-block; background: var(--gold); color: var(--green); padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
     .loading { text-align: center; padding: 32px; color: var(--green); font-weight: 600; }
     .spinner { width: 32px; height: 32px; margin: 0 auto 12px; border: 3px solid #E5E7EB; border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .email-capture { background: #F0FDF4; border: 1px solid #A7F3D0; border-radius: 8px; padding: 16px; margin-top: 20px; text-align: center; }
+    .email-capture p { font-weight: 600; color: var(--green); margin: 0 0 10px; font-size: 14px; }
+    .email-row { display: flex; gap: 8px; max-width: 320px; margin: 0 auto; }
+    .email-row input { flex: 1; padding: 8px 12px; border: 1px solid #A7F3D0; border-radius: 6px; font-size: 13px; }
+    .email-row button { background: var(--green); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; white-space: nowrap; }
+    .email-success { display: none; color: #059669; font-size: 12px; margin-top: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -83,8 +91,7 @@
       <label>Special requests or must-have shots <span style="font-weight:400; color:#9CA3AF;">(optional)</span></label>
       <textarea id="special" rows="3" placeholder="e.g. First look, ring details, grandparents, specific family groupings..."></textarea>
 
-      <label>Your email <span style="font-weight:400; color:#9CA3AF;">(optional — to save your shot list)</span></label>
-      <input type="email" id="email" placeholder="your@email.com">
+      <div id="formError" class="form-error"></div>
 
       <button class="btn" id="generateBtn" onclick="generateShotList()">Generate My Shot List →</button>
     </div>
@@ -97,7 +104,15 @@
       <div id="resultContent" style="display:none">
         <h3 style="color:var(--green); margin-bottom:16px;">Your Wedding Shot List</h3>
         <div class="result-content" id="shotListText"></div>
-        <button class="copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+        <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">Copy to Clipboard</button>
+        <div class="email-capture">
+          <p>Want to save this and get more free templates?</p>
+          <div class="email-row">
+            <input type="email" id="email" placeholder="your@email.com" />
+            <button onclick="submitEmail()">Save →</button>
+          </div>
+          <p class="email-success" id="emailSuccess">✓ Saved! Check your inbox.</p>
+        </div>
         <div class="upsell">
           <h3>Use this inside your client portal</h3>
           <p>PortalKit lets clients build their own shot list inside their private portal — and you confirm it with one click.</p>
@@ -108,15 +123,21 @@
   </div>
 
   <script>
+    function showError(msg) {
+      const el = document.getElementById('formError')
+      el.textContent = msg
+      el.style.display = 'block'
+      setTimeout(() => { el.style.display = 'none' }, 5000)
+    }
+
     async function generateShotList() {
       const venue = document.getElementById('venue').value
       const style = document.getElementById('style').value
       const family = document.getElementById('family').value
       const special = document.getElementById('special').value
-      const email = document.getElementById('email').value
 
       if (!venue || !style || !family) {
-        alert('Please fill in venue, style, and family size.')
+        showError('Please fill in venue type, photography style, and family size before generating.')
         return
       }
 
@@ -125,14 +146,6 @@
       document.getElementById('loadingState').style.display = 'block'
       document.getElementById('resultContent').style.display = 'none'
 
-      if (email) {
-        fetch('/api/tools/capture-lead', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, tool: 'shot-list-generator', source: 'free-tool' })
-        }).catch(() => {})
-      }
-
       try {
         const response = await fetch('/api/tools/shot-list', {
           method: 'POST',
@@ -140,14 +153,19 @@
           body: JSON.stringify({ venue, style, family, special })
         })
         const data = await response.json()
-
+        if (!response.ok) {
+          showError(data.error || 'Something went wrong. Please try again.')
+          document.getElementById('generateBtn').disabled = false
+          document.getElementById('resultCard').classList.remove('visible')
+          return
+        }
         document.getElementById('loadingState').style.display = 'none'
         document.getElementById('shotListText').textContent = data.result
         document.getElementById('resultContent').style.display = 'block'
         document.getElementById('generateBtn').disabled = false
         document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' })
       } catch (err) {
-        alert('Something went wrong. Please try again.')
+        showError('Something went wrong. Please try again.')
         document.getElementById('generateBtn').disabled = false
         document.getElementById('resultCard').classList.remove('visible')
       }
@@ -155,9 +173,31 @@
 
     function copyToClipboard() {
       const text = document.getElementById('shotListText').textContent
-      navigator.clipboard.writeText(text)
-        .then(() => alert('Copied to clipboard!'))
-        .catch(() => alert('Please select and copy manually.'))
+      const btn = document.getElementById('copyBtn')
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '✓ Copied!'
+        btn.classList.add('copied')
+        setTimeout(() => { btn.textContent = 'Copy to Clipboard'; btn.classList.remove('copied') }, 2000)
+      }).catch(() => {
+        const range = document.createRange()
+        range.selectNode(document.getElementById('shotListText'))
+        window.getSelection().removeAllRanges()
+        window.getSelection().addRange(range)
+      })
+    }
+
+    async function submitEmail() {
+      const email = document.getElementById('email').value
+      if (!email || !email.includes('@')) return
+      try {
+        await fetch('/api/tools/capture-lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, tool: 'shot-list-generator', source: 'post-generation' })
+        })
+        document.getElementById('emailSuccess').style.display = 'block'
+        document.getElementById('email').value = ''
+      } catch(e) {}
     }
   </script>
 </body>
