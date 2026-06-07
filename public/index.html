@@ -1897,5 +1897,49 @@
   });
 </script>
 
+<!-- Exit intent popup -->
+<div id="exitPopup" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);width:min(460px,calc(100vw - 32px));background:white;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,0.18);padding:28px 28px 24px;z-index:9999;border:1px solid #E8E0D0;">
+  <button onclick="dismissExitPopup()" aria-label="Close" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;line-height:1;">✕</button>
+  <p style="font-size:11px;font-weight:700;color:#C9A84C;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Free resource</p>
+  <h3 style="font-size:18px;font-weight:800;color:#1B4332;margin:0 0 8px;font-family:'Bricolage Grotesque',sans-serif;line-height:1.3;">Get the free shot list template every wedding photographer needs</h3>
+  <p style="font-size:13px;color:#6B7280;margin:0 0 16px;line-height:1.6;">A ready-to-use shot list template with 60+ must-have wedding shots. Drop your email and we'll send it right now.</p>
+  <form id="exitForm" onsubmit="submitExitEmail(event)" style="display:flex;gap:8px;flex-wrap:wrap;">
+    <input type="email" id="exitEmail" placeholder="your@email.com" required style="flex:1;min-width:180px;padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;font-family:inherit;outline:none;" />
+    <button type="submit" style="padding:10px 20px;background:#1B4332;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">Send It →</button>
+  </form>
+  <p id="exitSuccess" style="display:none;font-size:13px;font-weight:600;color:#1B4332;margin:10px 0 0;">✓ Check your inbox — it's on its way!</p>
+</div>
+
+<script>
+  (function() {
+    if (sessionStorage.getItem('pk_exit_shown')) return;
+    var shown = false;
+    document.addEventListener('mouseleave', function(e) {
+      if (e.clientY < 20 && !shown) {
+        shown = true;
+        sessionStorage.setItem('pk_exit_shown', '1');
+        document.getElementById('exitPopup').style.display = 'block';
+      }
+    });
+  })();
+
+  function dismissExitPopup() {
+    document.getElementById('exitPopup').style.display = 'none';
+  }
+
+  function submitExitEmail(e) {
+    e.preventDefault();
+    var email = document.getElementById('exitEmail').value;
+    fetch('/api/tools/capture-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, tool: 'shot-list-template', source: 'exit-intent' })
+    }).catch(function() {});
+    document.getElementById('exitForm').style.display = 'none';
+    document.getElementById('exitSuccess').style.display = 'block';
+    setTimeout(dismissExitPopup, 2500);
+  }
+</script>
+
 </body>
 </html>

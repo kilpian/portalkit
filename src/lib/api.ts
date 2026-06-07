@@ -33,6 +33,7 @@ export interface Client {
   secondary_name: string | null
   secondary_email: string | null
   secondary_phone: string | null
+  shot_list_status?: 'pending' | 'submitted' | 'confirmed' | null
   created_at: string
   updated_at: string
   _blurred?: boolean
@@ -403,6 +404,7 @@ export interface PortalUser {
   stripe_connect_id?: string | null
   stripe_connect_enabled?: boolean
   booking_username?: string | null
+  referral_code?: string | null
   created_at: string
 }
 

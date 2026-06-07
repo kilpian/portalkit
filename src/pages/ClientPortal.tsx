@@ -505,21 +505,55 @@ function PortalShotList({ token }: { token: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
+  const [shotListLoaded, setShotListLoaded] = useState(false)
+
   useEffect(() => {
     axios.get<ShotListPortal>(`${API_URL}/api/portals/${token}/shot-list`)
-      .then(r => { if (r.data) setShotList(r.data) })
-      .catch(() => {})
+      .then(r => { if (r.data) setShotList(r.data); setShotListLoaded(true) })
+      .catch(() => { setShotListLoaded(true) })
   }, [token])
-
-  if (!shotList) return null
 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      const allShots = [...(shotList.shots || []), ...customShots]
+      const allShots = [...(shotList?.shots || []), ...customShots]
       await axios.post(`${API_URL}/api/portals/${token}/shot-list`, { shots: allShots, client_notes: clientNotes })
       setSubmitted(true)
     } catch {} finally { setSubmitting(false) }
+  }
+
+  if (!shotListLoaded) return null
+
+  if (!shotList) {
+    return (
+      <SectionCard title="Shot List" icon={<span>📷</span>}>
+        <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 10, padding: '20px 20px', marginBottom: 12 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)', marginBottom: 6 }}>📋 Share your must-have shots</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
+            Let your photographer know about any special moments, family groupings, or specific shots that matter most to you. Add a note below and they'll see it right away.
+          </p>
+        </div>
+        <div style={{ marginTop: 4 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Your shot requests and notes for your photographer</label>
+          <textarea
+            className="input"
+            rows={4}
+            value={clientNotes}
+            onChange={e => setClientNotes(e.target.value)}
+            placeholder="e.g. First look moment, grandparents together, all bridesmaids candid shots, the bouquet detail..."
+            style={{ resize: 'vertical' }}
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !clientNotes.trim()}
+            className="btn btn-primary"
+            style={{ marginTop: 10, width: '100%' }}
+          >
+            {submitting ? 'Sending…' : 'Send Shot Requests to Your Photographer'}
+          </button>
+        </div>
+      </SectionCard>
+    )
   }
 
   const addCustomShot = () => {

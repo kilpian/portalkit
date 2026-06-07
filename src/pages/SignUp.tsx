@@ -1,7 +1,13 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { SignUp } from '@clerk/clerk-react'
 
 export default function SignUpPage() {
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref')
+    if (ref) localStorage.setItem('portalkit_ref', ref)
+  }, [])
+
   return (
     <div className="auth-page" style={{ background: '#FDFAF5', minHeight: '100vh' }}>
       <header className="auth-header">

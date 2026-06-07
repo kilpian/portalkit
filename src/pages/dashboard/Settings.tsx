@@ -75,6 +75,16 @@ export default function Settings() {
   const [connectError, setConnectError] = useState('')
   const stripeContainerRef = useRef<HTMLDivElement>(null)
 
+  // Referral
+  const [referralData, setReferralData] = useState<{
+    referral_code: string | null
+    referral_url: string | null
+    total_referred: number
+    total_converted: number
+    months_earned: number
+  } | null>(null)
+  const [referralCopied, setReferralCopied] = useState(false)
+
   const days = trialDaysLeft(user)
   const isActive = user?.plan === 'active'
 
@@ -108,6 +118,14 @@ export default function Settings() {
         handleConnectStripe()
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Fetch referral stats
+  useEffect(() => {
+    authFetch('/api/referrals', { method: 'get' })
+      .then(res => setReferralData(res.data))
+      .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -582,6 +600,43 @@ export default function Settings() {
             </button>
           )}
         </div>
+
+        {/* ── Referral ─────────────────────────────────────────── */}
+        {referralData?.referral_url && (
+          <div style={{ background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', borderRadius: 16, padding: 24, color: 'white' }}>
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: 'white', margin: '0 0 4px', fontFamily: 'var(--font-display)' }}>
+                🎁 Refer a Photographer — Earn Free Months
+              </h3>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', margin: 0, lineHeight: 1.6 }}>
+                Share your link. When a photographer subscribes, you both get rewarded — they get PortalKit, you get a free month added to your subscription.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: referralData.total_converted > 0 ? 14 : 0 }}>
+              <input
+                readOnly
+                value={referralData.referral_url}
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontFamily: 'monospace', background: 'rgba(255,255,255,0.15)', color: 'white', outline: 'none' }}
+                onFocus={e => e.target.select()}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(referralData.referral_url!)
+                  setReferralCopied(true)
+                  setTimeout(() => setReferralCopied(false), 2000)
+                }}
+                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: '#C9A84C', color: '#1B4332', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                {referralCopied ? '✓ Copied!' : 'Copy Link'}
+              </button>
+            </div>
+            {referralData.total_converted > 0 && (
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: 0 }}>
+                🎉 {referralData.total_converted} photographer{referralData.total_converted === 1 ? '' : 's'} subscribed via your link — you've earned {referralData.months_earned} free month{referralData.months_earned === 1 ? '' : 's'}!
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── Security ─────────────────────────────────────────── */}
         <SectionCard title="Security">

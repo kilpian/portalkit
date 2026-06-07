@@ -157,28 +157,96 @@ app.post('/api/stripe/webhook',
           ).catch(() => {})
           if (inv.billing_reason === 'subscription_create') {
             const userResult = await pool.query(
-              'SELECT email, full_name FROM users WHERE stripe_customer_id=$1',
+              'SELECT id, email, full_name, booking_username FROM users WHERE stripe_customer_id=$1',
               [inv.customer]
             )
             const u = userResult.rows[0]
             if (u && resend) {
               try {
                 const firstName = u.full_name?.split(' ')[0] || 'there'
+                const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+                const bookingUrl = u.booking_username ? `${frontendUrl}/book/${u.booking_username}` : `${frontendUrl}/dashboard/booking`
                 await resend.emails.send({
-                  from: 'PortalKit <hello@mail.getportalkit.com>',
+                  from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
                   to: u.email,
-                  subject: "Welcome to PortalKit — you're all set! 🎉",
+                  subject: `You're in, ${firstName}! Here's how to get your first portal live →`,
                   html: emailTemplate({
-                    title: "Welcome to PortalKit",
-                    preheader: "You're all set — let's get your first client portal ready.",
-                    body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Welcome, ${firstName}! 🎉</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your account is ready. Here's how to get started:</p><ol style="color:#2D2416;line-height:2.2;padding-left:20px;margin:0 0 16px;"><li><strong>Create your first client</strong> — Add a client and share their private portal link</li><li><strong>Send your contract</strong> — Use our templates or generate one with AI in seconds</li><li><strong>Stay organized</strong> — All your clients, contracts, and invoices in one place</li></ol><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You have 14 days to explore everything — no limits, no restrictions.</p><p style="color:#9C8E7A;font-size:13px;margin:0;">Questions? Reply to this email — we read every one.</p>`,
+                    title: "You're in — let's get your first portal live",
+                    preheader: "3 things to do in your first 10 minutes with PortalKit.",
+                    body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 8px;">Hey ${firstName}, welcome to PortalKit! 🎉</h2>
+<p style="color:#6B5E4A;line-height:1.7;margin:0 0 20px;font-size:15px;">I'm Chidera, founder of PortalKit. Here are the 3 things that'll make the biggest difference in your first session:</p>
+
+<div style="background:#F9F6F0;border-radius:10px;padding:20px;margin:0 0 20px;">
+  <p style="margin:0 0 14px;font-size:14px;color:#2D2416;"><strong style="color:#1B4332;">Step 1 → Add your first client</strong><br>Go to Dashboard → Clients → New Client. Enter their name and email — that's it. PortalKit generates a private portal link instantly.</p>
+  <p style="margin:0 0 14px;font-size:14px;color:#2D2416;"><strong style="color:#1B4332;">Step 2 → Share their portal link</strong><br>Copy the link and send it in an email or text. Your client can view their contract, pay invoices, and message you — no login required.</p>
+  <p style="margin:0;font-size:14px;color:#2D2416;"><strong style="color:#1B4332;">Step 3 → Send their contract</strong><br>Inside the client's portal, click "Send Contract." Use a template or write your own — clients sign with a click, and you get an email notification.</p>
+</div>
+
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;font-size:14px;">Your booking page is also live at: <a href="${bookingUrl}" style="color:#1B4332;font-weight:600;">${bookingUrl}</a> — add it to your Instagram bio today.</p>
+<p style="color:#9C8E7A;font-size:13px;margin:0;">Reply to this email anytime — I read every message personally.</p>
+<p style="color:#9C8E7A;font-size:13px;margin:4px 0 0;">— Chidera</p>`,
                     ctaText: 'Go to your dashboard →',
-                    ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard`,
+                    ctaUrl: `${frontendUrl}/dashboard`,
                     footerNote: 'PortalKit by Kilpian LLC',
                   }),
                 })
               } catch (emailErr) {
                 console.error('Welcome email failed:', emailErr)
+              }
+            }
+
+            // Handle referral conversion — if this user was referred, reward referrer
+            if (u) {
+              try {
+                const referralRow = await pool.query(
+                  `SELECT r.*, ref_user.email as referrer_email, ref_user.full_name as referrer_name, ref_user.stripe_subscription_id
+                   FROM referrals r
+                   JOIN users ref_user ON ref_user.id = r.referrer_user_id
+                   WHERE r.referred_user_id = $1 AND r.status != 'converted'`,
+                  [u.id]
+                )
+                if (referralRow.rows.length > 0) {
+                  const ref = referralRow.rows[0]
+                  await pool.query(
+                    `UPDATE referrals SET status='converted', reward_given_at=NOW() WHERE id=$1`,
+                    [ref.id]
+                  )
+                  // Extend referrer's subscription by 30 days
+                  if (stripe && ref.stripe_subscription_id) {
+                    try {
+                      const sub = await stripe.subscriptions.retrieve(ref.stripe_subscription_id)
+                      const currentPeriodEnd = sub.current_period_end
+                      await stripe.subscriptions.update(ref.stripe_subscription_id, {
+                        trial_end: currentPeriodEnd + (30 * 24 * 60 * 60),
+                      })
+                    } catch (stripeErr) {
+                      console.error('Referral subscription extend failed:', stripeErr.message)
+                    }
+                  }
+                  // Send referrer a "you earned a free month" email
+                  if (resend && ref.referrer_email) {
+                    const refFirstName = ref.referrer_name?.split(' ')[0] || 'there'
+                    await resend.emails.send({
+                      from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+                      to: ref.referrer_email,
+                      subject: "You just earned a free month of PortalKit! 🎉",
+                      html: emailTemplate({
+                        title: "You earned a free month!",
+                        preheader: "Someone you referred just subscribed to PortalKit.",
+                        body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 12px;">You earned a free month, ${refFirstName}! 🎉</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">A photographer you referred just subscribed to PortalKit. As a thank-you, we've added <strong>30 free days</strong> to your subscription — no charge, no action needed.</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Keep sharing your referral link to earn more free months. You'll get one free month for every photographer who subscribes.</p>
+<p style="color:#9C8E7A;font-size:13px;margin:0;">— Chidera at PortalKit</p>`,
+                        ctaText: 'Share your referral link →',
+                        ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+                        footerNote: 'PortalKit by Kilpian LLC',
+                      }),
+                    }).catch(err => console.error('Referral reward email failed:', err))
+                  }
+                  console.log(`🎁 Referral converted: referrer ${ref.referrer_email} earned a free month`)
+                }
+              } catch (refErr) {
+                console.error('Referral conversion error:', refErr.message)
               }
             }
           }
@@ -955,6 +1023,38 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      // ── Feature: Onboarding Email Sequence ───────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS onboarding_emails_sent (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          email_type TEXT NOT NULL,
+          sent_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(user_id, email_type)
+        );
+      `).catch(() => {})
+
+      // ── Feature: Referral System ──────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS referrals (
+          id SERIAL PRIMARY KEY,
+          referrer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          referred_email TEXT NOT NULL,
+          referred_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','signed_up','converted')),
+          reward_given_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE`).catch(() => {})
+
+      // Backfill referral codes for existing users without one
+      await pool.query(`
+        UPDATE users SET referral_code = 'PK' || UPPER(SUBSTRING(MD5(id::text || email), 1, 6))
+        WHERE referral_code IS NULL
+      `).catch(() => {})
+
       // Performance indexes for common lookups
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
@@ -1327,12 +1427,152 @@ async function sendTrialExpiryReminders() {
   }
 }
 
+async function sendOnboardingSequence() {
+  if (!resend) return
+  const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+  try {
+    // Day 2: nudge to add first client (or push contracts if they already have clients)
+    const day2Users = await pool.query(`
+      SELECT u.* FROM users u
+      WHERE u.plan = 'trial'
+      AND DATE(u.created_at) = CURRENT_DATE - 2
+      AND NOT EXISTS (
+        SELECT 1 FROM onboarding_emails_sent oes
+        WHERE oes.user_id = u.id AND oes.email_type = 'onboarding_day2'
+      )
+    `)
+    for (const u of day2Users.rows) {
+      try {
+        const firstName = u.full_name?.split(' ')[0] || 'there'
+        const clientCount = await pool.query('SELECT COUNT(*) as count FROM clients WHERE user_id=$1', [u.id])
+        const hasClients = parseInt(clientCount.rows[0].count, 10) > 0
+        const body = hasClients
+          ? `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Great start, ${firstName}!</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You've already added your first client — that's the hardest part. Now it's time to send contracts. PortalKit lets you send a professional contract in seconds, and clients sign with a single click from their portal.</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Head to your client's portal and click "Send Contract" to get started.</p>`
+          : `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName} — have you added your first client yet?</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Adding a client takes 30 seconds. Enter their name and email, and PortalKit generates a private portal link you can send right now.</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your clients don't need to create an account — they just click the link and see everything in one place.</p>`
+        await resend.emails.send({
+          from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+          to: u.email,
+          subject: hasClients ? 'Time to send your first contract →' : 'Have you added your first client yet?',
+          html: emailTemplate({
+            title: hasClients ? 'Send your first contract' : 'Add your first client',
+            preheader: hasClients ? 'Contracts sent from PortalKit get signed 3x faster.' : 'It takes 30 seconds.',
+            body,
+            ctaText: 'Go to your dashboard →',
+            ctaUrl: `${frontendUrl}/dashboard/clients`,
+            footerNote: 'PortalKit by Kilpian LLC',
+          }),
+        })
+        await pool.query(
+          `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day2') ON CONFLICT DO NOTHING`,
+          [u.id]
+        )
+        console.log(`📧 Onboarding Day 2 sent to ${u.email}`)
+      } catch (e) { console.error('Onboarding Day 2 email failed:', e.message) }
+    }
+
+    // Day 5: your booking page is live
+    const day5Users = await pool.query(`
+      SELECT u.* FROM users u
+      WHERE u.plan = 'trial'
+      AND DATE(u.created_at) = CURRENT_DATE - 5
+      AND NOT EXISTS (
+        SELECT 1 FROM onboarding_emails_sent oes
+        WHERE oes.user_id = u.id AND oes.email_type = 'onboarding_day5'
+      )
+    `)
+    for (const u of day5Users.rows) {
+      try {
+        const firstName = u.full_name?.split(' ')[0] || 'there'
+        const bookingUrl = u.booking_username ? `${frontendUrl}/book/${u.booking_username}` : `${frontendUrl}/dashboard/booking`
+        await resend.emails.send({
+          from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+          to: u.email,
+          subject: 'Your booking page is live (add it to your Instagram bio) →',
+          html: emailTemplate({
+            title: 'Your booking page is live',
+            preheader: 'Clients can request sessions directly — no back-and-forth.',
+            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName}, your booking page is already live!</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">PortalKit automatically created a public booking page for you at:</p>
+<p style="background:#F0F9F4;border:1px solid #BEE3CA;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:14px;color:#1B4332;margin:0 0 16px;"><a href="${bookingUrl}" style="color:#1B4332;text-decoration:none;">${bookingUrl}</a></p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>Pro tip:</strong> Add this link to your Instagram bio right now. When someone taps it, they can request a session, pick a time, and you get notified instantly — no email tag.</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can customize your session types, pricing, and availability from Dashboard → Booking.</p>`,
+            ctaText: 'Set up your booking page →',
+            ctaUrl: `${frontendUrl}/dashboard/booking`,
+            footerNote: 'PortalKit by Kilpian LLC',
+          }),
+        })
+        await pool.query(
+          `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day5') ON CONFLICT DO NOTHING`,
+          [u.id]
+        )
+        console.log(`📧 Onboarding Day 5 sent to ${u.email}`)
+      } catch (e) { console.error('Onboarding Day 5 email failed:', e.message) }
+    }
+
+    // Day 10: feature spotlight — 4 days left in trial
+    const day10Users = await pool.query(`
+      SELECT u.* FROM users u
+      WHERE u.plan = 'trial'
+      AND DATE(u.created_at) = CURRENT_DATE - 10
+      AND NOT EXISTS (
+        SELECT 1 FROM onboarding_emails_sent oes
+        WHERE oes.user_id = u.id AND oes.email_type = 'onboarding_day10'
+      )
+    `)
+    for (const u of day10Users.rows) {
+      try {
+        const firstName = u.full_name?.split(' ')[0] || 'there'
+        await resend.emails.send({
+          from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+          to: u.email,
+          subject: '4 days left — 3 features that save you the most time',
+          html: emailTemplate({
+            title: '3 features worth trying before your trial ends',
+            preheader: 'Shot lists, timelines, and review requests — your clients will notice.',
+            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName}, 4 days left on your trial</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Before your trial ends, here are 3 features that save photographers the most time:</p>
+<div style="background:#F9F6F0;border-radius:10px;padding:16px 20px;margin:0 0 12px;">
+  <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#1B4332;">📷 Shot List Builder</p>
+  <p style="margin:0;font-size:13px;color:#6B5E4A;line-height:1.6;">Build a shot list and send it to your client. They confirm what they want, you review it, and both sides know exactly what's planned. Find it under each client's portal.</p>
+</div>
+<div style="background:#F9F6F0;border-radius:10px;padding:16px 20px;margin:0 0 12px;">
+  <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#1B4332;">⏰ Day-of Timeline</p>
+  <p style="margin:0;font-size:13px;color:#6B5E4A;line-height:1.6;">Create a minute-by-minute wedding day schedule and share it with your client. They approve it with one click — no printing, no back-and-forth.</p>
+</div>
+<div style="background:#F9F6F0;border-radius:10px;padding:16px 20px;margin:0 0 20px;">
+  <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#1B4332;">⭐ Automated Review Requests</p>
+  <p style="margin:0;font-size:13px;color:#6B5E4A;line-height:1.6;">When you mark delivery complete, PortalKit automatically emails your client links to leave reviews on Google, WeddingWire, or The Knot. Set it up once in Workflows.</p>
+</div>
+<p style="color:#9C8E7A;font-size:13px;margin:0;">Reply to this email with any questions — I'm here to help.</p>`,
+            ctaText: 'Explore your dashboard →',
+            ctaUrl: `${frontendUrl}/dashboard`,
+            footerNote: 'PortalKit by Kilpian LLC',
+          }),
+        })
+        await pool.query(
+          `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day10') ON CONFLICT DO NOTHING`,
+          [u.id]
+        )
+        console.log(`📧 Onboarding Day 10 sent to ${u.email}`)
+      } catch (e) { console.error('Onboarding Day 10 email failed:', e.message) }
+    }
+  } catch (err) {
+    console.error('Onboarding sequence error:', err.message)
+  }
+}
+
 // Run on startup and every 24 hours (Railway restarts daily, so this effectively fires once per day)
 sendEventReminders()
 sendTrialExpiryReminders()
+sendOnboardingSequence()
 setInterval(() => {
   sendEventReminders()
   sendTrialExpiryReminders()
+  sendOnboardingSequence()
 }, 24 * 60 * 60 * 1000)
 
 async function requireAuth(req, res, next) {
@@ -1389,11 +1629,12 @@ async function requireAuth(req, res, next) {
         if (taken.rows.length) {
           bookingUsername = base.slice(0, 24) + Math.floor(Math.random() * 9000 + 1000)
         }
+        const referralCode = 'PK' + Math.random().toString(36).substring(2, 8).toUpperCase()
         const newUser = await pool.query(
-          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, onboarding_completed, booking_username)
-           VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days', FALSE, $4)
+          `INSERT INTO users (clerk_id, email, full_name, plan, trial_ends_at, onboarding_completed, booking_username, referral_code)
+           VALUES ($1, $2, $3, 'trial', NOW() + INTERVAL '14 days', FALSE, $4, $5)
            RETURNING *`,
-          [clerkId, email, fullName, bookingUsername]
+          [clerkId, email, fullName, bookingUsername, referralCode]
         )
         console.log('New user created:', newUser.rows[0].id)
         req.user = newUser.rows[0]
@@ -1555,6 +1796,56 @@ app.delete('/api/users/me', requireAuth, async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   res.json(req.user)
+})
+
+// Track referral code after signup (called by frontend once with ref from localStorage)
+app.post('/api/auth/me', requireAuth, async (req, res) => {
+  const { ref } = req.body || {}
+  if (ref && typeof ref === 'string' && ref.length <= 20) {
+    try {
+      const referrer = await pool.query('SELECT id, email FROM users WHERE referral_code=$1', [ref.toUpperCase()])
+      if (referrer.rows.length > 0 && referrer.rows[0].id !== req.user.id) {
+        await pool.query(
+          `INSERT INTO referrals (referrer_user_id, referred_email, referred_user_id, status)
+           VALUES ($1, $2, $3, 'signed_up')
+           ON CONFLICT DO NOTHING`,
+          [referrer.rows[0].id, req.user.email, req.user.id]
+        )
+        console.log(`🔗 Referral tracked: ${req.user.email} referred by ${referrer.rows[0].email}`)
+      }
+    } catch (refErr) {
+      console.error('Referral tracking error:', refErr.message)
+    }
+  }
+  res.json(req.user)
+})
+
+// ── REFERRALS ─────────────────────────────────────────────────
+
+app.get('/api/referrals', requireAuth, async (req, res) => {
+  try {
+    const user = await pool.query('SELECT referral_code FROM users WHERE id=$1', [req.userId])
+    const referralCode = user.rows[0]?.referral_code
+    const referrals = await pool.query(
+      'SELECT referred_email, referred_user_id, status, reward_given_at, created_at FROM referrals WHERE referrer_user_id=$1 ORDER BY created_at DESC',
+      [req.userId]
+    )
+    const rows = referrals.rows
+    const totalReferred = rows.filter(r => r.referred_user_id).length
+    const totalConverted = rows.filter(r => r.status === 'converted').length
+    const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
+    res.json({
+      referral_code: referralCode,
+      referral_url: referralCode ? `${frontendUrl}/signup?ref=${referralCode}` : null,
+      referrals: rows,
+      total_referred: totalReferred,
+      total_converted: totalConverted,
+      months_earned: totalConverted,
+    })
+  } catch (err) {
+    console.error('Get referrals error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 // Temporary diagnostic — inspect raw DB row + schema. Remove after onboarding stabilizes.
@@ -1988,7 +2279,9 @@ app.get('/api/clients', requireAuth, async (req, res) => {
       const offset = (page - 1) * limit
       const [result, countRes] = await Promise.all([
         pool.query(
-          'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
+          `SELECT c.id, c.name, c.email, c.phone, c.event_date, c.event_type, c.notes, c.portal_token, c.stage, c.stage_changed_at, c.gallery_url, c.secondary_name, c.secondary_email, c.secondary_phone, c.created_at, c.updated_at, sl.status as shot_list_status
+           FROM clients c LEFT JOIN shot_lists sl ON sl.client_id = c.id
+           WHERE c.user_id=$1 ORDER BY c.created_at DESC LIMIT $2 OFFSET $3`,
           [req.userId, limit, offset]
         ),
         pool.query('SELECT COUNT(*) as total FROM clients WHERE user_id=$1', [req.userId])
@@ -1997,7 +2290,10 @@ app.get('/api/clients', requireAuth, async (req, res) => {
       return res.json({ clients: result.rows, total, page, pages: Math.ceil(total / limit) })
     }
     const result = await pool.query(
-      'SELECT id, name, email, phone, event_date, event_type, notes, portal_token, stage, stage_changed_at, gallery_url, secondary_name, secondary_email, secondary_phone, created_at, updated_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200',
+      `SELECT c.id, c.name, c.email, c.phone, c.event_date, c.event_type, c.notes, c.portal_token, c.stage, c.stage_changed_at, c.gallery_url, c.secondary_name, c.secondary_email, c.secondary_phone, c.created_at, c.updated_at, sl.status as shot_list_status
+       FROM clients c
+       LEFT JOIN shot_lists sl ON sl.client_id = c.id
+       WHERE c.user_id=$1 ORDER BY c.created_at DESC LIMIT 200`,
       [req.userId]
     )
     res.json(result.rows)

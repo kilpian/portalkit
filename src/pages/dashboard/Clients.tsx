@@ -385,6 +385,20 @@ export default function Clients() {
 
                   <StageBadge stage={c.stage || 'inquiry'} />
 
+                  {/* Shot list status indicator */}
+                  {c.shot_list_status === 'submitted' && (
+                    <span
+                      title="Shot list pending review"
+                      style={{ fontSize: 14, lineHeight: 1, flexShrink: 0, cursor: 'default' }}
+                    >📋</span>
+                  )}
+                  {c.shot_list_status === 'confirmed' && (
+                    <span
+                      title="Shot list confirmed"
+                      style={{ fontSize: 14, lineHeight: 1, flexShrink: 0, cursor: 'default' }}
+                    >✅</span>
+                  )}
+
                   {/* Days badge */}
                   {days !== null && (
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, flexShrink: 0, background: days >= 0 && days <= 30 ? 'var(--gold-bg)' : 'var(--bg-secondary)', color: days >= 0 && days <= 30 ? 'var(--gold-dim)' : 'var(--text-dim)', border: `1px solid ${days >= 0 && days <= 30 ? 'var(--gold-border)' : 'var(--border)'}` }}>
