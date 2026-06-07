@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    {"source": "/tools/shot-list", "destination": "/tools/shot-list.html"},
+    {"source": "/tools/timeline", "destination": "/tools/timeline.html"},
+    {"source": "/tools/questionnaire", "destination": "/tools/questionnaire.html"},
+    {"source": "/tools/pricing-guide", "destination": "/tools/pricing-guide.html"},
     {"source": "/privacy", "destination": "/privacy.html"},
     {"source": "/terms", "destination": "/terms.html"},
     {"source": "/thank-you", "destination": "/thank-you.html"},

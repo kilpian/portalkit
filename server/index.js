@@ -4187,6 +4187,196 @@ app.post('/api/book/:username/book', async (req, res) => {
 // ── LEAD CAPTURE FORMS ────────────────────────────────────────
 const publicCors = cors({ origin: '*' })
 
+// ── Free Tool API Routes (public, no auth) ────────────────
+
+app.options('/api/tools/capture-lead', publicCors)
+app.post('/api/tools/capture-lead', publicCors, async (req, res) => {
+  try {
+    const { email, tool, source } = req.body
+    if (!email || !email.includes('@')) return res.json({ success: false })
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tool_leads (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        tool TEXT,
+        source TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {})
+    await pool.query(
+      'INSERT INTO tool_leads (email, tool, source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+      [email.toLowerCase().trim(), tool || null, source || null]
+    )
+    if (resend) {
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        to: email,
+        subject: 'Your free PortalKit tool + something extra',
+        html: emailTemplate({
+          title: "Thanks for using PortalKit's free tools!",
+          preheader: "Here's something that might help your photography business",
+          body: `
+            <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">Hope that was useful!</h2>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              These tools are actually built into PortalKit's client portal system — your clients can fill out
+              shot lists and questionnaires directly in their private portal.
+            </p>
+            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
+              If you're juggling contracts, invoices, and file delivery across multiple tools,
+              PortalKit consolidates everything into one link you send your clients.
+            </p>
+          `,
+          ctaText: 'See How It Works →',
+          ctaUrl: process.env.FRONTEND_URL || 'https://getportalkit.com',
+          footerNote: 'You used a free tool at getportalkit.com'
+        })
+      }).catch(() => {})
+    }
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Lead capture error:', err)
+    res.json({ success: false })
+  }
+})
+
+app.options('/api/tools/shot-list', publicCors)
+app.post('/api/tools/shot-list', publicCors, async (req, res) => {
+  try {
+    const { venue, style, family, special } = req.body
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: `Generate a complete wedding photography shot list for these details:
+Venue: ${venue}
+Photography style: ${style}
+Family size: ${family}
+Special requests: ${special || 'None specified'}
+
+Format as clear sections with dash-prefixed items:
+- Getting Ready (Bride / Groom)
+- Pre-Ceremony Details
+- Ceremony
+- Family Formals (list specific groupings)
+- Wedding Party
+- Couple Portraits
+- Reception
+- End of Night
+
+Keep it practical and professional. Maximum 60 shots total.`
+      }]
+    })
+    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+  } catch (err) {
+    console.error('Shot list generation error:', err)
+    res.status(500).json({ error: 'Generation failed' })
+  }
+})
+
+app.options('/api/tools/timeline', publicCors)
+app.post('/api/tools/timeline', publicCors, async (req, res) => {
+  try {
+    const { ceremony_time, ceremony_duration, distance, golden_hour, reception_end, notes } = req.body
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      messages: [{
+        role: 'user',
+        content: `Generate a professional wedding day photography timeline:
+Ceremony start: ${ceremony_time}
+Ceremony duration: ${ceremony_duration}
+Travel between venues: ${distance}
+Golden hour: ${golden_hour || 'estimate from typical sunset'}
+Reception end: ${reception_end}
+Additional notes: ${notes || 'None'}
+
+Create a minute-by-minute schedule for the photographer.
+Format each line as: TIME — Activity (duration)
+Include buffer time, travel, and golden hour portraits.
+Be specific and practical. Cover from getting-ready through reception end.`
+      }]
+    })
+    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+  } catch (err) {
+    console.error('Timeline generation error:', err)
+    res.status(500).json({ error: 'Generation failed' })
+  }
+})
+
+app.options('/api/tools/questionnaire', publicCors)
+app.post('/api/tools/questionnaire', publicCors, async (req, res) => {
+  try {
+    const { wedding_type, style, events, focus } = req.body
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1400,
+      messages: [{
+        role: 'user',
+        content: `Generate a professional wedding photography client questionnaire:
+Wedding type: ${wedding_type}
+Couple's style: ${style}
+Events to cover: ${events}
+Special focus areas: ${focus || 'None specified'}
+
+Create 15–20 thoughtful questions covering:
+- Logistics (venue, timeline, getting ready location)
+- Family and VIP list
+- Style and vision
+- Shot priorities and must-haves
+- Any concerns or special circumstances
+
+Format as numbered questions. Keep questions clear and conversational.`
+      }]
+    })
+    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+  } catch (err) {
+    console.error('Questionnaire generation error:', err)
+    res.status(500).json({ error: 'Generation failed' })
+  }
+})
+
+app.options('/api/tools/pricing-guide', publicCors)
+app.post('/api/tools/pricing-guide', publicCors, async (req, res) => {
+  try {
+    const { city, experience, packages, hours, differentiator } = req.body
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1400,
+      messages: [{
+        role: 'user',
+        content: `Generate a professional photography pricing guide:
+Market: ${city}
+Experience level: ${experience}
+Package types: ${packages}
+Hours offered: ${hours}
+Differentiator: ${differentiator || 'Professional editing and online gallery delivery'}
+
+Create 2–3 package options with:
+- Package name
+- Price (realistic for this market and experience level)
+- What's included (hours, images, deliverables)
+- Who it's best for
+
+Also include:
+- A/la carte add-ons section (2nd shooter, engagement session, album, etc)
+- A short "Why invest in professional photography" paragraph
+- A call to action
+
+Keep pricing realistic for the market. Format professionally.`
+      }]
+    })
+    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+  } catch (err) {
+    console.error('Pricing guide generation error:', err)
+    res.status(500).json({ error: 'Generation failed' })
+  }
+})
+
 app.get('/api/lead-form', requireAuth, async (req, res) => {
   try {
     let result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [req.userId])

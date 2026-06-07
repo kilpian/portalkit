@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free Wedding Day Timeline Generator — PortalKit</title>
+  <meta name="description" content="Build a professional wedding day photography timeline in minutes. Free tool for wedding photographers. No account required.">
+  <link rel="icon" href="/favicon.svg">
+  <style>
+    :root { --green: #1B4332; --gold: #C9A84C; --cream: #FDFAF5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: var(--cream); color: #1a1a1a; min-height: 100vh; }
+    .header { background: var(--green); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { color: white; font-weight: 800; font-size: 20px; text-decoration: none; }
+    .logo em { color: var(--gold); font-style: normal; }
+    .header-cta { background: var(--gold); color: var(--green); padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; }
+    .container { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+    h1 { font-size: 32px; font-weight: 800; color: var(--green); margin-bottom: 8px; }
+    .subtitle { font-size: 16px; color: #6B7280; margin-bottom: 32px; }
+    .form-card { background: white; border-radius: 16px; padding: 28px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; margin-top: 16px; }
+    label:first-child { margin-top: 0; }
+    input, select, textarea { width: 100%; padding: 10px 14px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; background: white; }
+    input:focus, select:focus, textarea:focus { outline: 3px solid var(--green); outline-offset: 2px; }
+    .btn { display: block; width: 100%; padding: 14px; background: var(--green); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result-card { background: white; border-radius: 16px; padding: 28px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); display: none; }
+    .result-card.visible { display: block; }
+    .result-content { white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #374151; }
+    .copy-btn { margin-top: 16px; padding: 10px 20px; background: var(--green); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .upsell { background: var(--green); color: white; border-radius: 12px; padding: 20px 24px; margin-top: 24px; text-align: center; }
+    .upsell h3 { font-size: 17px; margin-bottom: 6px; }
+    .upsell p { font-size: 13px; opacity: 0.85; margin-bottom: 14px; }
+    .upsell a { display: inline-block; background: var(--gold); color: var(--green); padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
+    .loading { text-align: center; padding: 32px; color: var(--green); font-weight: 600; }
+    .spinner { width: 32px; height: 32px; margin: 0 auto 12px; border: 3px solid #E5E7EB; border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">Portal<em>Kit</em></a>
+    <a href="/signup" class="header-cta">Free Trial →</a>
+  </header>
+
+  <div class="container">
+    <h1>⏰ Wedding Day Timeline Generator</h1>
+    <p class="subtitle">Enter your wedding day details and get a minute-by-minute photography schedule. Share with your second shooter and clients.</p>
+
+    <div class="form-card">
+      <label>Ceremony start time</label>
+      <input type="time" id="ceremony_time" value="14:00">
+
+      <label>Ceremony duration</label>
+      <select id="ceremony_duration">
+        <option value="30 minutes">30 minutes</option>
+        <option value="45 minutes">45 minutes</option>
+        <option value="60 minutes" selected>60 minutes</option>
+        <option value="90 minutes">90 minutes</option>
+        <option value="2 hours">2 hours</option>
+      </select>
+
+      <label>Travel time between ceremony and reception</label>
+      <select id="distance">
+        <option value="none (same venue)">None — same venue</option>
+        <option value="5 minutes">5 minutes</option>
+        <option value="15 minutes">15 minutes</option>
+        <option value="30 minutes">30 minutes</option>
+        <option value="45+ minutes">45+ minutes</option>
+      </select>
+
+      <label>Golden hour / sunset time <span style="font-weight:400; color:#9CA3AF;">(optional)</span></label>
+      <input type="time" id="golden_hour" placeholder="e.g. 19:30">
+
+      <label>Reception end time</label>
+      <input type="time" id="reception_end" value="22:00">
+
+      <label>Additional notes <span style="font-weight:400; color:#9CA3AF;">(optional)</span></label>
+      <textarea id="notes" rows="2" placeholder="e.g. First look at 1pm, cocktail hour on terrace, grand exit sparklers..."></textarea>
+
+      <label>Your email <span style="font-weight:400; color:#9CA3AF;">(optional — to save your timeline)</span></label>
+      <input type="email" id="email" placeholder="your@email.com">
+
+      <button class="btn" id="generateBtn" onclick="generateTimeline()">Generate My Timeline →</button>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <div class="loading" id="loadingState">
+        <div class="spinner"></div>
+        Building your timeline...
+      </div>
+      <div id="resultContent" style="display:none">
+        <h3 style="color:var(--green); margin-bottom:16px;">Your Wedding Day Timeline</h3>
+        <div class="result-content" id="timelineText"></div>
+        <button class="copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+        <div class="upsell">
+          <h3>Send this timeline directly in your client portal</h3>
+          <p>PortalKit includes a built-in day-of timeline tool. Clients approve it with one click inside their private portal.</p>
+          <a href="/signup">Start Free Trial →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function generateTimeline() {
+      const ceremony_time = document.getElementById('ceremony_time').value
+      const ceremony_duration = document.getElementById('ceremony_duration').value
+      const distance = document.getElementById('distance').value
+      const golden_hour = document.getElementById('golden_hour').value
+      const reception_end = document.getElementById('reception_end').value
+      const notes = document.getElementById('notes').value
+      const email = document.getElementById('email').value
+
+      if (!ceremony_time || !reception_end) {
+        alert('Please fill in ceremony time and reception end time.')
+        return
+      }
+
+      document.getElementById('generateBtn').disabled = true
+      document.getElementById('resultCard').classList.add('visible')
+      document.getElementById('loadingState').style.display = 'block'
+      document.getElementById('resultContent').style.display = 'none'
+
+      if (email) {
+        fetch('/api/tools/capture-lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, tool: 'timeline-generator', source: 'free-tool' })
+        }).catch(() => {})
+      }
+
+      try {
+        const response = await fetch('/api/tools/timeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ceremony_time, ceremony_duration, distance, golden_hour, reception_end, notes })
+        })
+        const data = await response.json()
+
+        document.getElementById('loadingState').style.display = 'none'
+        document.getElementById('timelineText').textContent = data.result
+        document.getElementById('resultContent').style.display = 'block'
+        document.getElementById('generateBtn').disabled = false
+        document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' })
+      } catch (err) {
+        alert('Something went wrong. Please try again.')
+        document.getElementById('generateBtn').disabled = false
+        document.getElementById('resultCard').classList.remove('visible')
+      }
+    }
+
+    function copyToClipboard() {
+      const text = document.getElementById('timelineText').textContent
+      navigator.clipboard.writeText(text)
+        .then(() => alert('Copied to clipboard!'))
+        .catch(() => alert('Please select and copy manually.'))
+    }
+  </script>
+</body>
+</html>
