@@ -168,7 +168,7 @@ app.post('/api/stripe/webhook',
                 const bookingUrl = u.booking_username ? `${frontendUrl}/book/${u.booking_username}` : `${frontendUrl}/dashboard/booking`
                 await resend.emails.send({
                   from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-                  reply_to: "portalkit@kilpian.com",
+                  reply_to: "hello@getportalkit.com",
                   to: u.email,
                   subject: `You're in, ${firstName}! Here's how to get your first portal live →`,
                   html: emailTemplate({
@@ -229,7 +229,7 @@ app.post('/api/stripe/webhook',
                     const refFirstName = ref.referrer_name?.split(' ')[0] || 'there'
                     await resend.emails.send({
                       from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-                      reply_to: "portalkit@kilpian.com",
+                      reply_to: "hello@getportalkit.com",
                       to: ref.referrer_email,
                       subject: "You just earned a free month of PortalKit! 🎉",
                       html: emailTemplate({
@@ -308,7 +308,7 @@ app.post('/api/stripe/webhook',
                 const firstName = u.full_name?.split(' ')[0] || 'there'
                 await resend.emails.send({
                   from: 'PortalKit <hello@mail.getportalkit.com>',
-                  reply_to: "portalkit@kilpian.com",
+                  reply_to: "hello@getportalkit.com",
                   to: u.email,
                   subject: 'Action required: Update your payment method',
                   html: emailTemplate({
@@ -340,7 +340,7 @@ app.post('/api/stripe/webhook',
             try {
               await resend.emails.send({
                 from: 'PortalKit <hello@mail.getportalkit.com>',
-                reply_to: "portalkit@kilpian.com",
+                reply_to: "hello@getportalkit.com",
                 to: u.email,
                 subject: 'Your PortalKit subscription has been cancelled',
                 html: emailTemplate({
@@ -390,7 +390,7 @@ app.post('/api/stripe/webhook',
                   : 'https://getportalkit.com'
                 await resend.emails.send({
                   from: 'PortalKit <hello@mail.getportalkit.com>',
-                  reply_to: "portalkit@kilpian.com",
+                  reply_to: "hello@getportalkit.com",
                   to: clientEmail,
                   subject: `Payment receipt — ${amountStr}`,
                   html: emailTemplate({
@@ -1138,6 +1138,21 @@ async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
       `).catch(err => console.error('Index creation warning:', err.message))
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS generated_content (
+          id SERIAL PRIMARY KEY,
+          content TEXT NOT NULL,
+          twitter_content TEXT,
+          angle TEXT,
+          day_number INTEGER,
+          week_start DATE,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','posted','skipped')),
+          scheduled_for TIMESTAMPTZ,
+          postproxy_id TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1182,7 +1197,7 @@ async function sendEventReminders() {
         try {
           await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
-            reply_to: "portalkit@kilpian.com",
+            reply_to: "hello@getportalkit.com",
             to: client.email,
             subject: reminder.subject,
             html: emailTemplate({
@@ -1240,7 +1255,7 @@ async function sendEventReminders() {
         try {
           await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
-            reply_to: "portalkit@kilpian.com",
+            reply_to: "hello@getportalkit.com",
             to: ev.email,
             subject,
             html: emailTemplate({
@@ -1292,7 +1307,7 @@ async function sendEventReminders() {
         if (resend) {
           await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
-            reply_to: "portalkit@kilpian.com",
+            reply_to: "hello@getportalkit.com",
             to: row.email,
             subject: `Reminder: Please sign your contract — ${biz}`,
             html: emailTemplate({
@@ -1338,7 +1353,7 @@ async function sendEventReminders() {
         if (resend) {
           await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
-            reply_to: "portalkit@kilpian.com",
+            reply_to: "hello@getportalkit.com",
             to: row.email,
             subject: `Balance due reminder — ${biz}`,
             html: emailTemplate({
@@ -1384,7 +1399,7 @@ async function sendTrialExpiryReminders() {
 
       await resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: user.email,
         subject: 'Your PortalKit trial ends in 3 days',
         html: emailTemplate({
@@ -1448,7 +1463,7 @@ async function sendTrialExpiryReminders() {
 
       await resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: user.email,
         subject: '⚠️ Your PortalKit trial ends tomorrow',
         html: emailTemplate({
@@ -1521,7 +1536,7 @@ async function sendOnboardingSequence() {
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your clients don't need to create an account — they just click the link and see everything in one place.</p>`
         await resend.emails.send({
           from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: u.email,
           subject: hasClients ? 'Time to send your first contract →' : 'Have you added your first client yet?',
           html: emailTemplate({
@@ -1557,7 +1572,7 @@ async function sendOnboardingSequence() {
         const bookingUrl = u.booking_username ? `${frontendUrl}/book/${u.booking_username}` : `${frontendUrl}/dashboard/booking`
         await resend.emails.send({
           from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: u.email,
           subject: 'Your booking page is live (add it to your Instagram bio) →',
           html: emailTemplate({
@@ -1596,7 +1611,7 @@ async function sendOnboardingSequence() {
         const firstName = u.full_name?.split(' ')[0] || 'there'
         await resend.emails.send({
           from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: u.email,
           subject: '4 days left — 3 features that save you the most time',
           html: emailTemplate({
@@ -1636,13 +1651,38 @@ async function sendOnboardingSequence() {
 
 // ── Content Engine (Publer) ───────────────────────────────────
 
-const PUBLER_API_KEY = process.env.PUBLER_API_KEY
-const PUBLER_WORKSPACE_ID = process.env.PUBLER_WORKSPACE_ID
-const PUBLER_ACCOUNT_IDS = (process.env.PUBLER_ACCOUNT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+const POSTPROXY_API_KEY = process.env.POSTPROXY_API_KEY
+
+async function postToSocialMedia(content, twitterContent) {
+  if (!POSTPROXY_API_KEY) return null
+  try {
+    const response = await fetch('https://api.postproxy.dev/v1/posts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${POSTPROXY_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        platforms: ['instagram', 'facebook', 'twitter', 'linkedin'],
+        content: {
+          default: content,
+          twitter: twitterContent || content.slice(0, 270)
+        },
+        publish_at: new Date().toISOString()
+      })
+    })
+    const result = await response.json()
+    console.log('⚡ Postproxy result:', result?.id || result?.error || 'unknown')
+    return result
+  } catch (err) {
+    console.error('⚡ Postproxy error:', err.message)
+    return null
+  }
+}
 
 async function generateAndScheduleWeeklyContent() {
-  if (!PUBLER_API_KEY || !PUBLER_WORKSPACE_ID || !PUBLER_ACCOUNT_IDS.length || !anthropic) {
-    console.log('⚡ Content engine: config missing, skipping')
+  if (!anthropic) {
+    console.log('⚡ Content engine: no AI key, skipping')
     return
   }
   console.log('⚡ Content engine: generating weekly content...')
@@ -1650,10 +1690,10 @@ async function generateAndScheduleWeeklyContent() {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
-      system: `You are a social media expert for PortalKit (getportalkit.com), a client portal for wedding photographers. PortalKit replaces DocuSign, Dropbox, Calendly, and Pixieset. One link gives clients contracts, invoices, gallery, shot list, questionnaire, and timeline. Price: from $29/month. Write like a fellow photographer helping peers, not a software company. Direct, conversational, zero corporate speak. Return ONLY valid JSON. No markdown. No code fences.`,
+      system: `You are the social media voice for PortalKit (getportalkit.com). Wedding photographer client portal. $29/month replaces DocuSign, Dropbox, Calendly, Pixieset. Write like a photographer helping peers. Direct. Zero corporate speak. Return ONLY valid JSON. No markdown. No code fences.`,
       messages: [{
         role: 'user',
-        content: `Generate 7 social media posts for the week. Each post a different angle. Angles: pain_point, tip, feature, savings, social_proof, question, story. Return exactly this JSON: {"posts":[{"day":1,"angle":"pain_point","content":"Full post text with line breaks as \\n. Include 8-12 hashtags at end.","twitter_content":"Under 280 chars version. 3-5 hashtags."}]}`
+        content: `Generate 7 social media posts. Vary the angle: pain_point, tip, feature, savings, social_proof, question, story. Return this JSON: {"posts":[{"day":1,"angle":"pain_point","content":"Full post for Instagram/Facebook. Use \\n for line breaks. Include 8-12 hashtags at end.","twitter_content":"Under 270 chars. 3-4 hashtags.","hook":"First line under 10 words"}]}`
       }]
     })
     const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
@@ -1661,43 +1701,34 @@ async function generateAndScheduleWeeklyContent() {
     if (!jsonMatch) { console.error('⚡ Content engine: invalid AI response'); return }
     const { posts } = JSON.parse(jsonMatch[0])
     console.log(`⚡ Generated ${posts.length} posts`)
-    const now = new Date()
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1)
     const times = ['09:00','19:00','08:30','12:00','18:00','10:00','20:00']
-    const scheduledPosts = []
     for (let i = 0; i < posts.length; i++) {
       const post = posts[i]
-      const date = new Date(now)
-      date.setDate(date.getDate() + i + 1)
+      const schedDate = new Date(weekStart)
+      schedDate.setDate(schedDate.getDate() + i)
       const [h, m] = times[i].split(':')
-      date.setHours(parseInt(h), parseInt(m), 0, 0)
-      for (const accountId of PUBLER_ACCOUNT_IDS) {
-        scheduledPosts.push({
-          networks: { default: { type: 'status', text: post.content } },
-          accounts: [{ id: accountId, scheduled_at: date.toISOString() }]
-        })
+      schedDate.setHours(parseInt(h), parseInt(m), 0, 0)
+      const inserted = await pool.query(
+        `INSERT INTO generated_content (content, twitter_content, angle, day_number, week_start, scheduled_for) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [post.content, post.twitter_content, post.angle, post.day, weekStart.toISOString().split('T')[0], schedDate.toISOString()]
+      ).catch(() => null)
+      if (POSTPROXY_API_KEY) {
+        const result = await postToSocialMedia(post.content, post.twitter_content)
+        if (result?.id && inserted?.rows[0]?.id) {
+          await pool.query('UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3', [result.id, 'posted', inserted.rows[0].id]).catch(() => {})
+        }
       }
     }
-    const publerRes = await fetch('https://app.publer.com/api/v1/posts/schedule', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer-API ${PUBLER_API_KEY}`,
-        'Publer-Workspace-Id': PUBLER_WORKSPACE_ID,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({ bulk: { state: 'scheduled', posts: scheduledPosts } })
-    })
-    const publerResult = await publerRes.json()
-    console.log('⚡ Publer response:', publerRes.status, publerResult.job_id || publerResult.error || 'unknown')
-    await pool.query(`CREATE TABLE IF NOT EXISTS content_runs (id SERIAL PRIMARY KEY, posts_count INTEGER, publer_job_id TEXT, ran_at TIMESTAMPTZ DEFAULT NOW())`).catch(() => {})
-    await pool.query(`INSERT INTO content_runs (posts_count, publer_job_id) VALUES ($1, $2)`, [scheduledPosts.length, publerResult.job_id || publerResult.error || 'unknown']).catch(() => {})
+    console.log(`⚡ Content engine: ${posts.length} posts stored`)
   } catch (err) {
     console.error('⚡ Content engine error:', err.message)
   }
 }
 
 async function monitorRedditAndGenerateContent() {
-  if (!PUBLER_API_KEY || !anthropic) return
+  if (!anthropic) return
   try {
     const redditRes = await fetch('https://www.reddit.com/r/weddingphotography/search.json?q=software+booking+client+invoice+contract&sort=new&limit=10&t=week', { headers: { 'User-Agent': 'PortalKit/1.0' } })
     if (!redditRes.ok) return
@@ -1716,23 +1747,18 @@ async function monitorRedditAndGenerateContent() {
     })
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : null
     if (!content) return
-    const postDate = new Date()
-    postDate.setDate(postDate.getDate() + 2)
-    postDate.setHours(18, 0, 0, 0)
-    const accountPosts = PUBLER_ACCOUNT_IDS.map(id => ({
-      networks: { default: { type: 'status', text: content } },
-      accounts: [{ id, scheduled_at: postDate.toISOString() }]
-    }))
-    await fetch('https://app.publer.com/api/v1/posts/schedule', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer-API ${PUBLER_API_KEY}`,
-        'Publer-Workspace-Id': PUBLER_WORKSPACE_ID,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ bulk: { state: 'scheduled', posts: accountPosts } })
-    })
-    console.log('⚡ Reddit post scheduled')
+    const schedDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    const inserted = await pool.query(
+      `INSERT INTO generated_content (content, angle, scheduled_for) VALUES ($1,'reddit_insight',$2) RETURNING id`,
+      [content, schedDate.toISOString()]
+    ).catch(() => null)
+    if (POSTPROXY_API_KEY) {
+      const result = await postToSocialMedia(content, content.slice(0, 270))
+      if (result?.id && inserted?.rows[0]?.id) {
+        await pool.query('UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3', [result.id, 'posted', inserted.rows[0].id]).catch(() => {})
+      }
+    }
+    console.log('⚡ Reddit post stored')
   } catch (err) {
     console.error('⚡ Reddit monitor error:', err.message)
   }
@@ -1945,8 +1971,8 @@ app.delete('/api/users/me', requireAuth, async (req, res) => {
     if (resend) {
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
-        to: 'contact.kilpian@gmail.com',
+        reply_to: "hello@getportalkit.com",
+        to: 'hello@getportalkit.com',
         subject: `PortalKit account deleted: ${reason || 'No reason given'}`,
         html: emailTemplate({
           title: 'Account Deleted',
@@ -2518,7 +2544,7 @@ app.post('/api/clients', requireAuth, async (req, res) => {
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: email,
           subject: `Welcome to ${biz}'s client portal`,
           html: emailTemplate({
@@ -2797,7 +2823,7 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
           console.log('📧 Sending invoice update email to:', info.email)
           const emailResult = await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
-            reply_to: "portalkit@kilpian.com",
+            reply_to: "hello@getportalkit.com",
             to: info.email,
             subject: `Your invoice has been updated — ${senderName}`,
             html: emailTemplate({
@@ -2859,7 +2885,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: contract.client_email,
           subject: `Please review and sign your contract — ${senderName}`,
           html: emailTemplate({
@@ -2936,7 +2962,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: invoice.client_email,
           subject: `Invoice from ${senderName} — ${amount}`,
           html: emailTemplate({
@@ -3251,7 +3277,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
         const clientFirst = prev.client_name?.split(' ')[0] || 'there'
         await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: prev.client_email,
           subject: 'Your wedding photos are ready! 📸',
           html: emailTemplate({
@@ -3446,7 +3472,7 @@ app.post('/api/portals/:token/gallery/download-request', async (req, res) => {
       const bizName = c.business_name || c.full_name || 'Your photographer'
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: c.photographer_email,
         subject: `${c.name} has downloaded their gallery`,
         html: emailTemplate({
@@ -3557,7 +3583,7 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
       try {
         await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: contract.client_email,
           subject: `Contract signed — ${senderName}`,
           html: emailTemplate({
@@ -3578,7 +3604,7 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
       try {
         await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: contract.photographer_email,
           subject: `${contract.client_name} signed their contract`,
           html: emailTemplate({
@@ -3689,7 +3715,7 @@ app.post('/api/messages', requireAuth, async (req, res) => {
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: client.email,
           subject: `New message from ${senderName}`,
           html: emailTemplate({
@@ -3750,7 +3776,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: client.photographer_email,
           subject: `${displaySender} sent you a message`,
           html: emailTemplate({
@@ -4103,7 +4129,7 @@ app.get('/api/test-email', async (req, res) => {
   try {
     const result = await resend.emails.send({
       from: 'PortalKit <hello@mail.getportalkit.com>',
-      reply_to: "portalkit@kilpian.com",
+      reply_to: "hello@getportalkit.com",
       to: 'hello@mail.getportalkit.com',
       subject: 'PortalKit test email',
       html: '<p>Test email from PortalKit — email is working!</p>',
@@ -4181,7 +4207,7 @@ app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
         const toList = [client.email, client.secondary_email].filter(Boolean)
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: toList,
           subject: `Thank you, ${client.name}! — ${biz}`,
           html: emailTemplate({
@@ -4281,7 +4307,7 @@ app.post('/api/questionnaires', requireAuth, async (req, res) => {
       const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client.email,
         subject: `Please fill out your questionnaire — ${biz}`,
         html: emailTemplate({
@@ -4347,7 +4373,7 @@ app.post('/api/portals/:token/questionnaires/:id/respond', async (req, res) => {
       const c = clientInfo.rows[0]
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: qr.photographer_email,
         subject: `${c?.name || 'Your client'} filled out their questionnaire`,
         html: emailTemplate({
@@ -4654,7 +4680,7 @@ app.post('/api/book/:username/book', async (req, res) => {
     if (resend) {
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client_email,
         subject: `Booking confirmed — ${sessionTypeName} with ${biz}`,
         html: emailTemplate({
@@ -4669,7 +4695,7 @@ app.post('/api/book/:username/book', async (req, res) => {
 
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: photographer.email,
         subject: `New booking: ${sanitize(client_name)} — ${sessionTypeName}`,
         html: emailTemplate({
@@ -4735,7 +4761,7 @@ app.post('/api/tools/capture-lead', publicCors, async (req, res) => {
     if (resend) {
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: email,
         subject: 'Your free PortalKit tool + something extra',
         html: emailTemplate({
@@ -5034,7 +5060,7 @@ app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
       const biz = photographer.business_name || photographer.full_name || 'You'
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: photographer.email,
         subject: `New lead from ${sanitize(name)}`,
         html: emailTemplate({
@@ -5212,7 +5238,7 @@ app.post('/api/clients/:id/shot-list/confirm', requireAuth, async (req, res) => 
       const biz = req.user.business_name || req.user.full_name || 'Your photographer'
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client.email,
         subject: `Your shot list has been confirmed! — ${biz}`,
         html: emailTemplate({
@@ -5257,7 +5283,7 @@ app.post('/api/portals/:token/shot-list', async (req, res) => {
       const biz = client.business_name || client.photographer_name || 'Your client'
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client.photographer_email,
         subject: `${client.name} submitted their shot list`,
         html: emailTemplate({
@@ -5374,7 +5400,7 @@ app.post('/api/clients/:id/timeline/send', requireAuth, async (req, res) => {
       const biz = req.user.business_name || req.user.full_name || 'Your photographer'
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client.email,
         subject: `Your day-of timeline is ready — ${biz}`,
         html: emailTemplate({
@@ -5416,7 +5442,7 @@ app.post('/api/portals/:token/timeline/approve', async (req, res) => {
     if (client.photographer_email && resend) {
       resend.emails.send({
         from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "portalkit@kilpian.com",
+        reply_to: "hello@getportalkit.com",
         to: client.photographer_email,
         subject: `${client.name} approved the day-of timeline`,
         html: emailTemplate({
@@ -5533,7 +5559,7 @@ app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
         const proposalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/proposal/${proposal.id}`
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: client.email,
           subject: `${proposal.title} — from ${biz}`,
           html: emailTemplate({
@@ -5591,7 +5617,7 @@ app.post('/api/proposals/:id/accept', async (req, res) => {
       if (photographer?.email && resend) {
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
-          reply_to: "portalkit@kilpian.com",
+          reply_to: "hello@getportalkit.com",
           to: photographer.email,
           subject: `Proposal accepted: ${proposal.title}`,
           html: emailTemplate({
@@ -5710,6 +5736,31 @@ app.post('/api/admin/generate-reddit-content', async (req, res) => {
   try {
     await monitorRedditAndGenerateContent()
     res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/admin/reddit-content', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    await monitorRedditAndGenerateContent()
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/admin/generated-content', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    const result = await pool.query('SELECT * FROM generated_content ORDER BY created_at DESC LIMIT 50')
+    res.json(result.rows)
+  } catch { res.json([]) }
+})
+
+app.patch('/api/admin/generated-content/:id', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    const { status } = req.body
+    const result = await pool.query('UPDATE generated_content SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
+    res.json(result.rows[0])
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
