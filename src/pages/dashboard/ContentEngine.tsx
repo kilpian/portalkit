@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
 import API_BASE from '../../lib/api'
 
-const ADMIN_EMAIL = 'derauzoma@gmail.com'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
 
 interface GeneratedPost {
@@ -61,10 +60,12 @@ export default function ContentEngine() {
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
 
-  if (user?.email !== ADMIN_EMAIL) {
+  const isAdmin = user?.email === import.meta.env.VITE_ADMIN_EMAIL
+
+  if (!isAdmin) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: '#6B7280' }}>
-        Access restricted.
+      <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+        <p>Not authorized.</p>
       </div>
     )
   }
