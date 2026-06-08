@@ -317,7 +317,7 @@ export default function DashboardLayout() {
           onClick={() => setMobileOpen(false)}
           icon={SETTINGS_ICON}
         />
-        {portalUser?.email === import.meta.env.VITE_ADMIN_EMAIL && (
+        {portalUser?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase() && (
           <NavItem
             to="/dashboard/content"
             label="Content"

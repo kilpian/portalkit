@@ -60,7 +60,13 @@ export default function ContentEngine() {
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
 
-  const isAdmin = user?.email === import.meta.env.VITE_ADMIN_EMAIL
+  console.log('Admin check:', {
+    userEmail: user?.email,
+    adminEmail: import.meta.env.VITE_ADMIN_EMAIL,
+    match: user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
+  })
+
+  const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
 
   if (!isAdmin) {
     return (
