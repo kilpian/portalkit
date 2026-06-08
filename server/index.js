@@ -5723,8 +5723,21 @@ app.patch('/api/admin/affiliates/:id', async (req, res) => {
 
 // ── ADMIN: CONTENT ENGINE ─────────────────────────────────────
 
+function checkAdminSecret(req, res) {
+  const provided = req.headers['x-admin-secret']
+  const match = provided === process.env.ADMIN_SECRET
+  console.log('Admin auth check:', {
+    route: req.method + ' ' + req.path,
+    provided: provided ? provided.slice(0, 4) + '...' : '[missing]',
+    expected: process.env.ADMIN_SECRET ? '[SET]' : '[NOT SET]',
+    match
+  })
+  if (!match) { res.status(401).json({ error: 'Unauthorized' }); return false }
+  return true
+}
+
 app.post('/api/admin/generate-content', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     await generateAndScheduleWeeklyContent()
     res.json({ success: true })
@@ -5732,7 +5745,7 @@ app.post('/api/admin/generate-content', async (req, res) => {
 })
 
 app.post('/api/admin/generate-reddit-content', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     await monitorRedditAndGenerateContent()
     res.json({ success: true })
@@ -5740,7 +5753,7 @@ app.post('/api/admin/generate-reddit-content', async (req, res) => {
 })
 
 app.post('/api/admin/reddit-content', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     await monitorRedditAndGenerateContent()
     res.json({ success: true })
@@ -5748,7 +5761,7 @@ app.post('/api/admin/reddit-content', async (req, res) => {
 })
 
 app.get('/api/admin/generated-content', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     const result = await pool.query('SELECT * FROM generated_content ORDER BY created_at DESC LIMIT 50')
     res.json(result.rows)
@@ -5756,7 +5769,7 @@ app.get('/api/admin/generated-content', async (req, res) => {
 })
 
 app.patch('/api/admin/generated-content/:id', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     const { status } = req.body
     const result = await pool.query('UPDATE generated_content SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
@@ -5765,7 +5778,7 @@ app.patch('/api/admin/generated-content/:id', async (req, res) => {
 })
 
 app.get('/api/admin/tool-leads', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!checkAdminSecret(req, res)) return
   try {
     const result = await pool.query('SELECT * FROM tool_leads ORDER BY created_at DESC LIMIT 100')
     res.json(result.rows)
