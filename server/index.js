@@ -90,7 +90,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret', 'x-gallery-password', 'x-clerk-auth-token'],
 }))
 
 // Webhook must be before express.json() to get raw body
