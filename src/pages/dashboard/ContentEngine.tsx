@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
-import API_BASE from '../../lib/api'
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
 
 export default function ContentEngine() {
@@ -34,7 +34,7 @@ export default function ContentEngine() {
   const fetchPosts = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/admin/generated-content`, {
+      const res = await fetch(`${API_URL}/api/admin/generated-content`, {
         headers: { 'x-admin-secret': ADMIN_SECRET }
       })
       const data = await res.json()
@@ -48,7 +48,7 @@ export default function ContentEngine() {
 
   const fetchLeads = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/tool-leads`, {
+      const res = await fetch(`${API_URL}/api/admin/tool-leads`, {
         headers: { 'x-admin-secret': ADMIN_SECRET }
       })
       const data = await res.json()
@@ -62,7 +62,7 @@ export default function ContentEngine() {
     setGenerating(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/api/admin/generate-content`, {
+      const res = await fetch(`${API_URL}/api/admin/generate-content`, {
         method: 'POST',
         headers: { 'x-admin-secret': ADMIN_SECRET }
       })
@@ -83,7 +83,7 @@ export default function ContentEngine() {
     setGenerating(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/api/admin/reddit-content`, {
+      const res = await fetch(`${API_URL}/api/admin/reddit-content`, {
         method: 'POST',
         headers: { 'x-admin-secret': ADMIN_SECRET }
       })
@@ -102,7 +102,7 @@ export default function ContentEngine() {
 
   const markStatus = async (id: number, status: 'posted' | 'skipped') => {
     try {
-      await fetch(`${API_BASE}/api/admin/generated-content/${id}`, {
+      await fetch(`${API_URL}/api/admin/generated-content/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
         body: JSON.stringify({ status }),
