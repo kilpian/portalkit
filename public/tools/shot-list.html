@@ -152,20 +152,20 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ venue, style, family, special })
         })
-        const data = await response.json()
         if (!response.ok) {
-          showError(data.error || 'Something went wrong. Please try again.')
-          document.getElementById('generateBtn').disabled = false
-          document.getElementById('resultCard').classList.remove('visible')
-          return
+          const err = await response.json().catch(() => ({}))
+          throw new Error(err.error || `Server error ${response.status}`)
         }
+        const data = await response.json()
+        if (!data.result) throw new Error('No content generated')
         document.getElementById('loadingState').style.display = 'none'
         document.getElementById('shotListText').textContent = data.result
         document.getElementById('resultContent').style.display = 'block'
         document.getElementById('generateBtn').disabled = false
         document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' })
       } catch (err) {
-        showError('Something went wrong. Please try again.')
+        const msg = err.message || 'Something went wrong'
+        showError(msg + ' — please try again.')
         document.getElementById('generateBtn').disabled = false
         document.getElementById('resultCard').classList.remove('visible')
       }
