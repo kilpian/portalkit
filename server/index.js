@@ -521,6 +521,20 @@ function sanitize(str) {
 
 const sanitizePrompt = (str) => str?.replace(/<[^>]*>/g, '').slice(0, 2000) || ''
 
+function stripMarkdown(text) {
+  return text
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_{1,2}(.*?)_{1,2}/g, '$1')
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')
+    .replace(/^\s*[-*+]\s+/gm, '- ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*>{1,}\s*/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1153,6 +1167,16 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS tool_lead_nurture (
+          id SERIAL PRIMARY KEY,
+          email TEXT NOT NULL,
+          email_type TEXT NOT NULL,
+          sent_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(email, email_type)
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1655,29 +1679,42 @@ const POSTPROXY_API_KEY = process.env.POSTPROXY_API_KEY
 
 async function postToSocialMedia(content, twitterContent) {
   if (!POSTPROXY_API_KEY) return null
-  try {
-    const response = await fetch('https://api.postproxy.dev/v1/posts', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${POSTPROXY_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        platforms: ['instagram', 'facebook', 'twitter', 'linkedin'],
-        content: {
-          default: content,
-          twitter: twitterContent || content.slice(0, 270)
-        },
-        publish_at: new Date().toISOString()
-      })
-    })
-    const result = await response.json()
-    console.log('⚡ Postproxy result:', result?.id || result?.error || 'unknown')
-    return result
-  } catch (err) {
-    console.error('⚡ Postproxy error:', err.message)
-    return null
+  const body = JSON.stringify({
+    text: content,
+    platforms: ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok', 'threads'],
+    publish_at: new Date().toISOString()
+  })
+  const headers = {
+    'Authorization': `Bearer ${POSTPROXY_API_KEY}`,
+    'Content-Type': 'application/json'
   }
+  const urls = [
+    'https://api.postproxy.io/v1/posts',
+    'https://postproxy.io/api/v1/posts'
+  ]
+  for (const url of urls) {
+    try {
+      console.log('⚡ Postproxy request:', { url, hasKey: !!POSTPROXY_API_KEY, contentLength: content?.length })
+      const response = await fetch(url, { method: 'POST', headers, body })
+      const responseText = await response.text()
+      console.log('⚡ Postproxy response status:', response.status)
+      console.log('⚡ Postproxy response body:', responseText)
+      let result = {}
+      try { result = JSON.parse(responseText) } catch(e) {}
+      if (response.status === 404) {
+        console.log('⚡ Postproxy 404 at', url, '— trying next URL')
+        continue
+      }
+      if (!response.ok) {
+        console.error('⚡ Postproxy failed:', response.status, responseText)
+        return null
+      }
+      return result
+    } catch (err) {
+      console.error('⚡ Postproxy error at', url, ':', err.message)
+    }
+  }
+  return null
 }
 
 async function generateAndScheduleWeeklyContent() {
@@ -1714,10 +1751,16 @@ async function generateAndScheduleWeeklyContent() {
         `INSERT INTO generated_content (content, twitter_content, angle, day_number, week_start, scheduled_for) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [post.content, post.twitter_content, post.angle, post.day, weekStart.toISOString().split('T')[0], schedDate.toISOString()]
       ).catch(() => null)
-      if (POSTPROXY_API_KEY) {
+      if (POSTPROXY_API_KEY && inserted?.rows[0]?.id) {
         const result = await postToSocialMedia(post.content, post.twitter_content)
-        if (result?.id && inserted?.rows[0]?.id) {
-          await pool.query('UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3', [result.id, 'posted', inserted.rows[0].id]).catch(() => {})
+        if (result && !result.error) {
+          await pool.query(
+            'UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3',
+            [result.id || result.post_id || 'sent', 'posted', inserted.rows[0].id]
+          ).catch(() => {})
+          console.log('⚡ Post marked as posted, id:', inserted.rows[0].id)
+        } else {
+          console.log('⚡ Postproxy failed for post id:', inserted.rows[0].id, '— remains pending')
         }
       }
     }
@@ -1752,15 +1795,114 @@ async function monitorRedditAndGenerateContent() {
       `INSERT INTO generated_content (content, angle, scheduled_for) VALUES ($1,'reddit_insight',$2) RETURNING id`,
       [content, schedDate.toISOString()]
     ).catch(() => null)
-    if (POSTPROXY_API_KEY) {
+    if (POSTPROXY_API_KEY && inserted?.rows[0]?.id) {
       const result = await postToSocialMedia(content, content.slice(0, 270))
-      if (result?.id && inserted?.rows[0]?.id) {
-        await pool.query('UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3', [result.id, 'posted', inserted.rows[0].id]).catch(() => {})
+      if (result && !result.error) {
+        await pool.query(
+          'UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3',
+          [result.id || result.post_id || 'sent', 'posted', inserted.rows[0].id]
+        ).catch(() => {})
+        console.log('⚡ Reddit post marked as posted')
+      } else {
+        console.log('⚡ Postproxy failed for Reddit post — remains pending')
       }
     }
     console.log('⚡ Reddit post stored')
   } catch (err) {
     console.error('⚡ Reddit monitor error:', err.message)
+  }
+}
+
+async function sendFreeToolNurtureEmails() {
+  if (!resend) return
+  try {
+    // Day 3: Show them what PortalKit actually does
+    const day3Leads = await pool.query(`
+      SELECT tl.email FROM tool_leads tl
+      WHERE tl.created_at < NOW() - INTERVAL '3 days'
+      AND tl.created_at > NOW() - INTERVAL '4 days'
+      AND NOT EXISTS (
+        SELECT 1 FROM tool_lead_nurture tln
+        WHERE tln.email = tl.email AND tln.email_type = 'day3_feature'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE LOWER(u.email) = LOWER(tl.email) AND u.plan IN ('trial','active')
+      )
+    `)
+    for (const lead of day3Leads.rows) {
+      await resend.emails.send({
+        from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+        reply_to: 'hello@getportalkit.com',
+        to: lead.email,
+        subject: 'Quick question about your workflow',
+        html: emailTemplate({
+          title: 'How are you managing clients right now?',
+          preheader: 'Most photographers use 6 tools. There is a better way.',
+          body: `
+            <h2>Hey there!</h2>
+            <p>You used one of our free tools a few days ago. Hope it was useful.</p>
+            <p>Quick honest question: how are you currently managing contracts, invoices, and file delivery for your clients?</p>
+            <p>Most photographers I talk to are bouncing between DocuSign, PayPal, Dropbox, and their inbox for every single booking. It works but it is exhausting.</p>
+            <p>PortalKit puts all of that in one private link you send each client. They sign, pay, fill out questionnaires, and download their gallery without you sending a single follow up email.</p>
+            <p>14-day free trial if you want to see it in action.</p>
+          `,
+          ctaText: 'See How It Works →',
+          ctaUrl: 'https://getportalkit.com',
+          footerNote: 'Reply to this email if you have questions. I read every one.'
+        })
+      })
+      await pool.query(
+        `INSERT INTO tool_lead_nurture (email, email_type) VALUES ($1, 'day3_feature') ON CONFLICT DO NOTHING`,
+        [lead.email]
+      )
+      console.log('📧 Day 3 nurture sent to:', lead.email)
+    }
+
+    // Day 7: Final nudge
+    const day7Leads = await pool.query(`
+      SELECT tl.email FROM tool_leads tl
+      WHERE tl.created_at < NOW() - INTERVAL '7 days'
+      AND tl.created_at > NOW() - INTERVAL '8 days'
+      AND NOT EXISTS (
+        SELECT 1 FROM tool_lead_nurture tln
+        WHERE tln.email = tl.email AND tln.email_type = 'day7_trial'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE LOWER(u.email) = LOWER(tl.email) AND u.plan IN ('trial','active')
+      )
+    `)
+    for (const lead of day7Leads.rows) {
+      await resend.emails.send({
+        from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+        reply_to: 'hello@getportalkit.com',
+        to: lead.email,
+        subject: 'Last thing, I promise',
+        html: emailTemplate({
+          title: 'One more thing before I stop emailing',
+          preheader: 'After this I will leave you alone',
+          body: `
+            <h2>Last email from me, I promise.</h2>
+            <p>You downloaded our free templates a week ago. If you tried PortalKit already, ignore this.</p>
+            <p>If not, here is the one thing photographers tell me after they sign up: they wish they had done it sooner.</p>
+            <p>Not because it is complicated. Because it is not. Most photographers send their first client portal within 10 minutes of signing up.</p>
+            <p>14-day free trial. Your card is saved but not charged for 14 days. If you cancel before day 15 you pay nothing.</p>
+            <p>That is genuinely the whole pitch.</p>
+          `,
+          ctaText: 'Start Free Trial →',
+          ctaUrl: 'https://getportalkit.com/signup',
+          footerNote: 'This is the last email in this sequence. Promise.'
+        })
+      })
+      await pool.query(
+        `INSERT INTO tool_lead_nurture (email, email_type) VALUES ($1, 'day7_trial') ON CONFLICT DO NOTHING`,
+        [lead.email]
+      )
+      console.log('📧 Day 7 nurture sent to:', lead.email)
+    }
+  } catch (err) {
+    console.error('Tool nurture error:', err.message)
   }
 }
 
@@ -1771,6 +1913,7 @@ async function runDailyJobs() {
   await sendEventReminders().catch(e => console.error('Reminders error:', e.message))
   await sendTrialExpiryReminders().catch(e => console.error('Trial reminder error:', e.message))
   await sendOnboardingSequence().catch(e => console.error('Onboarding seq error:', e.message))
+  await sendFreeToolNurtureEmails().catch(e => console.error('Tool nurture:', e.message))
   if (day === 1 && hour === 9) {
     await generateAndScheduleWeeklyContent().catch(e => console.error('Content engine error:', e.message))
   }
@@ -4738,6 +4881,90 @@ function checkFreeToolLimit(ip) {
   return true
 }
 
+async function generateAndSendAllTemplates(email, fromTool) {
+  if (!anthropic || !resend) return
+  try {
+    const [shotListMsg, timelineMsg, questionnaireMsg, pricingMsg] = await Promise.all([
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: 'Generate a concise wedding photography shot list template with sections: GETTING READY, CEREMONY, FAMILY FORMALS, PORTRAITS, RECEPTION. Use plain dashes for bullets. Section headers in ALL CAPS. No markdown. Max 40 shots.' }]
+      }),
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: 'Generate a sample wedding day photography timeline for a 4pm ceremony. Format as TIME - Activity. Plain text only, no markdown.' }]
+      }),
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: 'Generate 12 essential wedding photography client questionnaire questions. Number each one. Plain text only, no markdown.' }]
+      }),
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: 'Generate a simple 3-package wedding photography pricing structure (Silver/Gold/Platinum) for a US market photographer. Plain text, no markdown.' }]
+      })
+    ])
+
+    const shotList = stripMarkdown(shotListMsg.content[0]?.text || '')
+    const timeline = stripMarkdown(timelineMsg.content[0]?.text || '')
+    const questionnaire = stripMarkdown(questionnaireMsg.content[0]?.text || '')
+    const pricing = stripMarkdown(pricingMsg.content[0]?.text || '')
+
+    await resend.emails.send({
+      from: 'PortalKit <hello@mail.getportalkit.com>',
+      reply_to: 'hello@getportalkit.com',
+      to: email,
+      subject: 'Your 4 free wedding photography templates',
+      html: `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+          <div style="background:#1B4332;padding:24px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:20px;">Portal<em style="color:#C9A84C;font-style:normal;">Kit</em></h1>
+          </div>
+          <div style="padding:32px 24px;">
+            <h2 style="font-size:20px;margin:0 0 8px;color:#1B4332;">Here are your 4 free templates</h2>
+            <p style="color:#6B7280;margin:0 0 32px;font-size:14px;">Save these — you'll use them for every wedding.</p>
+
+            <div style="background:#F9FAFB;border-radius:10px;padding:20px;margin-bottom:20px;">
+              <h3 style="color:#1B4332;margin:0 0 12px;font-size:16px;">📋 Shot List Template</h3>
+              <pre style="font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap;font-family:inherit;margin:0;">${shotList}</pre>
+            </div>
+
+            <div style="background:#F9FAFB;border-radius:10px;padding:20px;margin-bottom:20px;">
+              <h3 style="color:#1B4332;margin:0 0 12px;font-size:16px;">⏰ Wedding Day Timeline Template</h3>
+              <pre style="font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap;font-family:inherit;margin:0;">${timeline}</pre>
+            </div>
+
+            <div style="background:#F9FAFB;border-radius:10px;padding:20px;margin-bottom:20px;">
+              <h3 style="color:#1B4332;margin:0 0 12px;font-size:16px;">📝 Client Questionnaire Template</h3>
+              <pre style="font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap;font-family:inherit;margin:0;">${questionnaire}</pre>
+            </div>
+
+            <div style="background:#F9FAFB;border-radius:10px;padding:20px;margin-bottom:28px;">
+              <h3 style="color:#1B4332;margin:0 0 12px;font-size:16px;">💰 Pricing Guide Template</h3>
+              <pre style="font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap;font-family:inherit;margin:0;">${pricing}</pre>
+            </div>
+
+            <div style="background:#1B4332;border-radius:12px;padding:24px;text-align:center;">
+              <h3 style="color:white;margin:0 0 8px;font-size:17px;">Use these inside a professional client portal</h3>
+              <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0 0 16px;line-height:1.6;">PortalKit lets your clients fill out shot lists and questionnaires directly in their private portal. You get notified instantly.</p>
+              <a href="https://getportalkit.com/signup" style="display:inline-block;background:#C9A84C;color:#1B4332;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">Start Free Trial →</a>
+              <p style="color:rgba(255,255,255,0.6);font-size:11px;margin:10px 0 0;">14-day free trial · $0 today · Cancel anytime</p>
+            </div>
+          </div>
+          <div style="padding:16px 24px;text-align:center;border-top:1px solid #E5E7EB;">
+            <p style="font-size:11px;color:#9CA3AF;margin:0;">You received this because you used a free tool at getportalkit.com.<br>Questions? Reply to this email.</p>
+          </div>
+        </div>
+      `
+    })
+    console.log('📧 All 4 templates sent to:', email)
+  } catch (err) {
+    console.error('Template email error:', err.message)
+  }
+}
+
 // ── Free Tool API Routes (public, no auth) ────────────────
 
 app.options('/api/tools/capture-lead', publicCors)
@@ -4758,32 +4985,7 @@ app.post('/api/tools/capture-lead', publicCors, async (req, res) => {
       'INSERT INTO tool_leads (email, tool, source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
       [email.toLowerCase().trim(), tool || null, source || null]
     )
-    if (resend) {
-      resend.emails.send({
-        from: 'PortalKit <hello@mail.getportalkit.com>',
-        reply_to: "hello@getportalkit.com",
-        to: email,
-        subject: 'Your free PortalKit tool + something extra',
-        html: emailTemplate({
-          title: "Thanks for using PortalKit's free tools!",
-          preheader: "Here's something that might help your photography business",
-          body: `
-            <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">Hope that was useful!</h2>
-            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
-              These tools are actually built into PortalKit's client portal system — your clients can fill out
-              shot lists and questionnaires directly in their private portal.
-            </p>
-            <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
-              If you're juggling contracts, invoices, and file delivery across multiple tools,
-              PortalKit consolidates everything into one link you send your clients.
-            </p>
-          `,
-          ctaText: 'See How It Works →',
-          ctaUrl: process.env.FRONTEND_URL || 'https://getportalkit.com',
-          footerNote: 'You used a free tool at getportalkit.com'
-        })
-      }).catch(() => {})
-    }
+    generateAndSendAllTemplates(email.toLowerCase().trim(), tool || 'free-tool').catch(() => {})
     res.json({ success: true })
   } catch (err) {
     console.error('Lead capture error:', err)
@@ -4820,10 +5022,11 @@ Format as clear sections with dash-prefixed items:
 - Reception
 - End of Night
 
-Keep it practical and professional. Maximum 60 shots total.`
+Keep it practical and professional. Maximum 60 shots total.
+Return ONLY plain text. No markdown. No pound signs. No asterisks. No hashtags. Use plain dashes for bullets. Use ALL CAPS for section headers like GETTING READY.`
       }]
     })
-    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+    res.json({ result: stripMarkdown(msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.') })
   } catch (err) {
     console.error('Shot list generation error:', err)
     res.status(500).json({ error: 'Generation failed' })
@@ -4852,12 +5055,13 @@ Reception end: ${reception_end}
 Additional notes: ${notes || 'None'}
 
 Create a minute-by-minute schedule for the photographer.
-Format each line as: TIME — Activity (duration)
+Format each line as: TIME - Activity (duration)
 Include buffer time, travel, and golden hour portraits.
-Be specific and practical. Cover from getting-ready through reception end.`
+Be specific and practical. Cover from getting-ready through reception end.
+Return ONLY plain text. No markdown. No pound signs. No asterisks. Use ALL CAPS for section headers like GETTING READY.`
       }]
     })
-    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+    res.json({ result: stripMarkdown(msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.') })
   } catch (err) {
     console.error('Timeline generation error:', err)
     res.status(500).json({ error: 'Generation failed' })
@@ -4882,17 +5086,18 @@ Couple's style: ${style}
 Events to cover: ${events}
 Special focus areas: ${focus || 'None specified'}
 
-Create 15–20 thoughtful questions covering:
+Create 15-20 thoughtful questions covering:
 - Logistics (venue, timeline, getting ready location)
 - Family and VIP list
 - Style and vision
 - Shot priorities and must-haves
 - Any concerns or special circumstances
 
-Format as numbered questions. Keep questions clear and conversational.`
+Format as numbered questions. Keep questions clear and conversational.
+Return ONLY plain text. No markdown. No pound signs. No asterisks. No hashtags. Use plain dashes for bullets. Use ALL CAPS for section headers.`
       }]
     })
-    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+    res.json({ result: stripMarkdown(msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.') })
   } catch (err) {
     console.error('Questionnaire generation error:', err)
     res.status(500).json({ error: 'Generation failed' })
@@ -4918,21 +5123,22 @@ Package types: ${packages}
 Hours offered: ${hours}
 Differentiator: ${differentiator || 'Professional editing and online gallery delivery'}
 
-Create 2–3 package options with:
+Create 2-3 package options with:
 - Package name
 - Price (realistic for this market and experience level)
 - What's included (hours, images, deliverables)
 - Who it's best for
 
 Also include:
-- A/la carte add-ons section (2nd shooter, engagement session, album, etc)
+- A la carte add-ons section (2nd shooter, engagement session, album, etc)
 - A short "Why invest in professional photography" paragraph
 - A call to action
 
-Keep pricing realistic for the market. Format professionally.`
+Keep pricing realistic for the market. Format professionally.
+Return ONLY plain text. No markdown. No pound signs. No asterisks. No hashtags. Use ALL CAPS for section headers like SILVER PACKAGE.`
       }]
     })
-    res.json({ result: msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.' })
+    res.json({ result: stripMarkdown(msg.content[0]?.type === 'text' ? msg.content[0].text : 'Could not generate. Please try again.') })
   } catch (err) {
     console.error('Pricing guide generation error:', err)
     res.status(500).json({ error: 'Generation failed' })

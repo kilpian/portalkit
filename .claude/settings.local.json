@@ -37,7 +37,12 @@
       "Bash(psql --version)",
       "Bash(grep -o 'portalkit-production[^\"` ]*\\\\|localhost:3001' dist/assets/app-Cf0PoCAd.js)",
       "Bash(npm uninstall *)",
-      "Bash(awk -F: '$1 > 418 && $1 < 900')"
+      "Bash(awk -F: '$1 > 418 && $1 < 900')",
+      "Bash(awk -F: '$1 > 990 && $1 < 1080')",
+      "Bash(grep *)",
+      "Bash(mkdir -p /mnt/user-data/outputs)",
+      "Read(//mnt/user-data/**)",
+      "Bash(python3 *)"
     ]
   }
 }
