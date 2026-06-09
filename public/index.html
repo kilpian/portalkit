@@ -874,19 +874,19 @@
 
     /* ── Pricing ───────────────────────────────────── */
     .pricing__wrap {
-      display: flex;
-      justify-content: center;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 760px;
       margin: 40px auto 0;
-      max-width: 440px;
     }
     .pricing-card {
       background: #fff;
-      border-radius: var(--r-lg);
-      padding: 36px;
+      border-radius: 14px;
+      padding: 24px;
       border: 1px solid var(--border);
       box-shadow: var(--shadow);
       text-align: center;
-      width: 100%;
     }
     .pricing-card__pill {
       display: inline-block;
@@ -901,7 +901,7 @@
     }
     .pricing-card__name {
       font-family: var(--fh);
-      font-size: 1.5rem;
+      font-size: 18px;
       font-weight: 700;
       color: var(--green);
       margin-bottom: 4px;
@@ -922,7 +922,7 @@
     }
     .pricing-card__amt {
       font-family: var(--fh);
-      font-size: 5.5rem;
+      font-size: 42px;
       font-weight: 800;
       color: var(--green);
       line-height: 1;
@@ -941,16 +941,16 @@
     .pricing-card__feat {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 11px 0;
+      gap: 10px;
+      padding: 5px 0;
       border-bottom: 1px solid var(--border);
-      font-size: .9375rem;
+      font-size: 13px;
       color: var(--text);
     }
     .pricing-card__feat:last-child { border-bottom: none; }
     .check {
-      width: 20px;
-      height: 20px;
+      width: 14px;
+      height: 14px;
       flex-shrink: 0;
       color: var(--green-mid);
     }
@@ -1169,9 +1169,35 @@
         font-size: 15px !important;
         line-height: 1.6 !important;
       }
+      .hero__text {
+        text-align: center !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+      }
       .hero__cta {
+        display: flex !important;
+        flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
+        width: 100% !important;
+        text-align: center !important;
+      }
+      .hero__cta > div {
+        justify-content: center !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+        width: 100% !important;
+        display: flex !important;
+      }
+      .hero__cta .btn {
+        width: 100% !important;
+        text-align: center !important;
+        justify-content: center !important;
+      }
+      .hero__note {
+        text-align: center !important;
+        width: 100% !important;
       }
       .hero__mockup {
         max-width: 100% !important;
@@ -1233,8 +1259,11 @@
         align-items: flex-start !important;
         gap: 16px !important;
         text-align: left !important;
-        padding: 0 !important;
+        padding: 16px !important;
         border-right: none !important;
+        background: white !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
       }
       .hiw__num {
         flex-shrink: 0 !important;
@@ -1279,18 +1308,20 @@
         gap: 16px !important;
         margin-top: 28px !important;
       }
-      .testi-card { padding: 20px !important; }
+      .testi-card { padding: 18px !important; }
       .testi-card__text {
-        font-size: 14px !important;
+        font-size: 13px !important;
         line-height: 1.6 !important;
       }
+      .testi-card__mark { font-size: 36px !important; }
 
       .pricing__wrap {
+        grid-template-columns: 1fr !important;
         max-width: 360px !important;
         margin: 32px auto 0 !important;
       }
       .pricing-card { padding: 20px !important; }
-      .pricing-card__amt { font-size: 3.5rem !important; }
+      .pricing-card__amt { font-size: 36px !important; }
 
       .compare__wrap {
         overflow-x: auto !important;
@@ -1317,9 +1348,10 @@
 
       .proof-banner {
         font-size: 13px !important;
-        padding: 14px 16px !important;
+        padding: 12px 16px !important;
         line-height: 1.5 !important;
       }
+      .section__sub { margin-bottom: 0 !important; }
 
       .footer { padding: 36px 0 20px !important; }
       .footer__top { gap: 24px !important; padding-bottom: 24px !important; margin-bottom: 16px !important; }
@@ -1329,6 +1361,26 @@
         padding: 13px 24px !important;
         font-size: 15px !important;
       }
+    }
+
+    @media (max-width: 640px) {
+      .pricing__wrap {
+        grid-template-columns: 1fr !important;
+        max-width: 340px !important;
+        margin: 28px auto 0 !important;
+        gap: 16px !important;
+      }
+      .pricing-card {
+        padding: 20px !important;
+        border-radius: 12px !important;
+      }
+      .pricing-card__amt { font-size: 36px !important; }
+      .pricing-card__name { font-size: 16px !important; }
+      .pricing-card__price { margin: 6px 0 4px !important; }
+      .pricing-card__feat { font-size: 12px !important; padding: 4px 0 !important; }
+      .pricing-card__pill { font-size: 10px !important; padding: 3px 10px !important; }
+      .pricing-card .btn { padding: 12px !important; font-size: 14px !important; }
+      .pricing-card__note { font-size: 11px !important; }
     }
 
     @media (max-width: 400px) {
