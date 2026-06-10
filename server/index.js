@@ -1937,128 +1937,142 @@ async function sendFreeToolNurtureEmails() {
 
 // ── Cold Outreach Engine ──────────────────────────────────────
 
-const COLD_EMAIL_FROM = process.env.COLD_EMAIL_FROM || ''
-const COLD_DAILY_LIMIT = parseInt(process.env.COLD_DAILY_LIMIT || '25', 10)
-const COLD_EMAIL_ADDRESS = process.env.COLD_EMAIL_ADDRESS || '[Business address not configured]'
+const COLD_EMAIL_FROM = process.env.COLD_EMAIL_FROM
+const COLD_EMAIL_ADDRESS = process.env.COLD_EMAIL_ADDRESS || 'Kilpian LLC, Maryland, USA'
+const COLD_DAILY_LIMIT = parseInt(process.env.COLD_DAILY_LIMIT || '25')
 
 function buildColdEmail(contact) {
-  const firstName = contact.first_name || null
-  const businessName = contact.business_name || null
-
-  const greeting = firstName ? `Hi ${firstName},` : 'Hi,'
-  const bizLine = businessName
-    ? `I came across ${businessName} and wanted to reach out.`
-    : 'I wanted to reach out to a fellow wedding photographer.'
+  const firstName = contact.first_name
+    ? contact.first_name.trim() : null
+  const greeting = firstName
+    ? `Hi ${firstName}` : 'Hi there'
+  const biz = contact.business_name
+    ? ` at ${contact.business_name}` : ''
 
   const subjects = [
+    'a free shot list template for your weddings',
     'quick question about your client workflow',
-    'shot list template for your weddings',
-    'something I built for wedding photographers',
+    'something I made for wedding photographers',
   ]
-  const subjectIndex = contact.email.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % subjects.length
-  const subject = subjects[subjectIndex]
+  const subject = subjects[
+    Math.floor(Math.random() * subjects.length)
+  ]
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Georgia,'Times New Roman',serif;">
-  <div style="max-width:560px;margin:40px auto;padding:0 20px;">
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">${greeting}</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">${bizLine}</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">I made a free wedding shot list generator that a lot of photographers have been using to build and share shot lists with couples before the wedding. No signup, no account, works in about 60 seconds.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">You can try it here: <a href="https://getportalkit.com/tools/shot-list" style="color:#1B4332;">getportalkit.com/tools/shot-list</a></p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">I built it as part of PortalKit, a client portal for wedding photographers that handles contracts, invoices, questionnaires, and gallery delivery in one private link per client. If that is ever relevant, happy to share more.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 32px;">Hope the tool is useful either way.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 4px;">Chidera</p>
-    <p style="font-size:14px;line-height:1.6;color:#555555;margin:0 0 40px;">PortalKit</p>
-    <hr style="border:none;border-top:1px solid #e5e5e5;margin:0 0 16px;">
-    <p style="font-size:11px;line-height:1.6;color:#999999;margin:0;">
-      ${COLD_EMAIL_ADDRESS}<br>
-      Not relevant? Just reply and I'll take you off this list.
-    </p>
-  </div>
-</body>
-</html>`
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,
+      'Inter',sans-serif; max-width:520px; color:#1a1a1a;
+      font-size:15px; line-height:1.7;">
+
+      <p>${greeting}${biz},</p>
+
+      <p>I built a free wedding shot list generator for
+      photographers and wanted to share it. No signup,
+      no email required, just paste your details and get
+      a full shot list in seconds.</p>
+
+      <p>
+        <a href="https://getportalkit.com/tools/shot-list"
+          style="color:#1B4332; font-weight:600;">
+          getportalkit.com/tools/shot-list
+        </a>
+      </p>
+
+      <p>I also built the tool into a client portal
+      platform called PortalKit where couples can submit
+      their own shot list through a private link you send
+      them, and you confirm it in one click. If that
+      sounds useful there's a free trial at
+      getportalkit.com.</p>
+
+      <p>Either way, hope the free tool is helpful.</p>
+
+      <p>Chidera<br>
+      <span style="color:#6B7280; font-size:13px;">
+        Founder, PortalKit
+      </span></p>
+
+      <hr style="border:none; border-top:1px solid #E5E7EB;
+        margin:24px 0;">
+
+      <p style="font-size:11px; color:#9CA3AF; margin:0;">
+        ${COLD_EMAIL_ADDRESS}<br>
+        Not relevant? Just reply and I'll take you off
+        this list immediately.
+      </p>
+    </div>
+  `
 
   return { subject, html }
 }
 
 async function sendColdOutreach() {
-  if (!COLD_EMAIL_FROM) {
-    console.log('cold email disabled - no sender set')
-    return
-  }
-  if (!resend) {
-    console.log('cold email disabled - no resend configured')
+  if (!resend || !COLD_EMAIL_FROM) {
+    console.log('Cold email disabled: COLD_EMAIL_FROM not set')
     return
   }
 
-  console.log(`📬 Cold outreach: starting daily run (limit ${COLD_DAILY_LIMIT})`)
   try {
-    const contacts = await pool.query(`
+    const queued = await pool.query(`
       SELECT cc.* FROM cold_contacts cc
       WHERE cc.status = 'queued'
-      AND NOT EXISTS (
-        SELECT 1 FROM cold_suppression cs WHERE LOWER(cs.email) = LOWER(cc.email)
+      AND cc.email NOT IN (
+        SELECT email FROM cold_suppression
+      )
+      AND LOWER(cc.email) NOT IN (
+        SELECT LOWER(email) FROM users
+        WHERE plan IN ('trial','active')
       )
       ORDER BY cc.created_at ASC
       LIMIT $1
     `, [COLD_DAILY_LIMIT])
 
-    let sent = 0, bounced = 0, skipped = 0
+    if (!queued.rows.length) {
+      console.log('Cold outreach: no queued contacts')
+      return
+    }
 
-    for (const contact of contacts.rows) {
-      // Double-check suppression
-      const suppressed = await pool.query(
-        'SELECT 1 FROM cold_suppression WHERE LOWER(email)=LOWER($1)',
-        [contact.email]
-      )
-      if (suppressed.rows.length > 0) {
-        await pool.query("UPDATE cold_contacts SET status='opted_out' WHERE id=$1", [contact.id])
-        skipped++
-        continue
-      }
+    let sent = 0
+    let skipped = 0
 
-      // Double-check not an existing user
-      const existingUser = await pool.query(
-        'SELECT 1 FROM users WHERE LOWER(email)=LOWER($1)',
-        [contact.email]
-      )
-      if (existingUser.rows.length > 0) {
-        await pool.query("UPDATE cold_contacts SET status='opted_out' WHERE id=$1", [contact.id])
-        skipped++
-        continue
-      }
-
+    for (const contact of queued.rows) {
       try {
         const { subject, html } = buildColdEmail(contact)
+
         await resend.emails.send({
           from: COLD_EMAIL_FROM,
           reply_to: COLD_EMAIL_FROM,
           to: contact.email,
           subject,
-          html,
+          html
         })
+
         await pool.query(
-          "UPDATE cold_contacts SET status='sent', sent_at=NOW() WHERE id=$1",
+          `UPDATE cold_contacts SET status='sent',
+           sent_at=NOW() WHERE id=$1`,
           [contact.id]
         )
+
         sent++
-        // Small delay between sends — avoid burst sending
-        await new Promise(r => setTimeout(r, 300))
+        console.log(`Cold email sent to ${contact.email}`)
+
+        await new Promise(r => setTimeout(r, 2000))
+
       } catch (err) {
-        console.error(`📬 Cold send failed for ${contact.email}:`, err.message)
+        console.error(`Cold send failed for ${contact.email}:`,
+          err.message)
         await pool.query(
-          "UPDATE cold_contacts SET status='bounced' WHERE id=$1",
+          `UPDATE cold_contacts SET status='bounced'
+           WHERE id=$1`,
           [contact.id]
         )
-        bounced++
+        skipped++
       }
     }
 
-    console.log(`📬 Cold outreach complete: sent=${sent} bounced=${bounced} skipped=${skipped}`)
+    console.log(`Cold outreach: ${sent} sent, ${skipped} failed`)
+
   } catch (err) {
-    console.error('📬 Cold outreach error:', err.message)
+    console.error('Cold outreach error:', err.message)
   }
 }
 
@@ -6214,16 +6228,18 @@ app.post('/api/admin/cold-contacts/import', async (req, res) => {
 app.get('/api/admin/cold-contacts/stats', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   try {
-    const counts = await pool.query(`
+    const stats = await pool.query(`
       SELECT status, COUNT(*)::int as count
       FROM cold_contacts
       GROUP BY status
     `)
-    const stats = {}
-    for (const row of counts.rows) stats[row.status] = row.count
-    const suppressed = await pool.query('SELECT COUNT(*)::int as count FROM cold_suppression')
-    stats.suppressed = suppressed.rows[0].count
-    res.json(stats)
+    const total = await pool.query(
+      'SELECT COUNT(*)::int as count FROM cold_contacts'
+    )
+    res.json({
+      byStatus: stats.rows,
+      total: total.rows[0]?.count || 0
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -4,17 +4,8 @@ import { usePortalAuth } from '../../context/AuthContext'
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
 
-interface ColdStats {
-  queued?: number
-  sent?: number
-  replied?: number
-  opted_out?: number
-  bounced?: number
-  suppressed?: number
-}
-
 export default function ContentEngine() {
-  // ALL hooks first
+  // ALL hooks first — no exceptions
   const { user } = usePortalAuth()
   const [posts, setPosts] = useState<any[]>([])
   const [leads, setLeads] = useState<any[]>([])
@@ -23,15 +14,13 @@ export default function ContentEngine() {
   const [activeTab, setActiveTab] = useState('posts')
   const [error, setError] = useState('')
 
-  // Outreach tab state
-  const [outreachInput, setOutreachInput] = useState('')
-  const [outreachLoading, setOutreachLoading] = useState(false)
-  const [outreachResult, setOutreachResult] = useState<{ added: number; skipped: number; skippedReasons: string[] } | null>(null)
-  const [coldStats, setColdStats] = useState<ColdStats>({})
-  const [testEmail, setTestEmail] = useState('')
-  const [testResult, setTestResult] = useState('')
-  const [suppressEmail, setSuppressEmail] = useState('')
-  const [suppressResult, setSuppressResult] = useState('')
+  // Outreach state
+  const [outreachStats, setOutreachStats] = useState<any>(null)
+  const [importText, setImportText] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<any>(null)
+  const [testingEmail, setTestingEmail] = useState('')
+  const [testSending, setTestSending] = useState(false)
 
   const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
 
@@ -62,13 +51,14 @@ export default function ContentEngine() {
     }
   }, [])
 
-  const fetchColdStats = useCallback(async () => {
+  const fetchOutreachStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/cold-contacts/stats`, {
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
+      const res = await fetch(
+        `${API_URL}/api/admin/cold-contacts/stats`,
+        { headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET } }
+      )
       const data = await res.json()
-      setColdStats(data)
+      setOutreachStats(data)
     } catch {}
   }, [])
 
@@ -76,8 +66,8 @@ export default function ContentEngine() {
     if (!isAdmin) return
     fetchPosts()
     fetchLeads()
-    fetchColdStats()
-  }, [isAdmin, fetchPosts, fetchLeads, fetchColdStats])
+    fetchOutreachStats()
+  }, [isAdmin, fetchPosts, fetchLeads, fetchOutreachStats])
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -132,72 +122,75 @@ export default function ContentEngine() {
     } catch {}
   }
 
-  // Outreach handlers
-  const parseContacts = (raw: string) => {
-    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean)
-    return lines.map(line => {
-      const parts = line.split(',').map(p => p.trim())
-      if (parts.length >= 3) {
-        return { email: parts[0], first_name: parts[1] || undefined, business_name: parts[2] || undefined }
-      }
-      return { email: parts[0] }
-    })
-  }
-
   const handleImport = async () => {
-    if (!outreachInput.trim()) return
-    setOutreachLoading(true)
-    setOutreachResult(null)
+    if (!importText.trim()) return
+    setImporting(true)
+    setImportResult(null)
+
+    const lines = importText.trim().split('\n')
+      .map((l: string) => l.trim()).filter(Boolean)
+
+    const contacts = lines.map((line: string) => {
+      const parts = line.split(',').map((p: string) => p.trim())
+      return {
+        email: parts[0],
+        first_name: parts[1] || null,
+        business_name: parts[2] || null
+      }
+    })
+
     try {
-      const contacts = parseContacts(outreachInput)
-      const res = await fetch(`${API_URL}/api/admin/cold-contacts/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-        body: JSON.stringify({ contacts }),
-      })
+      const res = await fetch(
+        `${API_URL}/api/admin/cold-contacts/import`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
+          },
+          body: JSON.stringify({ contacts })
+        }
+      )
       const data = await res.json()
-      setOutreachResult(data)
-      await fetchColdStats()
+      setImportResult(data)
+      setImportText('')
+      fetchOutreachStats()
     } catch {
-      setOutreachResult({ added: 0, skipped: 0, skippedReasons: ['Import failed — check connection'] })
+      setImportResult({ error: 'Import failed' })
     } finally {
-      setOutreachLoading(false)
+      setImporting(false)
     }
   }
 
-  const handleSendTest = async () => {
-    if (!testEmail) return
-    setTestResult('Sending...')
+  const handleTestEmail = async () => {
+    if (!testingEmail) return
+    setTestSending(true)
     try {
-      const res = await fetch(`${API_URL}/api/admin/cold-send-test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-        body: JSON.stringify({ email: testEmail }),
-      })
+      const res = await fetch(
+        `${API_URL}/api/admin/cold-send-test`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
+          },
+          body: JSON.stringify({ email: testingEmail })
+        }
+      )
       const data = await res.json()
-      setTestResult(data.success ? 'Sent! Check your inbox.' : `Error: ${data.error}`)
+      if (data.success) {
+        alert('Test email sent! Check your inbox.')
+      } else {
+        alert(data.error || 'Failed to send test')
+      }
     } catch {
-      setTestResult('Failed to connect.')
+      alert('Failed to connect')
+    } finally {
+      setTestSending(false)
     }
   }
 
-  const handleSuppress = async () => {
-    if (!suppressEmail) return
-    try {
-      await fetch(`${API_URL}/api/admin/cold-suppression`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-        body: JSON.stringify({ email: suppressEmail }),
-      })
-      setSuppressResult(`${suppressEmail} suppressed.`)
-      setSuppressEmail('')
-      await fetchColdStats()
-    } catch {
-      setSuppressResult('Failed.')
-    }
-  }
-
-  // Conditional returns — after all hooks
+  // Conditional returns — AFTER all hooks
   if (!user) {
     return (
       <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -214,16 +207,6 @@ export default function ContentEngine() {
       </div>
     )
   }
-
-  const statBox = (label: string, value: number | undefined, color: string) => (
-    <div style={{
-      background: 'white', border: '1px solid var(--border)', borderRadius: 8,
-      padding: '12px 16px', textAlign: 'center' as const, minWidth: 80
-    }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color }}>{value ?? 0}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, fontWeight: 600 }}>{label}</div>
-    </div>
-  )
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
@@ -274,7 +257,7 @@ export default function ContentEngine() {
         display: 'flex', gap: 4, marginBottom: 20,
         borderBottom: '1px solid var(--border-subtle)', paddingBottom: 0
       }}>
-        {['posts', 'leads', 'outreach'].map(t => (
+        {['posts', 'leads'].map(t => (
           <button key={t}
             onClick={() => setActiveTab(t)}
             style={{
@@ -285,14 +268,26 @@ export default function ContentEngine() {
               textTransform: 'capitalize' as const
             }}
           >
-            {t === 'posts' ? `Posts (${posts.length})` : t === 'leads' ? `Leads (${leads.length})` : 'Outreach'}
+            {t === 'posts' ? `Posts (${posts.length})` : `Leads (${leads.length})`}
           </button>
         ))}
+        <button
+          key="outreach"
+          onClick={() => setActiveTab('outreach')}
+          style={{
+            padding: '8px 16px', border: 'none', background: 'none',
+            cursor: 'pointer', fontSize: 14, fontWeight: 600,
+            color: activeTab === 'outreach' ? '#1B4332' : 'var(--text-muted)',
+            borderBottom: activeTab === 'outreach' ? '2px solid #1B4332' : '2px solid transparent'
+          }}
+        >
+          Outreach
+        </button>
         <button
           onClick={() => {
             if (activeTab === 'posts') fetchPosts()
             else if (activeTab === 'leads') fetchLeads()
-            else fetchColdStats()
+            else fetchOutreachStats()
           }}
           style={{ marginLeft: 'auto', padding: '6px 14px', background: 'white', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
         >
@@ -452,151 +447,141 @@ export default function ContentEngine() {
       {/* Outreach tab */}
       {activeTab === 'outreach' && (
         <div>
-          {/* Stats row */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' as const }}>
-            {statBox('Queued', coldStats.queued, '#C9A84C')}
-            {statBox('Sent', coldStats.sent, '#1B4332')}
-            {statBox('Replied', coldStats.replied, '#059669')}
-            {statBox('Opted out', coldStats.opted_out, '#6B7280')}
-            {statBox('Bounced', coldStats.bounced, '#EF4444')}
-            {statBox('Suppressed', coldStats.suppressed, '#9CA3AF')}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 12, marginBottom: 24
+          }}>
+            {['queued', 'sent', 'opted_out', 'bounced'].map(s => (
+              <div key={s} style={{
+                background: 'white', borderRadius: 10,
+                padding: 16, border: '1px solid var(--border-subtle)'
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase' as const,
+                  marginBottom: 6
+                }}>
+                  {s.replace('_', ' ')}
+                </div>
+                <div style={{
+                  fontSize: 26, fontWeight: 800,
+                  color: '#1B4332'
+                }}>
+                  {outreachStats?.byStatus?.find(
+                    (b: any) => b.status === s
+                  )?.count || 0}
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Import section */}
           <div style={{
-            background: 'white', border: '1px solid var(--border)', borderRadius: 10,
-            padding: 20, marginBottom: 16
+            background: 'white', borderRadius: 12,
+            padding: 20, marginBottom: 20,
+            border: '1px solid var(--border-subtle)'
           }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-              Import contacts
+            <h3 style={{
+              fontSize: 14, fontWeight: 700,
+              marginBottom: 6, color: '#1B4332'
+            }}>
+              Import Contacts
             </h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-              One per line. Formats: <code>email</code> or <code>email,first_name,business_name</code>
+            <p style={{
+              fontSize: 12, color: 'var(--text-muted)',
+              marginBottom: 12
+            }}>
+              One per line. Format: email OR email,FirstName,BusinessName
             </p>
             <textarea
-              value={outreachInput}
-              onChange={e => setOutreachInput(e.target.value)}
-              placeholder={'jane@studiojane.com\nbob@bobphoto.com,Bob,Bob Photo Co\nalice@aliceweds.com,Alice'}
-              rows={8}
+              value={importText}
+              onChange={e => setImportText(e.target.value)}
+              placeholder={'sarah@sarahphoto.com,Sarah,Sarah Photo Co\nmike@mikeweddings.com'}
               style={{
-                width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB',
-                borderRadius: 8, fontSize: 13, fontFamily: 'monospace',
-                resize: 'vertical', boxSizing: 'border-box' as const
+                width: '100%', height: 140,
+                padding: '10px 14px',
+                border: '1px solid var(--border)',
+                borderRadius: 8, fontSize: 13,
+                fontFamily: 'monospace', resize: 'vertical' as const,
+                boxSizing: 'border-box' as const
               }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-              <button
-                onClick={handleImport}
-                disabled={outreachLoading || !outreachInput.trim()}
-                style={{
-                  background: '#1B4332', color: 'white', border: 'none',
-                  padding: '10px 20px', borderRadius: 8, fontSize: 14,
-                  fontWeight: 600, cursor: 'pointer',
-                  opacity: outreachLoading || !outreachInput.trim() ? 0.6 : 1
-                }}
-              >
-                {outreachLoading ? 'Importing...' : 'Import contacts'}
-              </button>
-              {outreachResult && (
-                <span style={{ fontSize: 13, color: outreachResult.added > 0 ? '#059669' : '#6B7280' }}>
-                  Added {outreachResult.added}, skipped {outreachResult.skipped}
-                </span>
-              )}
-            </div>
-            {outreachResult && outreachResult.skippedReasons.length > 0 && (
+            <button
+              onClick={handleImport}
+              disabled={importing || !importText.trim()}
+              style={{
+                marginTop: 10, background: '#1B4332',
+                color: 'white', border: 'none',
+                padding: '10px 20px', borderRadius: 8,
+                fontSize: 14, fontWeight: 600,
+                cursor: 'pointer',
+                opacity: importing ? 0.7 : 1
+              }}
+            >
+              {importing ? 'Importing...' : 'Import Contacts'}
+            </button>
+
+            {importResult && (
               <div style={{
-                marginTop: 10, background: '#F9FAFB', border: '1px solid #E5E7EB',
-                borderRadius: 6, padding: '8px 12px', maxHeight: 120, overflowY: 'auto' as const
+                marginTop: 12, padding: '10px 14px',
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: 8, fontSize: 13
               }}>
-                {outreachResult.skippedReasons.map((r, i) => (
-                  <p key={i} style={{ fontSize: 11, color: '#6B7280', margin: '2px 0', fontFamily: 'monospace' }}>{r}</p>
-                ))}
+                {importResult.error
+                  ? importResult.error
+                  : `Added ${importResult.added} contacts. Skipped ${importResult.skipped}.`
+                }
               </div>
             )}
           </div>
 
-          {/* Test send */}
           <div style={{
-            background: 'white', border: '1px solid var(--border)', borderRadius: 10,
-            padding: 20, marginBottom: 16
+            background: 'white', borderRadius: 12,
+            padding: 20, border: '1px solid var(--border-subtle)'
           }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-primary)' }}>
-              Send test email
+            <h3 style={{
+              fontSize: 14, fontWeight: 700,
+              marginBottom: 12, color: '#1B4332'
+            }}>
+              Send Test Email
             </h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="email"
-                value={testEmail}
-                onChange={e => setTestEmail(e.target.value)}
-                placeholder="your@email.com"
-                style={{
-                  flex: 1, padding: '9px 12px', border: '1px solid #E5E7EB',
-                  borderRadius: 8, fontSize: 13
-                }}
-              />
-              <button
-                onClick={handleSendTest}
-                disabled={!testEmail}
-                style={{
-                  background: '#1B4332', color: 'white', border: 'none',
-                  padding: '9px 18px', borderRadius: 8, fontSize: 13,
-                  fontWeight: 600, cursor: 'pointer', opacity: !testEmail ? 0.5 : 1,
-                  whiteSpace: 'nowrap' as const
-                }}
-              >
-                Send test
-              </button>
-            </div>
-            {testResult && (
-              <p style={{ fontSize: 13, color: testResult.startsWith('Sent') ? '#059669' : '#EF4444', margin: '8px 0 0' }}>
-                {testResult}
-              </p>
-            )}
-          </div>
-
-          {/* Suppress */}
-          <div style={{
-            background: 'white', border: '1px solid var(--border)', borderRadius: 10,
-            padding: 20
-          }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-              Add to suppression list
-            </h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-              Adds to suppression and marks any matching contact as opted_out.
+            <p style={{
+              fontSize: 12, color: 'var(--text-muted)',
+              marginBottom: 10
+            }}>
+              Sends a test cold email to any address so you can see exactly what photographers receive.
+              Requires COLD_EMAIL_FROM to be set in Railway.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="email"
-                value={suppressEmail}
-                onChange={e => setSuppressEmail(e.target.value)}
-                placeholder="optout@example.com"
+                value={testingEmail}
+                onChange={e => setTestingEmail(e.target.value)}
+                placeholder="your@email.com"
                 style={{
-                  flex: 1, padding: '9px 12px', border: '1px solid #E5E7EB',
+                  flex: 1, padding: '9px 14px',
+                  border: '1px solid var(--border)',
                   borderRadius: 8, fontSize: 13
                 }}
               />
               <button
-                onClick={handleSuppress}
-                disabled={!suppressEmail}
+                onClick={handleTestEmail}
+                disabled={testSending || !testingEmail}
                 style={{
-                  background: '#6B7280', color: 'white', border: 'none',
-                  padding: '9px 18px', borderRadius: 8, fontSize: 13,
-                  fontWeight: 600, cursor: 'pointer', opacity: !suppressEmail ? 0.5 : 1,
-                  whiteSpace: 'nowrap' as const
+                  background: '#1B4332',
+                  color: 'white', border: 'none',
+                  padding: '9px 16px', borderRadius: 8,
+                  fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: testSending ? 0.7 : 1
                 }}
               >
-                Suppress
+                {testSending ? 'Sending...' : 'Send Test'}
               </button>
             </div>
-            {suppressResult && (
-              <p style={{ fontSize: 13, color: '#059669', margin: '8px 0 0' }}>{suppressResult}</p>
-            )}
           </div>
-
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 16 }}>
-            Cold sends run daily at 13:00 UTC (up to {import.meta.env.VITE_API_URL ? '25' : '25'} per day). Sender: COLD_EMAIL_FROM env var on Railway.
-          </p>
         </div>
       )}
     </div>
