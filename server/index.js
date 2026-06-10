@@ -15,6 +15,7 @@ import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
+import { TwitterApi } from 'twitter-api-v2'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -51,6 +52,21 @@ const r2 = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process
   : null
 
 const R2_BUCKET = process.env.R2_BUCKET_NAME || 'portalkit-files'
+
+const twitterClient = process.env.TWITTER_API_KEY
+  ? new TwitterApi({
+      appKey: process.env.TWITTER_API_KEY,
+      appSecret: process.env.TWITTER_API_SECRET,
+      accessToken: process.env.TWITTER_ACCESS_TOKEN,
+      accessSecret: process.env.TWITTER_ACCESS_SECRET,
+    }).readWrite
+  : null
+
+if (twitterClient) {
+  console.log('🐦 Twitter/X client configured')
+} else {
+  console.log('🐦 Twitter/X not configured - posts stored only')
+}
 
 const { Pool } = pkg
 const app = express()
@@ -1702,48 +1718,27 @@ async function sendOnboardingSequence() {
   }
 }
 
-// ── Content Engine (Publer) ───────────────────────────────────
+// ── Content Engine ────────────────────────────────────────────
 
-const POSTPROXY_API_KEY = process.env.POSTPROXY_API_KEY
+async function postToX(content) {
+  if (!twitterClient) {
+    console.log('⚡ X not configured - skipping post')
+    return null
+  }
 
-async function postToSocialMedia(content, twitterContent) {
-  if (!POSTPROXY_API_KEY) return null
-  const body = JSON.stringify({
-    text: content,
-    platforms: ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok', 'threads'],
-    publish_at: new Date().toISOString()
-  })
-  const headers = {
-    'Authorization': `Bearer ${POSTPROXY_API_KEY}`,
-    'Content-Type': 'application/json'
+  try {
+    // X has a 280 char limit
+    const text = content.length > 270
+      ? content.slice(0, 267) + '...'
+      : content
+
+    const tweet = await twitterClient.v2.tweet(text)
+    console.log('⚡ Posted to X:', tweet.data?.id)
+    return tweet.data
+  } catch (err) {
+    console.error('⚡ X post error:', err.message)
+    return null
   }
-  const urls = [
-    'https://api.postproxy.io/v1/posts',
-    'https://postproxy.io/api/v1/posts'
-  ]
-  for (const url of urls) {
-    try {
-      console.log('⚡ Postproxy request:', { url, hasKey: !!POSTPROXY_API_KEY, contentLength: content?.length })
-      const response = await fetch(url, { method: 'POST', headers, body })
-      const responseText = await response.text()
-      console.log('⚡ Postproxy response status:', response.status)
-      console.log('⚡ Postproxy response body:', responseText)
-      let result = {}
-      try { result = JSON.parse(responseText) } catch(e) {}
-      if (response.status === 404) {
-        console.log('⚡ Postproxy 404 at', url, '— trying next URL')
-        continue
-      }
-      if (!response.ok) {
-        console.error('⚡ Postproxy failed:', response.status, responseText)
-        return null
-      }
-      return result
-    } catch (err) {
-      console.error('⚡ Postproxy error at', url, ':', err.message)
-    }
-  }
-  return null
 }
 
 async function generateAndScheduleWeeklyContent() {
@@ -1776,22 +1771,37 @@ async function generateAndScheduleWeeklyContent() {
       schedDate.setDate(schedDate.getDate() + i)
       const [h, m] = times[i].split(':')
       schedDate.setHours(parseInt(h), parseInt(m), 0, 0)
+
       const inserted = await pool.query(
-        `INSERT INTO generated_content (content, twitter_content, angle, day_number, week_start, scheduled_for) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-        [post.content, post.twitter_content, post.angle, post.day, weekStart.toISOString().split('T')[0], schedDate.toISOString()]
+        `INSERT INTO generated_content
+         (content, twitter_content, angle, day_number,
+          week_start, scheduled_for)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [post.content, post.twitter_content,
+         post.angle, post.day,
+         weekStart.toISOString().split('T')[0],
+         schedDate.toISOString()]
       ).catch(() => null)
-      if (POSTPROXY_API_KEY && inserted?.rows[0]?.id) {
-        const result = await postToSocialMedia(post.content, post.twitter_content)
-        if (result && !result.error) {
-          await pool.query(
-            'UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3',
-            [result.id || result.post_id || 'sent', 'posted', inserted.rows[0].id]
-          ).catch(() => {})
-          console.log('⚡ Post marked as posted, id:', inserted.rows[0].id)
-        } else {
-          console.log('⚡ Postproxy failed for post id:', inserted.rows[0].id, '— remains pending')
-        }
+
+      // Post twitter_content to X immediately
+      const xContent = post.twitter_content ||
+        post.content.slice(0, 270)
+      const result = await postToX(xContent)
+
+      if (result?.id) {
+        await pool.query(
+          `UPDATE generated_content
+           SET status='posted', postproxy_id=$1
+           WHERE id=$2`,
+          ['x:' + result.id, inserted.rows[0].id]
+        ).catch(() => {})
+        console.log(`⚡ Post ${i+1}/7 posted to X`)
+      } else {
+        console.log(`⚡ Post ${i+1}/7 stored, X not posted`)
       }
+
+      // Small delay between posts to avoid rate limits
+      await new Promise(r => setTimeout(r, 1000))
     }
     console.log(`⚡ Content engine: ${posts.length} posts stored`)
   } catch (err) {
@@ -1824,19 +1834,16 @@ async function monitorRedditAndGenerateContent() {
       `INSERT INTO generated_content (content, angle, scheduled_for) VALUES ($1,'reddit_insight',$2) RETURNING id`,
       [content, schedDate.toISOString()]
     ).catch(() => null)
-    if (POSTPROXY_API_KEY && inserted?.rows[0]?.id) {
-      const result = await postToSocialMedia(content, content.slice(0, 270))
-      if (result && !result.error) {
-        await pool.query(
-          'UPDATE generated_content SET postproxy_id=$1, status=$2 WHERE id=$3',
-          [result.id || result.post_id || 'sent', 'posted', inserted.rows[0].id]
-        ).catch(() => {})
-        console.log('⚡ Reddit post marked as posted')
-      } else {
-        console.log('⚡ Postproxy failed for Reddit post — remains pending')
-      }
+    const redditResult = await postToX(content.slice(0, 270))
+    if (redditResult?.id) {
+      await pool.query(
+        `UPDATE generated_content SET status='posted', postproxy_id=$1 WHERE id=$2`,
+        ['x:' + redditResult.id, inserted?.rows[0]?.id]
+      ).catch(() => {})
+      console.log('⚡ Reddit post posted to X')
+    } else {
+      console.log('⚡ Reddit post stored, X not posted')
     }
-    console.log('⚡ Reddit post stored')
   } catch (err) {
     console.error('⚡ Reddit monitor error:', err.message)
   }
