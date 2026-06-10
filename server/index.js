@@ -1177,6 +1177,35 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      // ── Feature: Cold Outreach Engine ────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cold_contacts (
+          id SERIAL PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          first_name TEXT,
+          business_name TEXT,
+          note TEXT,
+          status TEXT DEFAULT 'queued'
+            CHECK (status IN ('queued','sent','replied','opted_out','bounced')),
+          sent_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cold_suppression (
+          id SERIAL PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          reason TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cold_contacts_status
+          ON cold_contacts(status);
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1906,6 +1935,133 @@ async function sendFreeToolNurtureEmails() {
   }
 }
 
+// ── Cold Outreach Engine ──────────────────────────────────────
+
+const COLD_EMAIL_FROM = process.env.COLD_EMAIL_FROM || ''
+const COLD_DAILY_LIMIT = parseInt(process.env.COLD_DAILY_LIMIT || '25', 10)
+const COLD_EMAIL_ADDRESS = process.env.COLD_EMAIL_ADDRESS || '[Business address not configured]'
+
+function buildColdEmail(contact) {
+  const firstName = contact.first_name || null
+  const businessName = contact.business_name || null
+
+  const greeting = firstName ? `Hi ${firstName},` : 'Hi,'
+  const bizLine = businessName
+    ? `I came across ${businessName} and wanted to reach out.`
+    : 'I wanted to reach out to a fellow wedding photographer.'
+
+  const subjects = [
+    'quick question about your client workflow',
+    'shot list template for your weddings',
+    'something I built for wedding photographers',
+  ]
+  const subjectIndex = contact.email.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % subjects.length
+  const subject = subjects[subjectIndex]
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Georgia,'Times New Roman',serif;">
+  <div style="max-width:560px;margin:40px auto;padding:0 20px;">
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">${greeting}</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">${bizLine}</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">I made a free wedding shot list generator that a lot of photographers have been using to build and share shot lists with couples before the wedding. No signup, no account, works in about 60 seconds.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">You can try it here: <a href="https://getportalkit.com/tools/shot-list" style="color:#1B4332;">getportalkit.com/tools/shot-list</a></p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px;">I built it as part of PortalKit, a client portal for wedding photographers that handles contracts, invoices, questionnaires, and gallery delivery in one private link per client. If that is ever relevant, happy to share more.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 32px;">Hope the tool is useful either way.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 4px;">Chidera</p>
+    <p style="font-size:14px;line-height:1.6;color:#555555;margin:0 0 40px;">PortalKit</p>
+    <hr style="border:none;border-top:1px solid #e5e5e5;margin:0 0 16px;">
+    <p style="font-size:11px;line-height:1.6;color:#999999;margin:0;">
+      ${COLD_EMAIL_ADDRESS}<br>
+      Not relevant? Just reply and I'll take you off this list.
+    </p>
+  </div>
+</body>
+</html>`
+
+  return { subject, html }
+}
+
+async function sendColdOutreach() {
+  if (!COLD_EMAIL_FROM) {
+    console.log('cold email disabled - no sender set')
+    return
+  }
+  if (!resend) {
+    console.log('cold email disabled - no resend configured')
+    return
+  }
+
+  console.log(`📬 Cold outreach: starting daily run (limit ${COLD_DAILY_LIMIT})`)
+  try {
+    const contacts = await pool.query(`
+      SELECT cc.* FROM cold_contacts cc
+      WHERE cc.status = 'queued'
+      AND NOT EXISTS (
+        SELECT 1 FROM cold_suppression cs WHERE LOWER(cs.email) = LOWER(cc.email)
+      )
+      ORDER BY cc.created_at ASC
+      LIMIT $1
+    `, [COLD_DAILY_LIMIT])
+
+    let sent = 0, bounced = 0, skipped = 0
+
+    for (const contact of contacts.rows) {
+      // Double-check suppression
+      const suppressed = await pool.query(
+        'SELECT 1 FROM cold_suppression WHERE LOWER(email)=LOWER($1)',
+        [contact.email]
+      )
+      if (suppressed.rows.length > 0) {
+        await pool.query("UPDATE cold_contacts SET status='opted_out' WHERE id=$1", [contact.id])
+        skipped++
+        continue
+      }
+
+      // Double-check not an existing user
+      const existingUser = await pool.query(
+        'SELECT 1 FROM users WHERE LOWER(email)=LOWER($1)',
+        [contact.email]
+      )
+      if (existingUser.rows.length > 0) {
+        await pool.query("UPDATE cold_contacts SET status='opted_out' WHERE id=$1", [contact.id])
+        skipped++
+        continue
+      }
+
+      try {
+        const { subject, html } = buildColdEmail(contact)
+        await resend.emails.send({
+          from: COLD_EMAIL_FROM,
+          reply_to: COLD_EMAIL_FROM,
+          to: contact.email,
+          subject,
+          html,
+        })
+        await pool.query(
+          "UPDATE cold_contacts SET status='sent', sent_at=NOW() WHERE id=$1",
+          [contact.id]
+        )
+        sent++
+        // Small delay between sends — avoid burst sending
+        await new Promise(r => setTimeout(r, 300))
+      } catch (err) {
+        console.error(`📬 Cold send failed for ${contact.email}:`, err.message)
+        await pool.query(
+          "UPDATE cold_contacts SET status='bounced' WHERE id=$1",
+          [contact.id]
+        )
+        bounced++
+      }
+    }
+
+    console.log(`📬 Cold outreach complete: sent=${sent} bounced=${bounced} skipped=${skipped}`)
+  } catch (err) {
+    console.error('📬 Cold outreach error:', err.message)
+  }
+}
+
 async function runDailyJobs() {
   const now = new Date()
   const hour = now.getUTCHours()
@@ -1914,6 +2070,9 @@ async function runDailyJobs() {
   await sendTrialExpiryReminders().catch(e => console.error('Trial reminder error:', e.message))
   await sendOnboardingSequence().catch(e => console.error('Onboarding seq error:', e.message))
   await sendFreeToolNurtureEmails().catch(e => console.error('Tool nurture:', e.message))
+  if (hour === 13) {
+    await sendColdOutreach().catch(e => console.error('Cold outreach:', e.message))
+  }
   if (day === 1 && hour === 9) {
     await generateAndScheduleWeeklyContent().catch(e => console.error('Content engine error:', e.message))
   }
@@ -5989,6 +6148,129 @@ app.get('/api/admin/tool-leads', async (req, res) => {
     const result = await pool.query('SELECT * FROM tool_leads ORDER BY created_at DESC LIMIT 100')
     res.json(result.rows)
   } catch { res.json([]) }
+})
+
+// ── ADMIN: COLD OUTREACH ──────────────────────────────────────
+
+app.post('/api/admin/cold-contacts/import', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const { contacts } = req.body
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      return res.status(400).json({ error: 'contacts array required' })
+    }
+
+    let added = 0
+    const skipped = []
+    const skippedReasons = []
+
+    for (const c of contacts) {
+      const email = (c.email || '').toLowerCase().trim()
+      if (!email || !email.includes('@')) {
+        skipped.push(email)
+        skippedReasons.push(`${email}: invalid email`)
+        continue
+      }
+
+      const suppressed = await pool.query(
+        'SELECT 1 FROM cold_suppression WHERE LOWER(email)=$1', [email]
+      )
+      if (suppressed.rows.length > 0) {
+        skipped.push(email)
+        skippedReasons.push(`${email}: on suppression list`)
+        continue
+      }
+
+      const existingUser = await pool.query(
+        'SELECT 1 FROM users WHERE LOWER(email)=$1', [email]
+      )
+      if (existingUser.rows.length > 0) {
+        skipped.push(email)
+        skippedReasons.push(`${email}: existing user`)
+        continue
+      }
+
+      const result = await pool.query(
+        `INSERT INTO cold_contacts (email, first_name, business_name, note)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (email) DO NOTHING
+         RETURNING id`,
+        [email, c.first_name || null, c.business_name || null, c.note || null]
+      )
+      if (result.rows.length > 0) {
+        added++
+      } else {
+        skipped.push(email)
+        skippedReasons.push(`${email}: already in list`)
+      }
+    }
+
+    res.json({ added, skipped: skipped.length, skippedReasons })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/admin/cold-contacts/stats', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const counts = await pool.query(`
+      SELECT status, COUNT(*)::int as count
+      FROM cold_contacts
+      GROUP BY status
+    `)
+    const stats = {}
+    for (const row of counts.rows) stats[row.status] = row.count
+    const suppressed = await pool.query('SELECT COUNT(*)::int as count FROM cold_suppression')
+    stats.suppressed = suppressed.rows[0].count
+    res.json(stats)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/admin/cold-suppression', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const email = (req.body.email || '').toLowerCase().trim()
+    if (!email) return res.status(400).json({ error: 'email required' })
+    await pool.query(
+      `INSERT INTO cold_suppression (email, reason) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [email, req.body.reason || 'manual']
+    )
+    await pool.query(
+      `UPDATE cold_contacts SET status='opted_out' WHERE LOWER(email)=$1`,
+      [email]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/admin/cold-send-test', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  if (!COLD_EMAIL_FROM) {
+    return res.status(400).json({ error: 'COLD_EMAIL_FROM not configured' })
+  }
+  if (!resend) {
+    return res.status(400).json({ error: 'Resend not configured' })
+  }
+  try {
+    const to = (req.body.email || '').trim()
+    if (!to || !to.includes('@')) return res.status(400).json({ error: 'email required' })
+    const { subject, html } = buildColdEmail({ email: to, first_name: null, business_name: null })
+    const result = await resend.emails.send({
+      from: COLD_EMAIL_FROM,
+      reply_to: COLD_EMAIL_FROM,
+      to,
+      subject: '[TEST] ' + subject,
+      html,
+    })
+    res.json({ success: true, id: result.id })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.use((err, req, res, next) => {
