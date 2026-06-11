@@ -1253,6 +1253,16 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`
+        CREATE TABLE IF NOT EXISTS tool_leads (
+          id SERIAL PRIMARY KEY,
+          email TEXT NOT NULL,
+          tool TEXT,
+          source TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(e => console.error('tool_leads:', e.message))
+
+      await pool.query(`
         CREATE TABLE IF NOT EXISTS tool_lead_nurture (
           id SERIAL PRIMARY KEY,
           email TEXT NOT NULL,
@@ -1860,73 +1870,122 @@ async function generateVoiceAudio(text, outputPath) {
   }
 }
 
-async function generateVideoFrames(text, outputDir, durationSeconds) {
-  if (!createCanvas) throw new Error('Canvas not available')
-  fs.mkdirSync(outputDir, { recursive: true })
-  const fps = 30
-  const totalFrames = durationSeconds * fps
+async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
+  if (!createCanvas) return null
+
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true })
+  }
+
   const width = 1080
   const height = 1920
+  const fps = 30
+  const totalFrames = durationSeconds * fps
 
-  const words = text.split(' ')
-  const wordsPerFrame = Math.ceil(words.length / totalFrames)
-
-  for (let i = 0; i < totalFrames; i++) {
-    const canvas = createCanvas(width, height)
-    const ctx = canvas.getContext('2d')
-
-    // Dark green gradient background
-    const grad = ctx.createLinearGradient(0, 0, 0, height)
-    grad.addColorStop(0, '#0D2B1E')
-    grad.addColorStop(1, '#1B4332')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, width, height)
-
-    // Gold accent bar
-    ctx.fillStyle = '#C9A84C'
-    ctx.fillRect(80, height * 0.3 - 4, 920, 6)
-
-    // Logo text
-    ctx.fillStyle = '#FFFFFF'
-    ctx.font = 'bold 52px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('PortalKit', width / 2, height * 0.15)
-
-    // Main text — reveal words over time
-    const wordIndex = Math.min(Math.floor(i * wordsPerFrame), words.length)
-    const visibleText = words.slice(0, wordIndex).join(' ')
-    ctx.fillStyle = '#F9FAFB'
-    ctx.font = '500 56px sans-serif'
-    ctx.textAlign = 'center'
-
-    // Word wrap
-    const maxWidth = 900
-    const lineHeight = 72
-    const textWords = visibleText.split(' ')
-    let line = ''
-    let y = height * 0.4
-    for (const word of textWords) {
-      const testLine = line ? line + ' ' + word : word
-      if (ctx.measureText(testLine).width > maxWidth && line) {
-        ctx.fillText(line, width / 2, y)
-        line = word
-        y += lineHeight
-      } else {
-        line = testLine
-      }
-    }
-    if (line) ctx.fillText(line, width / 2, y)
-
-    // CTA at bottom
-    ctx.fillStyle = '#C9A84C'
-    ctx.font = 'bold 44px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('getportalkit.com', width / 2, height * 0.88)
-
-    const framePath = path.join(outputDir, `frame-${String(i).padStart(5, '0')}.png`)
-    const buf = canvas.toBuffer('image/png')
-    fs.writeFileSync(framePath, buf)
+  // Split text into chunks of 6 words each
+  const words = text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.length > 0)
+  const chunks = []
+  for (let i = 0; i < words.length; i += 6) {
+    chunks.push(words.slice(i, i + 6).join(' '))
   }
+  if (!chunks.length) chunks.push(text.slice(0, 50))
+
+  const framesPerChunk = Math.max(Math.floor(totalFrames / chunks.length), 30)
+  let frameCount = 0
+
+  for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+    const chunk = chunks[chunkIdx]
+    const framesToRender = chunkIdx === chunks.length - 1
+      ? Math.max(framesPerChunk, totalFrames - frameCount)
+      : framesPerChunk
+
+    for (let f = 0; f < framesToRender; f++) {
+      const canvas = createCanvas(width, height)
+      const ctx = canvas.getContext('2d')
+
+      // Solid dark background (no gradient for reliability)
+      ctx.fillStyle = '#0D1B2A'
+      ctx.fillRect(0, 0, width, height)
+
+      // Top accent bar
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(0, 0, width, 8)
+
+      // Brand name
+      ctx.fillStyle = '#C9A84C'
+      ctx.font = 'bold 36px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('PORTALKIT', width / 2, 120)
+
+      // Divider line
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'
+      ctx.fillRect(width / 2 - 80, 145, 160, 2)
+
+      // Main text - white, large, centered
+      ctx.fillStyle = '#FFFFFF'
+      ctx.font = 'bold 68px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+
+      // Word wrap
+      const maxWidth = width - 120
+      const lineHeight = 88
+      const cWords = chunk.split(' ')
+      const lines = []
+      let currentLine = ''
+
+      for (const word of cWords) {
+        const test = currentLine ? currentLine + ' ' + word : word
+        if (ctx.measureText(test).width > maxWidth && currentLine) {
+          lines.push(currentLine)
+          currentLine = word
+        } else {
+          currentLine = test
+        }
+      }
+      if (currentLine) lines.push(currentLine)
+
+      const totalTextHeight = lines.length * lineHeight
+      const startY = (height - totalTextHeight) / 2
+
+      lines.forEach((line, i) => {
+        // Text shadow for readability
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'
+        ctx.fillText(line, width / 2 + 3, startY + i * lineHeight + 3)
+        // Main text
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillText(line, width / 2, startY + i * lineHeight)
+      })
+
+      // Bottom CTA
+      ctx.fillStyle = 'rgba(201,168,76,0.9)'
+      ctx.fillRect(80, height - 200, width - 160, 80)
+      ctx.fillStyle = '#0D1B2A'
+      ctx.font = 'bold 32px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('getportalkit.com', width / 2, height - 160)
+
+      // Progress bar
+      const progress = chunkIdx / chunks.length
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+      ctx.fillRect(40, height - 60, width - 80, 6)
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(40, height - 60, (width - 80) * progress, 6)
+
+      // Save frame
+      const framePath = path.join(
+        outputDir,
+        'frame_' + String(frameCount).padStart(5, '0') + '.png'
+      )
+      fs.writeFileSync(framePath, canvas.toBuffer('image/png'))
+      frameCount++
+    }
+  }
+
+  console.log('🎬 Generated ' + frameCount + ' frames')
+  return outputDir
 }
 
 async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
@@ -2419,6 +2478,11 @@ async function findPhotographerEmails(city, state) {
     const query = encodeURIComponent('wedding photographer')
     const near = encodeURIComponent(`${city}, ${state}, USA`)
 
+    console.log('Foursquare key starts with:', FOURSQUARE_API_KEY?.slice(0, 4))
+    if (!FOURSQUARE_API_KEY?.startsWith('fsq3')) {
+      console.warn('WARNING: Foursquare key should start with fsq3 - check Railway env var')
+    }
+
     const searchRes = await fetch(
       `https://api.foursquare.com/v3/places/search` +
       `?query=${query}` +
@@ -2427,7 +2491,8 @@ async function findPhotographerEmails(city, state) {
       {
         headers: {
           'Authorization': FOURSQUARE_API_KEY,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'X-Places-Api-Version': '20240101'
         }
       }
     )
@@ -2463,7 +2528,8 @@ async function findPhotographerEmails(city, state) {
           {
             headers: {
               'Authorization': FOURSQUARE_API_KEY,
-              'Accept': 'application/json'
+              'Accept': 'application/json',
+              'X-Places-Api-Version': '20240101'
             }
           }
         )
