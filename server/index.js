@@ -92,9 +92,6 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
-const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY
-const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX
-
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
 async function sendBrevoEmail({ from, to, subject, html }) {
@@ -2363,125 +2360,192 @@ async function sendColdOutreach() {
   }
 }
 
-async function findPhotographerEmails(city, state = 'USA', count = 20) {
-  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
-    console.log('Google Search not configured')
-    return []
-  }
+const US_CITIES = [
+  ['Nashville', 'tn'], ['Atlanta', 'ga'],
+  ['Austin', 'tx'], ['Denver', 'co'],
+  ['Seattle', 'wa'], ['Miami', 'fl'],
+  ['Chicago', 'il'], ['Portland', 'or'],
+  ['Charlotte', 'nc'], ['Phoenix', 'az'],
+  ['Minneapolis', 'mn'], ['Detroit', 'mi'],
+  ['Boston', 'ma'], ['Baltimore', 'md'],
+  ['Tampa', 'fl'], ['Louisville', 'ky'],
+  ['Memphis', 'tn'], ['New Orleans', 'la'],
+  ['Indianapolis', 'in'], ['Columbus', 'oh'],
+  ['San Diego', 'ca'], ['Dallas', 'tx'],
+  ['Houston', 'tx'], ['San Antonio', 'tx'],
+  ['Jacksonville', 'fl'], ['Sacramento', 'ca'],
+  ['Raleigh', 'nc'], ['Richmond', 'va'],
+  ['Salt Lake City', 'ut'], ['Tucson', 'az'],
+  ['Albuquerque', 'nm'], ['Omaha', 'ne'],
+  ['Kansas City', 'mo'], ['Pittsburgh', 'pa'],
+  ['Cincinnati', 'oh'], ['Cleveland', 'oh']
+]
 
+async function findPhotographerEmails(city, state) {
   try {
-    const query = encodeURIComponent(
-      `wedding photographer ${city} ${state} contact email`
-    )
+    const citySlug = city.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
 
-    const results = []
+    const stateSlug = (state || 'us').toLowerCase()
+      .replace(/[^a-z]+/g, '')
+      .slice(0, 2)
 
-    // Google CSE returns max 10 per page
-    for (let start = 1; start <= 2; start += 10) {
-      const searchRes = await fetch(
-        `https://customsearch.googleapis.com/customsearch/v1` +
-        `?key=${GOOGLE_SEARCH_API_KEY}` +
-        `&cx=${GOOGLE_SEARCH_CX}` +
-        `&q=${query}` +
-        `&num=10` +
-        `&start=${start}`
-      )
+    const url = `https://www.theknot.com/marketplace/` +
+      `wedding-photographers-${citySlug}-${stateSlug}`
 
-      if (!searchRes.ok) {
-        const err = await searchRes.json()
-        console.error('Google CSE error:', err?.error?.message)
-        break
+    console.log('Scraping The Knot:', url)
+
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
+          'Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+          'Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,' +
+          'application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive'
       }
+    })
 
-      const data = await searchRes.json()
-      const items = data.items || []
-      results.push(...items)
+    if (!res.ok) {
+      console.error('The Knot fetch failed:', res.status)
+      return []
+    }
 
-      if (items.length < 10) break
+    const html = await res.text()
 
-      // Respect rate limits
-      await new Promise(r => setTimeout(r, 1000))
+    // Extract vendor profile URLs from The Knot listing
+    const profileRegex = /href="(\/marketplace\/[^"]+)"/g
+    const profileUrls = []
+    let match
+
+    while ((match = profileRegex.exec(html)) !== null) {
+      const path = match[1]
+      if (path.includes('/marketplace/') &&
+          !path.includes('?') &&
+          path.split('/').length === 3 &&
+          !profileUrls.includes(path)) {
+        profileUrls.push(path)
+      }
     }
 
     console.log(
-      `Google CSE found ${results.length} sites for ${city}`
+      `Found ${profileUrls.length} profiles in ${city}`
     )
 
     const foundEmails = []
 
-    for (const result of results.slice(0, 12)) {
+    // Visit each profile to get their website
+    for (const profilePath of profileUrls.slice(0, 15)) {
       try {
-        const siteRes = await fetch(result.link, {
-          signal: AbortSignal.timeout(6000),
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
-              'AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
-          }
-        })
-
-        if (!siteRes.ok) continue
-
-        const html = await siteRes.text()
-
-        // Extract emails
-        const emailRegex =
-          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-        const rawEmails = html.match(emailRegex) || []
-
-        const filtered = rawEmails.filter(email => {
-          const lower = email.toLowerCase()
-          return !lower.includes('example')
-            && !lower.includes('sentry')
-            && !lower.includes('google')
-            && !lower.includes('schema')
-            && !lower.includes('w3.org')
-            && !lower.includes('adobe')
-            && !lower.includes('@2x')
-            && !lower.includes('.png')
-            && !lower.includes('.jpg')
-            && !lower.includes('.gif')
-            && !lower.includes('wordpress')
-            && email.length < 60
-            && email.length > 6
-        })
-
-        // Get business name
-        const titleMatch = html.match(
-          /<title[^>]*>([^<]+)<\/title>/i
-        )
-        const businessName = titleMatch
-          ? titleMatch[1]
-              .replace(/\s*[-|–].*$/, '')
-              .replace(/\s*\|.*$/, '')
-              .trim()
-              .slice(0, 80)
-          : result.title || ''
-
-        // Try to get first name from meta
-        const authorMatch = html.match(
-          /name=["']author["'][^>]+content=["']([^"']+)/i
-        )
-        const firstName = authorMatch
-          ? authorMatch[1].split(' ')[0].trim()
-          : ''
-
-        const uniqueEmails = [...new Set(filtered)]
-
-        for (const email of uniqueEmails.slice(0, 2)) {
-          foundEmails.push({
-            email: email.toLowerCase().trim(),
-            business_name: businessName,
-            first_name: firstName,
-            note: `${city}, ${state} — via Google search`
-          })
-        }
-
         await new Promise(r => setTimeout(r, 800))
 
-      } catch {
-        continue
-      }
+        const profileRes = await fetch(
+          `https://www.theknot.com${profilePath}`,
+          {
+            signal: AbortSignal.timeout(8000),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
+                'Intel Mac OS X 10_15_7) ' +
+                'AppleWebKit/537.36 Chrome/120.0.0.0 ' +
+                'Safari/537.36'
+            }
+          }
+        )
+
+        if (!profileRes.ok) continue
+
+        const profileHtml = await profileRes.text()
+
+        // Extract business name
+        const nameMatch = profileHtml.match(
+          /<h1[^>]*>([^<]+)<\/h1>/i
+        )
+        const businessName = nameMatch
+          ? nameMatch[1].trim().slice(0, 80)
+          : ''
+
+        // Extract website URL from profile
+        const websiteMatch = profileHtml.match(
+          /href="(https?:\/\/(?!www\.theknot\.com)[^"]+)"[^>]*>\s*(?:Visit Website|website|Website)\s*/i
+        )
+
+        // Also look for email directly on profile
+        const emailRegex =
+          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+        const profileEmails = profileHtml.match(emailRegex) || []
+
+        const cleanEmails = profileEmails.filter(e => {
+          const l = e.toLowerCase()
+          return !l.includes('theknot')
+            && !l.includes('example')
+            && !l.includes('sentry')
+            && !l.includes('google')
+            && !l.includes('schema')
+            && !l.includes('.png')
+            && !l.includes('.jpg')
+            && e.length < 60
+        })
+
+        if (cleanEmails.length) {
+          for (const email of cleanEmails.slice(0, 1)) {
+            foundEmails.push({
+              email: email.toLowerCase().trim(),
+              business_name: businessName,
+              first_name: '',
+              note: `${city} via The Knot`
+            })
+          }
+          continue
+        }
+
+        // If no email on profile, visit their website
+        if (websiteMatch?.[1]) {
+          try {
+            await new Promise(r => setTimeout(r, 600))
+
+            const siteRes = await fetch(websiteMatch[1], {
+              signal: AbortSignal.timeout(6000),
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
+                  'Intel Mac OS X 10_15_7) ' +
+                  'AppleWebKit/537.36 Chrome/120.0.0.0'
+              }
+            })
+
+            if (!siteRes.ok) continue
+
+            const siteHtml = await siteRes.text()
+            const siteEmails = siteHtml.match(emailRegex) || []
+
+            const cleanSiteEmails = siteEmails.filter(e => {
+              const l = e.toLowerCase()
+              return !l.includes('example')
+                && !l.includes('sentry')
+                && !l.includes('google')
+                && !l.includes('schema')
+                && !l.includes('wordpress')
+                && !l.includes('.png')
+                && !l.includes('.jpg')
+                && e.length < 60
+                && e.length > 6
+            })
+
+            if (cleanSiteEmails.length) {
+              foundEmails.push({
+                email: cleanSiteEmails[0].toLowerCase().trim(),
+                business_name: businessName,
+                first_name: '',
+                note: `${city} via The Knot website`
+              })
+            }
+          } catch { continue }
+        }
+
+      } catch { continue }
     }
 
     // Deduplicate
@@ -2493,7 +2557,7 @@ async function findPhotographerEmails(city, state = 'USA', count = 20) {
     })
 
     console.log(
-      `Found ${unique.length} unique emails in ${city}`
+      `Found ${unique.length} emails for ${city}`
     )
     return unique
 
@@ -2548,20 +2612,17 @@ async function runDailyJobs() {
   }
   const isSunday = day === 0
   const isAutoFillHour = hour === 6
-  if (isSunday && isAutoFillHour && GOOGLE_SEARCH_API_KEY && GOOGLE_SEARCH_CX) {
-    const targetCities = [
-      { city: 'Austin', state: 'TX' },
-      { city: 'Nashville', state: 'TN' },
-      { city: 'Denver', state: 'CO' },
-      { city: 'Charlotte', state: 'NC' },
-      { city: 'Portland', state: 'OR' },
-    ]
-    for (const { city, state } of targetCities) {
-      const emails = await findPhotographerEmails(city, state, 20)
+  if (isSunday && isAutoFillHour) {
+    const { rows: queuedRows } = await pool.query(
+      `SELECT COUNT(*) FROM cold_contacts WHERE status='queued'`
+    ).catch(() => ({ rows: [{ count: '999' }] }))
+    const queued = parseInt(queuedRows[0].count)
+    if (queued < 100) {
+      const cityData = US_CITIES[Math.floor(Math.random() * US_CITIES.length)]
+      const emails = await findPhotographerEmails(cityData[0], cityData[1])
         .catch(e => { console.error('Auto-finder error:', e.message); return [] })
       const result = await importFoundEmails(emails)
-      console.log(`Auto-finder ${city}: +${result.added} contacts`)
-      await new Promise(r => setTimeout(r, 3000))
+      console.log(`Auto-finder ${cityData[0]}: +${result.added} contacts`)
     }
   }
 }
@@ -6761,16 +6822,13 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
   }
 })
 
-// POST /api/admin/find-emails — search Google CSE for photographer emails and import them
+// POST /api/admin/find-emails — scrape The Knot for photographer emails and import them
 app.post('/api/admin/find-emails', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  const { city, state = 'USA', count = 20 } = req.body
+  const { city, state } = req.body
   if (!city) return res.status(400).json({ error: 'city required' })
-  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
-    return res.status(503).json({ error: 'GOOGLE_SEARCH_API_KEY / GOOGLE_SEARCH_CX not configured' })
-  }
   try {
-    const emails = await findPhotographerEmails(city, state, count)
+    const emails = await findPhotographerEmails(city, state)
     const { added, skipped } = await importFoundEmails(emails)
     res.json({ found: emails.length, added, skipped })
   } catch (err) {

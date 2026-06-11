@@ -626,7 +626,7 @@ export default function ContentEngine() {
               Find Photographers by City
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Uses Google Custom Search to scrape photographer websites and extract contact emails. Requires GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX in Railway.
+              Enter any US city to find wedding photographers from The Knot directory. Runs automatically every Sunday.
             </p>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <input
