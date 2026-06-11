@@ -266,6 +266,19 @@ export default function ContentEngine() {
     }
   }
 
+  const handleDeleteVideo = async (id: number) => {
+    try {
+      await fetch(`${API_URL}/api/admin/generated-videos/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET }
+      })
+      setVideos(prev => prev.filter((v: any) => v.id !== id))
+      showToast('Video deleted')
+    } catch {
+      showToast('Failed to delete', 'error')
+    }
+  }
+
   const handleGenerateVideo = async () => {
     if (!videoScript.trim()) return
     setVideoGenerating(true)
@@ -877,24 +890,40 @@ export default function ContentEngine() {
                 {v.error && (
                   <p style={{ fontSize: 12, color: '#DC2626', margin: '0 0 8px' }}>Error: {v.error}</p>
                 )}
-                {v.status === 'done' && v.r2_url && (
-                  <a
-                    href={v.r2_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block', fontSize: 12, padding: '5px 12px',
-                      background: '#F0FDF4', border: '1px solid #A7F3D0',
-                      borderRadius: 6, color: '#059669', fontWeight: 600,
-                      textDecoration: 'none'
-                    }}
-                  >
-                    Download MP4
-                  </a>
-                )}
-                {(v.status === 'rendering' || v.status === 'queued') && (
-                  <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+                  {v.status === 'done' && v.r2_url && (
+                    <a
+                      href={v.r2_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-block', fontSize: 12, padding: '5px 12px',
+                        background: '#F0FDF4', border: '1px solid #A7F3D0',
+                        borderRadius: 6, color: '#059669', fontWeight: 600,
+                        textDecoration: 'none'
+                      }}
+                    >
+                      Download MP4
+                    </a>
+                  )}
+                  {(v.status === 'rendering' || v.status === 'queued') && (
+                    <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
+                  )}
+                  {(v.status === 'error' || v.status === 'done') && (
+                    <button
+                      onClick={() => handleDeleteVideo(v.id)}
+                      style={{
+                        fontSize: 12, padding: '4px 10px',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: 6, background: 'white',
+                        color: '#A32D2D', cursor: 'pointer',
+                        fontWeight: 600
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           )}

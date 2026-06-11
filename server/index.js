@@ -92,6 +92,8 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
+
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
 async function sendBrevoEmail({ from, to, subject, html }) {
@@ -2396,219 +2398,151 @@ const US_CITIES = [
 ]
 
 async function findPhotographerEmails(city, state) {
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.log('Google Maps API not configured')
+    return []
+  }
+
   try {
-    const citySlug = city.toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '')
+    console.log(`Finding photographers in ${city}, ${state}`)
 
-    const stateSlug = (state || 'us').toLowerCase()
-      .slice(0, 2)
+    const searchQuery = encodeURIComponent(
+      `wedding photographer ${city} ${state}`
+    )
 
-    console.log(`Scraping photographers in ${city}, ${state}`)
+    const searchRes = await fetch(
+      `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+      `?query=${searchQuery}` +
+      `&type=establishment` +
+      `&key=${GOOGLE_MAPS_API_KEY}`
+    )
 
-    const photographerSites = []
-
-    // SOURCE 1: WeddingWire directory
-    const wwUrl = `https://www.weddingwire.com/` +
-      `wedding-photographers/${citySlug}--${stateSlug}`
-
-    try {
-      const wwRes = await fetch(wwUrl, {
-        signal: AbortSignal.timeout(10000),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
-            'Intel Mac OS X 10_15_7) ' +
-            'AppleWebKit/537.36 Chrome/120.0.0.0 ' +
-            'Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml',
-          'Accept-Language': 'en-US,en;q=0.9'
-        }
-      })
-
-      if (wwRes.ok) {
-        const wwHtml = await wwRes.text()
-
-        const vendorLinks = []
-        const linkRegex = /href="(\/wedding-photography\/[^"?#]+)"/g
-        let m
-        while ((m = linkRegex.exec(wwHtml)) !== null) {
-          if (!vendorLinks.includes(m[1])) {
-            vendorLinks.push(m[1])
-          }
-        }
-
-        console.log(`WeddingWire: ${vendorLinks.length} profiles`)
-
-        for (const link of vendorLinks.slice(0, 15)) {
-          try {
-            await new Promise(r => setTimeout(r, 700))
-
-            const vendorRes = await fetch(
-              `https://www.weddingwire.com${link}`,
-              {
-                signal: AbortSignal.timeout(8000),
-                headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Chrome/120.0.0.0' }
-              }
-            )
-
-            if (!vendorRes.ok) continue
-
-            const vendorHtml = await vendorRes.text()
-
-            const nameMatch = vendorHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i)
-            const businessName = nameMatch ? nameMatch[1].trim().slice(0, 80) : ''
-
-            const websiteMatch = vendorHtml.match(
-              /href="(https?:\/\/(?!www\.weddingwire)[^"]+)"[^>]*>(?:Website|Visit)[^<]*<\/a>/i
-            )
-
-            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-            const vendorEmails = vendorHtml.match(emailRegex) || []
-
-            const cleanEmails = vendorEmails.filter(e => {
-              const l = e.toLowerCase()
-              return !l.includes('weddingwire')
-                && !l.includes('xo')
-                && !l.includes('example')
-                && !l.includes('sentry')
-                && !l.includes('google')
-                && !l.includes('.png')
-                && !l.includes('.jpg')
-                && e.length < 60
-                && e.length > 6
-            })
-
-            if (cleanEmails.length) {
-              photographerSites.push({
-                email: cleanEmails[0].toLowerCase(),
-                business_name: businessName,
-                first_name: '',
-                note: `${city}, ${state} via WeddingWire`
-              })
-              continue
-            }
-
-            if (websiteMatch?.[1]) {
-              try {
-                await new Promise(r => setTimeout(r, 500))
-                const siteRes = await fetch(websiteMatch[1], {
-                  signal: AbortSignal.timeout(6000),
-                  headers: { 'User-Agent': 'Mozilla/5.0' }
-                })
-                if (!siteRes.ok) continue
-
-                const siteHtml = await siteRes.text()
-                const siteEmails = (siteHtml.match(emailRegex) || []).filter(e => {
-                  const l = e.toLowerCase()
-                  return !l.includes('example')
-                    && !l.includes('sentry')
-                    && !l.includes('schema')
-                    && !l.includes('wordpress')
-                    && !l.includes('.png')
-                    && !l.includes('.jpg')
-                    && e.length < 60
-                    && e.length > 6
-                })
-
-                if (siteEmails.length) {
-                  photographerSites.push({
-                    email: siteEmails[0].toLowerCase(),
-                    business_name: businessName,
-                    first_name: '',
-                    note: `${city}, ${state} via WeddingWire`
-                  })
-                }
-              } catch { continue }
-            }
-
-          } catch { continue }
-        }
-      }
-    } catch (err) {
-      console.log('WeddingWire fetch error:', err.message)
+    if (!searchRes.ok) {
+      console.error('Places search failed:', searchRes.status)
+      return []
     }
 
-    // SOURCE 2: Zola vendor directory
-    try {
-      const zolaUrl = `https://www.zola.com/` +
-        `wedding-vendors/wedding-photographers/` +
-        `${stateSlug}/${citySlug}`
+    const searchData = await searchRes.json()
 
-      const zolaRes = await fetch(zolaUrl, {
-        signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Chrome/120.0' }
-      })
+    if (searchData.status !== 'OK' && searchData.status !== 'ZERO_RESULTS') {
+      console.error('Places API error:', searchData.status, searchData.error_message)
+      return []
+    }
 
-      if (zolaRes.ok) {
-        const zolaHtml = await zolaRes.text()
+    const places = searchData.results || []
+    console.log(`Places API found ${places.length} photographers`)
 
-        const zolaLinks = []
-        const zolaRegex = /href="(\/wedding-vendors\/[^"?#]+-photographer[^"?#]*)"/gi
-        let zm
-        while ((zm = zolaRegex.exec(zolaHtml)) !== null) {
-          if (!zolaLinks.includes(zm[1]) && zm[1].split('/').length > 3) {
-            zolaLinks.push(zm[1])
-          }
-        }
+    const foundEmails = []
 
-        console.log(`Zola: ${zolaLinks.length} profiles`)
+    for (const place of places.slice(0, 20)) {
+      try {
+        await new Promise(r => setTimeout(r, 300))
 
-        for (const link of zolaLinks.slice(0, 10)) {
-          try {
-            await new Promise(r => setTimeout(r, 600))
+        const detailRes = await fetch(
+          `https://maps.googleapis.com/maps/api/place/details/json` +
+          `?place_id=${place.place_id}` +
+          `&fields=name,website,formatted_phone_number` +
+          `&key=${GOOGLE_MAPS_API_KEY}`
+        )
 
-            const vendorRes = await fetch(
-              `https://www.zola.com${link}`,
-              {
-                signal: AbortSignal.timeout(7000),
+        if (!detailRes.ok) continue
+
+        const detailData = await detailRes.json()
+        const detail = detailData.result
+
+        if (!detail?.website) continue
+
+        const businessName = detail.name || place.name || ''
+        const websiteUrl = detail.website
+
+        console.log(`Scraping: ${businessName} - ${websiteUrl}`)
+
+        try {
+          await new Promise(r => setTimeout(r, 500))
+
+          const siteRes = await fetch(websiteUrl, {
+            signal: AbortSignal.timeout(7000),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
+                'Intel Mac OS X 10_15_7) ' +
+                'AppleWebKit/537.36 Chrome/120.0.0.0'
+            }
+          })
+
+          if (!siteRes.ok) continue
+
+          const siteHtml = await siteRes.text()
+
+          const emailRegex =
+            /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+          let allEmails = siteHtml.match(emailRegex) || []
+
+          if (!allEmails.length) {
+            try {
+              const baseUrl = new URL(websiteUrl).origin
+              const contactRes = await fetch(`${baseUrl}/contact`, {
+                signal: AbortSignal.timeout(5000),
                 headers: { 'User-Agent': 'Mozilla/5.0' }
+              })
+              if (contactRes.ok) {
+                const contactHtml = await contactRes.text()
+                allEmails = contactHtml.match(emailRegex) || []
               }
-            )
+            } catch {}
+          }
 
-            if (!vendorRes.ok) continue
+          const filtered = allEmails.filter(e => {
+            const l = e.toLowerCase()
+            return !l.includes('example')
+              && !l.includes('sentry')
+              && !l.includes('google')
+              && !l.includes('schema')
+              && !l.includes('wordpress')
+              && !l.includes('wix')
+              && !l.includes('squarespace')
+              && !l.includes('shopify')
+              && !l.includes('.png')
+              && !l.includes('.jpg')
+              && !l.includes('.gif')
+              && !l.includes('.svg')
+              && !l.includes('@2x')
+              && e.length < 60
+              && e.length > 6
+          })
 
-            const vendorHtml = await vendorRes.text()
-            const nameMatch = vendorHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i)
-            const businessName = nameMatch ? nameMatch[1].trim() : ''
+          const email = [...new Set(filtered)][0]
 
-            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-            const emails = (vendorHtml.match(emailRegex) || []).filter(e => {
-              const l = e.toLowerCase()
-              return !l.includes('zola')
-                && !l.includes('example')
-                && !l.includes('sentry')
-                && !l.includes('.png')
-                && !l.includes('.jpg')
-                && e.length < 60
-                && e.length > 6
+          if (email) {
+            const nameParts = businessName.split(' ')
+            const firstName = nameParts.length > 1 ? nameParts[0] : ''
+
+            foundEmails.push({
+              email: email.toLowerCase().trim(),
+              business_name: businessName,
+              first_name: firstName,
+              note: `${city}, ${state} via Google Maps`
             })
 
-            if (emails.length) {
-              photographerSites.push({
-                email: emails[0].toLowerCase(),
-                business_name: businessName,
-                first_name: '',
-                note: `${city}, ${state} via Zola`
-              })
-            }
+            console.log(`Found: ${email} (${businessName})`)
+          }
 
-          } catch { continue }
+        } catch (siteErr) {
+          console.log(`Site scrape failed for ${websiteUrl}:`, siteErr.message)
         }
+
+      } catch (placeErr) {
+        console.log('Place detail error:', placeErr.message)
       }
-    } catch (err) {
-      console.log('Zola fetch error:', err.message)
     }
 
-    // Deduplicate by email
     const seen = new Set()
-    const unique = photographerSites.filter(c => {
-      const email = c.email?.trim()
-      if (!email || seen.has(email)) return false
-      seen.add(email)
+    const unique = foundEmails.filter(c => {
+      if (seen.has(c.email)) return false
+      seen.add(c.email)
       return true
     })
 
-    console.log(`Total unique emails found in ${city}: ${unique.length}`)
+    console.log(`✅ Found ${unique.length} unique emails in ${city}`)
     return unique
 
   } catch (err) {
@@ -6909,6 +6843,12 @@ app.get('/api/admin/generated-videos', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+app.delete('/api/admin/generated-videos/:id', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  await pool.query('DELETE FROM generated_videos WHERE id=$1', [req.params.id])
+  res.json({ success: true })
 })
 
 app.use((err, req, res, next) => {
