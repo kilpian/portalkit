@@ -92,7 +92,7 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
+const FOURSQUARE_API_KEY = process.env.FOURSQUARE_API_KEY
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
@@ -2398,64 +2398,66 @@ const US_CITIES = [
 ]
 
 async function findPhotographerEmails(city, state) {
-  if (!GOOGLE_MAPS_API_KEY) {
-    console.log('Google Maps API not configured')
+  if (!FOURSQUARE_API_KEY) {
+    console.log('Foursquare not configured')
     return []
   }
 
   try {
     console.log(`Finding photographers in ${city}, ${state}`)
 
-    const searchQuery = encodeURIComponent(
-      `wedding photographer ${city} ${state}`
-    )
+    const query = encodeURIComponent('wedding photographer')
+    const near = encodeURIComponent(`${city}, ${state}`)
 
     const searchRes = await fetch(
-      `https://maps.googleapis.com/maps/api/place/textsearch/json` +
-      `?query=${searchQuery}` +
-      `&type=establishment` +
-      `&key=${GOOGLE_MAPS_API_KEY}`
+      `https://api.foursquare.com/v3/places/search` +
+      `?query=${query}&near=${near}&limit=50` +
+      `&categories=11134`,
+      {
+        headers: {
+          'Authorization': FOURSQUARE_API_KEY,
+          'Accept': 'application/json'
+        }
+      }
     )
 
     if (!searchRes.ok) {
-      console.error('Places search failed:', searchRes.status)
+      const err = await searchRes.text()
+      console.error('Foursquare error:', searchRes.status, err)
       return []
     }
 
     const searchData = await searchRes.json()
-
-    if (searchData.status !== 'OK' && searchData.status !== 'ZERO_RESULTS') {
-      console.error('Places API error:', searchData.status, searchData.error_message)
-      return []
-    }
-
     const places = searchData.results || []
-    console.log(`Places API found ${places.length} photographers`)
+
+    console.log(`Foursquare found ${places.length} photographers`)
 
     const foundEmails = []
 
-    for (const place of places.slice(0, 20)) {
+    for (const place of places) {
       try {
-        await new Promise(r => setTimeout(r, 300))
+        await new Promise(r => setTimeout(r, 400))
 
         const detailRes = await fetch(
-          `https://maps.googleapis.com/maps/api/place/details/json` +
-          `?place_id=${place.place_id}` +
-          `&fields=name,website,formatted_phone_number` +
-          `&key=${GOOGLE_MAPS_API_KEY}`
+          `https://api.foursquare.com/v3/places/${place.fsq_id}` +
+          `?fields=name,website,social_media`,
+          {
+            headers: {
+              'Authorization': FOURSQUARE_API_KEY,
+              'Accept': 'application/json'
+            }
+          }
         )
 
         if (!detailRes.ok) continue
 
-        const detailData = await detailRes.json()
-        const detail = detailData.result
-
-        if (!detail?.website) continue
-
+        const detail = await detailRes.json()
         const businessName = detail.name || place.name || ''
         const websiteUrl = detail.website
 
-        console.log(`Scraping: ${businessName} - ${websiteUrl}`)
+        if (!websiteUrl) continue
+
+        console.log(`Scraping: ${businessName}`)
 
         try {
           await new Promise(r => setTimeout(r, 500))
@@ -2475,9 +2477,9 @@ async function findPhotographerEmails(city, state) {
 
           const emailRegex =
             /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-          let allEmails = siteHtml.match(emailRegex) || []
+          let emails = siteHtml.match(emailRegex) || []
 
-          if (!allEmails.length) {
+          if (!emails.length) {
             try {
               const baseUrl = new URL(websiteUrl).origin
               const contactRes = await fetch(`${baseUrl}/contact`, {
@@ -2486,12 +2488,12 @@ async function findPhotographerEmails(city, state) {
               })
               if (contactRes.ok) {
                 const contactHtml = await contactRes.text()
-                allEmails = contactHtml.match(emailRegex) || []
+                emails = contactHtml.match(emailRegex) || []
               }
             } catch {}
           }
 
-          const filtered = allEmails.filter(e => {
+          const filtered = emails.filter(e => {
             const l = e.toLowerCase()
             return !l.includes('example')
               && !l.includes('sentry')
@@ -2500,12 +2502,11 @@ async function findPhotographerEmails(city, state) {
               && !l.includes('wordpress')
               && !l.includes('wix')
               && !l.includes('squarespace')
-              && !l.includes('shopify')
+              && !l.includes('jquery')
+              && !l.includes('@2x')
               && !l.includes('.png')
               && !l.includes('.jpg')
               && !l.includes('.gif')
-              && !l.includes('.svg')
-              && !l.includes('@2x')
               && e.length < 60
               && e.length > 6
           })
@@ -2513,25 +2514,22 @@ async function findPhotographerEmails(city, state) {
           const email = [...new Set(filtered)][0]
 
           if (email) {
-            const nameParts = businessName.split(' ')
-            const firstName = nameParts.length > 1 ? nameParts[0] : ''
-
+            const firstName = businessName.split(' ')[0]
             foundEmails.push({
               email: email.toLowerCase().trim(),
               business_name: businessName,
               first_name: firstName,
-              note: `${city}, ${state} via Google Maps`
+              note: `${city}, ${state} via Foursquare`
             })
-
             console.log(`Found: ${email} (${businessName})`)
           }
 
         } catch (siteErr) {
-          console.log(`Site scrape failed for ${websiteUrl}:`, siteErr.message)
+          console.log('Site scrape failed:', siteErr.message)
         }
 
-      } catch (placeErr) {
-        console.log('Place detail error:', placeErr.message)
+      } catch (err) {
+        console.log('Place detail error:', err.message)
       }
     }
 
@@ -2542,7 +2540,7 @@ async function findPhotographerEmails(city, state) {
       return true
     })
 
-    console.log(`✅ Found ${unique.length} unique emails in ${city}`)
+    console.log(`✅ ${unique.length} emails found in ${city}`)
     return unique
 
   } catch (err) {
@@ -2596,7 +2594,7 @@ async function runDailyJobs() {
   }
   const isSunday = day === 0
   const isAutoFillHour = hour === 6
-  if (isSunday && isAutoFillHour) {
+  if (isSunday && isAutoFillHour && FOURSQUARE_API_KEY) {
     const { rows: queuedRows } = await pool.query(
       `SELECT COUNT(*) FROM cold_contacts WHERE status='queued'`
     ).catch(() => ({ rows: [{ count: '999' }] }))
@@ -6806,11 +6804,14 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
   }
 })
 
-// POST /api/admin/find-emails — scrape The Knot for photographer emails and import them
+// POST /api/admin/find-emails — Foursquare + website scrape for photographer emails
 app.post('/api/admin/find-emails', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { city, state } = req.body
   if (!city) return res.status(400).json({ error: 'city required' })
+  if (!FOURSQUARE_API_KEY) {
+    return res.status(400).json({ error: 'FOURSQUARE_API_KEY not set in Railway' })
+  }
   try {
     const emails = await findPhotographerEmails(city, state)
     const { added, skipped } = await importFoundEmails(emails)
