@@ -16,6 +16,8 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { TwitterApi } from 'twitter-api-v2'
+import path from 'path'
+import os from 'os'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -67,6 +69,28 @@ if (twitterClient) {
 } else {
   console.log('🐦 Twitter/X not configured - posts stored only')
 }
+
+// Video generation deps — loaded via dynamic import (ESM-compatible)
+let createCanvas = null
+let ffmpegPath = null
+let ffmpeg = null
+;(async () => {
+  try {
+    const canvasMod = await import('@napi-rs/canvas')
+    createCanvas = canvasMod.createCanvas
+    const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg')
+    ffmpegPath = ffmpegInstaller.default?.path || ffmpegInstaller.path
+    const fluentMod = await import('fluent-ffmpeg')
+    ffmpeg = fluentMod.default
+    if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath)
+    console.log('🎬 Video generation deps loaded')
+  } catch (e) {
+    console.log('🎬 Video generation deps not available:', e.message)
+  }
+})()
+
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
@@ -1265,6 +1289,20 @@ async function initDb() {
           ON cold_contacts(status);
       `).catch(() => {})
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS generated_videos (
+          id SERIAL PRIMARY KEY,
+          post_id INTEGER REFERENCES generated_content(id),
+          title TEXT,
+          script TEXT,
+          status TEXT DEFAULT 'queued',
+          r2_url TEXT,
+          error TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          completed_at TIMESTAMPTZ
+        );
+      `).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -1784,6 +1822,183 @@ async function postToX(content) {
   }
 }
 
+async function generateVoiceAudio(text, outputPath) {
+  if (!ELEVENLABS_API_KEY) throw new Error('ElevenLabs not configured')
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': ELEVENLABS_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'audio/mpeg'
+    },
+    body: JSON.stringify({
+      text,
+      model_id: 'eleven_monolingual_v1',
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    })
+  })
+  if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
+  const buffer = Buffer.from(await res.arrayBuffer())
+  fs.writeFileSync(outputPath, buffer)
+}
+
+async function generateVideoFrames(text, outputDir, durationSeconds) {
+  if (!createCanvas) throw new Error('Canvas not available')
+  fs.mkdirSync(outputDir, { recursive: true })
+  const fps = 30
+  const totalFrames = durationSeconds * fps
+  const width = 1080
+  const height = 1920
+
+  const words = text.split(' ')
+  const wordsPerFrame = Math.ceil(words.length / totalFrames)
+
+  for (let i = 0; i < totalFrames; i++) {
+    const canvas = createCanvas(width, height)
+    const ctx = canvas.getContext('2d')
+
+    // Dark green gradient background
+    const grad = ctx.createLinearGradient(0, 0, 0, height)
+    grad.addColorStop(0, '#0D2B1E')
+    grad.addColorStop(1, '#1B4332')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, width, height)
+
+    // Gold accent bar
+    ctx.fillStyle = '#C9A84C'
+    ctx.fillRect(80, height * 0.3 - 4, 920, 6)
+
+    // Logo text
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = 'bold 52px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('PortalKit', width / 2, height * 0.15)
+
+    // Main text — reveal words over time
+    const wordIndex = Math.min(Math.floor(i * wordsPerFrame), words.length)
+    const visibleText = words.slice(0, wordIndex).join(' ')
+    ctx.fillStyle = '#F9FAFB'
+    ctx.font = '500 56px sans-serif'
+    ctx.textAlign = 'center'
+
+    // Word wrap
+    const maxWidth = 900
+    const lineHeight = 72
+    const textWords = visibleText.split(' ')
+    let line = ''
+    let y = height * 0.4
+    for (const word of textWords) {
+      const testLine = line ? line + ' ' + word : word
+      if (ctx.measureText(testLine).width > maxWidth && line) {
+        ctx.fillText(line, width / 2, y)
+        line = word
+        y += lineHeight
+      } else {
+        line = testLine
+      }
+    }
+    if (line) ctx.fillText(line, width / 2, y)
+
+    // CTA at bottom
+    ctx.fillStyle = '#C9A84C'
+    ctx.font = 'bold 44px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('getportalkit.com', width / 2, height * 0.88)
+
+    const framePath = path.join(outputDir, `frame-${String(i).padStart(5, '0')}.png`)
+    const buf = canvas.toBuffer('image/png')
+    fs.writeFileSync(framePath, buf)
+  }
+}
+
+async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
+  if (!ffmpeg) throw new Error('FFmpeg not available')
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg()
+    cmd.input(path.join(framesDir, 'frame-%05d.png'))
+       .inputOptions([`-framerate ${fps}`])
+    if (fs.existsSync(audioPath)) {
+      cmd.input(audioPath)
+    }
+    cmd.outputOptions([
+      '-c:v libx264',
+      '-pix_fmt yuv420p',
+      '-crf 23',
+      '-preset fast',
+      ...(fs.existsSync(audioPath) ? ['-c:a aac', '-shortest'] : [])
+    ])
+    cmd.output(outputPath)
+    cmd.on('end', resolve)
+    cmd.on('error', reject)
+    cmd.run()
+  })
+}
+
+async function generateSocialVideo(script, title, postId) {
+  if (!createCanvas || !ffmpeg) {
+    console.log('🎬 Video deps not ready, skipping')
+    return null
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `video-${Date.now()}`)
+  const framesDir = path.join(tmpDir, 'frames')
+  const audioPath = path.join(tmpDir, 'audio.mp3')
+  const outputPath = path.join(tmpDir, 'output.mp4')
+
+  try {
+    // Insert queued record
+    const { rows } = await pool.query(
+      `INSERT INTO generated_videos (post_id, title, script, status) VALUES ($1, $2, $3, 'rendering') RETURNING id`,
+      [postId || null, title, script]
+    )
+    const videoId = rows[0].id
+
+    const durationSeconds = Math.ceil(script.split(' ').length / 2.5)
+
+    // Generate audio and frames in parallel
+    const [,] = await Promise.all([
+      ELEVENLABS_API_KEY
+        ? generateVoiceAudio(script, audioPath)
+        : Promise.resolve(),
+      generateVideoFrames(script, framesDir, durationSeconds)
+    ])
+
+    await renderVideo(framesDir, audioPath, outputPath)
+
+    // Upload to R2
+    const fileBuffer = fs.readFileSync(outputPath)
+    const r2Key = `videos/${Date.now()}-${videoId}.mp4`
+    await s3.send(new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: r2Key,
+      Body: fileBuffer,
+      ContentType: 'video/mp4'
+    }))
+
+    const r2Url = `${process.env.R2_PUBLIC_URL || ''}/${r2Key}`
+    await pool.query(
+      `UPDATE generated_videos SET status='done', r2_url=$1, completed_at=NOW() WHERE id=$2`,
+      [r2Url, videoId]
+    )
+
+    console.log(`🎬 Video ${videoId} ready: ${r2Key}`)
+    return { videoId, r2Url }
+  } catch (err) {
+    console.error('🎬 Video generation error:', err.message)
+    // Mark error in DB if we have a record
+    try {
+      await pool.query(
+        `UPDATE generated_videos SET status='error', error=$1 WHERE script=$2 AND status='rendering'`,
+        [err.message, script]
+      )
+    } catch {}
+    return null
+  } finally {
+    // Cleanup temp files
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
 async function generateAndScheduleWeeklyContent() {
   if (!anthropic) {
     console.log('⚡ Content engine: no AI key, skipping')
@@ -1847,6 +2062,16 @@ async function generateAndScheduleWeeklyContent() {
       await new Promise(r => setTimeout(r, 1000))
     }
     console.log(`⚡ Content engine: ${posts.length} posts stored`)
+
+    // Queue a background video for the first post
+    if (posts.length > 0) {
+      const firstPost = posts[0]
+      const script = firstPost.twitter_content || firstPost.content.slice(0, 300)
+      const title = `Weekly tip - ${new Date().toISOString().slice(0, 10)}`
+      generateSocialVideo(script, title, null).catch(e =>
+        console.error('🎬 Weekly video error:', e.message)
+      )
+    }
   } catch (err) {
     console.error('⚡ Content engine error:', err.message)
   }
@@ -6344,6 +6569,31 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
       return res.status(500).json({ error: 'Brevo send failed' })
     }
     res.json({ success: true, messageId: result.messageId })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/admin/generate-video — queue a video for a specific post
+app.post('/api/admin/generate-video', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  const { post_id, script, title } = req.body
+  if (!script) return res.status(400).json({ error: 'script required' })
+  res.json({ queued: true })
+  generateSocialVideo(script, title || 'Admin video', post_id || null).catch(e =>
+    console.error('🎬 Admin video error:', e.message)
+  )
+})
+
+// GET /api/admin/generated-videos — list all videos
+app.get('/api/admin/generated-videos', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, post_id, title, status, r2_url, error, created_at, completed_at
+       FROM generated_videos ORDER BY created_at DESC LIMIT 100`
+    )
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

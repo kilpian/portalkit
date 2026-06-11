@@ -1,18 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
+
+type ToastType = 'success' | 'error'
+interface Toast { id: number; msg: string; type: ToastType }
 
 export default function ContentEngine() {
   // ALL hooks first — no exceptions
   const { user } = usePortalAuth()
   const [posts, setPosts] = useState<any[]>([])
   const [leads, setLeads] = useState<any[]>([])
+  const [videos, setVideos] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [activeTab, setActiveTab] = useState('posts')
   const [error, setError] = useState('')
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const toastId = useRef(0)
 
   // Outreach state
   const [outreachStats, setOutreachStats] = useState<any>(null)
@@ -22,7 +28,19 @@ export default function ContentEngine() {
   const [testingEmail, setTestingEmail] = useState('')
   const [testSending, setTestSending] = useState(false)
 
+  // Video state
+  const [videoScript, setVideoScript] = useState('')
+  const [videoTitle, setVideoTitle] = useState('')
+  const [videoGenerating, setVideoGenerating] = useState(false)
+  const videoPolling = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
+
+  const showToast = useCallback((msg: string, type: ToastType = 'success') => {
+    const id = ++toastId.current
+    setToasts(prev => [...prev, { id, msg, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+  }, [])
 
   const fetchPosts = useCallback(async () => {
     setLoading(true)
@@ -62,12 +80,37 @@ export default function ContentEngine() {
     } catch {}
   }, [])
 
+  const fetchVideos = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/generated-videos`, {
+        headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET }
+      })
+      const data = await res.json()
+      setVideos(Array.isArray(data) ? data : [])
+    } catch {}
+  }, [])
+
   useEffect(() => {
     if (!isAdmin) return
     fetchPosts()
     fetchLeads()
     fetchOutreachStats()
-  }, [isAdmin, fetchPosts, fetchLeads, fetchOutreachStats])
+    fetchVideos()
+  }, [isAdmin, fetchPosts, fetchLeads, fetchOutreachStats, fetchVideos])
+
+  // Poll videos while any are rendering
+  useEffect(() => {
+    const hasRendering = videos.some(v => v.status === 'rendering' || v.status === 'queued')
+    if (hasRendering && !videoPolling.current) {
+      videoPolling.current = setInterval(fetchVideos, 8000)
+    } else if (!hasRendering && videoPolling.current) {
+      clearInterval(videoPolling.current)
+      videoPolling.current = null
+    }
+    return () => {
+      if (videoPolling.current) clearInterval(videoPolling.current)
+    }
+  }, [videos, fetchVideos])
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -179,14 +222,42 @@ export default function ContentEngine() {
       )
       const data = await res.json()
       if (data.success) {
-        alert('Test email sent! Check your inbox.')
+        showToast('Test email sent! Check your inbox.')
       } else {
-        alert(data.error || 'Failed to send test')
+        showToast(data.error || 'Failed to send test', 'error')
       }
     } catch {
-      alert('Failed to connect')
+      showToast('Failed to connect', 'error')
     } finally {
       setTestSending(false)
+    }
+  }
+
+  const handleGenerateVideo = async () => {
+    if (!videoScript.trim()) return
+    setVideoGenerating(true)
+    try {
+      const res = await fetch(`${API_URL}/api/admin/generate-video`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
+        },
+        body: JSON.stringify({ script: videoScript, title: videoTitle || undefined })
+      })
+      const data = await res.json()
+      if (data.queued) {
+        showToast('Video queued! Rendering in background.')
+        setVideoScript('')
+        setVideoTitle('')
+        setTimeout(fetchVideos, 2000)
+      } else {
+        showToast(data.error || 'Failed to queue video', 'error')
+      }
+    } catch {
+      showToast('Failed to connect', 'error')
+    } finally {
+      setVideoGenerating(false)
     }
   }
 
@@ -210,11 +281,36 @@ export default function ContentEngine() {
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
+      {/* Toast notifications */}
+      <style>{`
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            padding: '12px 18px',
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            color: 'white',
+            background: t.type === 'error' ? '#DC2626' : '#059669',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+            animation: 'slideUp 0.25s ease',
+            maxWidth: 320
+          }}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
           ⚡ Content Engine
         </h1>
-        {activeTab !== 'outreach' && (
+        {activeTab !== 'outreach' && activeTab !== 'videos' && (
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={handleReddit}
@@ -272,7 +368,6 @@ export default function ContentEngine() {
           </button>
         ))}
         <button
-          key="outreach"
           onClick={() => setActiveTab('outreach')}
           style={{
             padding: '8px 16px', border: 'none', background: 'none',
@@ -284,9 +379,21 @@ export default function ContentEngine() {
           Outreach
         </button>
         <button
+          onClick={() => setActiveTab('videos')}
+          style={{
+            padding: '8px 16px', border: 'none', background: 'none',
+            cursor: 'pointer', fontSize: 14, fontWeight: 600,
+            color: activeTab === 'videos' ? '#1B4332' : 'var(--text-muted)',
+            borderBottom: activeTab === 'videos' ? '2px solid #1B4332' : '2px solid transparent'
+          }}
+        >
+          Videos ({videos.length})
+        </button>
+        <button
           onClick={() => {
             if (activeTab === 'posts') fetchPosts()
             else if (activeTab === 'leads') fetchLeads()
+            else if (activeTab === 'videos') fetchVideos()
             else fetchOutreachStats()
           }}
           style={{ marginLeft: 'auto', padding: '6px 14px', background: 'white', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
@@ -582,6 +689,125 @@ export default function ContentEngine() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Videos tab */}
+      {activeTab === 'videos' && (
+        <div>
+          <div style={{
+            background: 'white', borderRadius: 12,
+            padding: 20, marginBottom: 20,
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>
+              Generate Video
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Renders a 1080x1920 MP4 with voice narration. Requires ElevenLabs + R2 configured in Railway.
+            </p>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
+              Title (optional)
+            </label>
+            <input
+              type="text"
+              value={videoTitle}
+              onChange={e => setVideoTitle(e.target.value)}
+              placeholder="e.g. Why photographers need a client portal"
+              style={{
+                width: '100%', padding: '9px 14px', marginBottom: 10,
+                border: '1px solid var(--border)', borderRadius: 8, fontSize: 13,
+                boxSizing: 'border-box' as const
+              }}
+            />
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
+              Script
+            </label>
+            <textarea
+              value={videoScript}
+              onChange={e => setVideoScript(e.target.value)}
+              placeholder="The hook, the story, the CTA. Keep it under 60 seconds (~150 words)."
+              rows={5}
+              style={{
+                width: '100%', padding: '10px 14px',
+                border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 13, resize: 'vertical' as const,
+                boxSizing: 'border-box' as const
+              }}
+            />
+            <button
+              onClick={handleGenerateVideo}
+              disabled={videoGenerating || !videoScript.trim()}
+              style={{
+                marginTop: 10, background: '#1B4332',
+                color: 'white', border: 'none',
+                padding: '10px 20px', borderRadius: 8,
+                fontSize: 14, fontWeight: 600,
+                cursor: 'pointer',
+                opacity: videoGenerating ? 0.7 : 1
+              }}
+            >
+              {videoGenerating ? 'Queuing...' : '🎬 Generate Video'}
+            </button>
+          </div>
+
+          {videos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+              <p style={{ fontSize: 15 }}>No videos generated yet.</p>
+            </div>
+          ) : (
+            videos.map((v: any) => (
+              <div key={v.id} style={{
+                background: 'white', borderRadius: 10, padding: 16, marginBottom: 12,
+                border: '1px solid var(--border-subtle)',
+                borderLeft: `4px solid ${v.status === 'done' ? '#059669' : v.status === 'error' ? '#DC2626' : '#C9A84C'}`,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                    background: v.status === 'done' ? '#F0FDF4' : v.status === 'error' ? '#FEE2E2' : '#FFFBEB',
+                    color: v.status === 'done' ? '#14532D' : v.status === 'error' ? '#991B1B' : '#92400E',
+                    textTransform: 'uppercase' as const
+                  }}>
+                    {v.status}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {v.title || 'Untitled video'}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                    {new Date(v.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                {v.script && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>
+                    {v.script.length > 200 ? v.script.slice(0, 200) + '...' : v.script}
+                  </p>
+                )}
+                {v.error && (
+                  <p style={{ fontSize: 12, color: '#DC2626', margin: '0 0 8px' }}>Error: {v.error}</p>
+                )}
+                {v.status === 'done' && v.r2_url && (
+                  <a
+                    href={v.r2_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block', fontSize: 12, padding: '5px 12px',
+                      background: '#F0FDF4', border: '1px solid #A7F3D0',
+                      borderRadius: 6, color: '#059669', fontWeight: 600,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    Download MP4
+                  </a>
+                )}
+                {(v.status === 'rendering' || v.status === 'queued') && (
+                  <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
