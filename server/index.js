@@ -68,6 +68,49 @@ if (twitterClient) {
   console.log('🐦 Twitter/X not configured - posts stored only')
 }
 
+const BREVO_API_KEY = process.env.BREVO_API_KEY
+
+async function sendBrevoEmail({ from, to, subject, html }) {
+  if (!BREVO_API_KEY) {
+    console.log('Brevo not configured')
+    return null
+  }
+
+  // from format: "Name <email@domain.com>"
+  const fromMatch = from.match(/^(.+?)\s*<(.+?)>$/)
+  const senderName = fromMatch ? fromMatch[1].trim() : 'PortalKit'
+  const senderEmail = fromMatch ? fromMatch[2].trim() : from
+
+  const response = await fetch(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      method: 'POST',
+      headers: {
+        'api-key': BREVO_API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: to }],
+        replyTo: { email: senderEmail },
+        subject,
+        htmlContent: html
+      })
+    }
+  )
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    console.error('Brevo error:', response.status, data)
+    return null
+  }
+
+  console.log('Brevo sent:', data.messageId)
+  return data
+}
+
 const { Pool } = pkg
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -2013,7 +2056,7 @@ function buildColdEmail(contact) {
 }
 
 async function sendColdOutreach() {
-  if (!resend || !COLD_EMAIL_FROM) {
+  if (!BREVO_API_KEY || !COLD_EMAIL_FROM) {
     console.log('Cold email disabled: COLD_EMAIL_FROM not set')
     return
   }
@@ -2045,13 +2088,22 @@ async function sendColdOutreach() {
       try {
         const { subject, html } = buildColdEmail(contact)
 
-        await resend.emails.send({
+        const result = await sendBrevoEmail({
           from: COLD_EMAIL_FROM,
-          reply_to: COLD_EMAIL_FROM,
           to: contact.email,
           subject,
           html
         })
+
+        if (!result) {
+          await pool.query(
+            `UPDATE cold_contacts SET status='bounced'
+             WHERE id=$1`,
+            [contact.id]
+          )
+          skipped++
+          continue
+        }
 
         await pool.query(
           `UPDATE cold_contacts SET status='sent',
@@ -6273,24 +6325,25 @@ app.post('/api/admin/cold-suppression', async (req, res) => {
 
 app.post('/api/admin/cold-send-test', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  if (!COLD_EMAIL_FROM) {
-    return res.status(400).json({ error: 'COLD_EMAIL_FROM not configured' })
-  }
-  if (!resend) {
-    return res.status(400).json({ error: 'Resend not configured' })
+  if (!BREVO_API_KEY || !COLD_EMAIL_FROM) {
+    return res.status(400).json({
+      error: 'BREVO_API_KEY or COLD_EMAIL_FROM not set in Railway'
+    })
   }
   try {
     const to = (req.body.email || '').trim()
     if (!to || !to.includes('@')) return res.status(400).json({ error: 'email required' })
-    const { subject, html } = buildColdEmail({ email: to, first_name: null, business_name: null })
-    const result = await resend.emails.send({
+    const { subject, html } = buildColdEmail({ email: to, first_name: 'Test', business_name: 'Test Studio' })
+    const result = await sendBrevoEmail({
       from: COLD_EMAIL_FROM,
-      reply_to: COLD_EMAIL_FROM,
       to,
       subject: '[TEST] ' + subject,
-      html,
+      html
     })
-    res.json({ success: true, id: result.id })
+    if (!result) {
+      return res.status(500).json({ error: 'Brevo send failed' })
+    }
+    res.json({ success: true, messageId: result.messageId })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
