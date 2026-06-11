@@ -1982,23 +1982,33 @@ async function generateSocialVideo(script, title, postId) {
     await renderVideo(framesDir, audioResult ? audioPath : null, outputPath)
 
     // Upload to R2
-    const fileBuffer = fs.readFileSync(outputPath)
-    const r2Key = `videos/${Date.now()}-${videoId}.mp4`
-    await s3.send(new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: r2Key,
-      Body: fileBuffer,
-      ContentType: 'video/mp4'
-    }))
+    const videoBuffer = fs.readFileSync(outputPath)
+    const videoKey = `videos/${Date.now()}-${videoId}.mp4`
 
-    const r2Url = `${process.env.R2_PUBLIC_URL || ''}/${r2Key}`
+    if (r2 && fs.existsSync(outputPath)) {
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: videoKey,
+        Body: videoBuffer,
+        ContentType: 'video/mp4'
+      }))
+    }
+
+    if (!process.env.R2_PUBLIC_URL) {
+      console.log('🎬 R2_PUBLIC_URL not set - video rendered but URL unavailable')
+    }
+
+    const videoUrl = process.env.R2_PUBLIC_URL
+      ? `${process.env.R2_PUBLIC_URL}/${videoKey}`
+      : null
+
     await pool.query(
       `UPDATE generated_videos SET status='done', r2_url=$1, completed_at=NOW() WHERE id=$2`,
-      [r2Url, videoId]
+      [videoUrl, videoId]
     )
 
-    console.log(`🎬 Video ${videoId} ready: ${r2Key}`)
-    return { videoId, r2Url }
+    console.log(`🎬 Video ${videoId} ready: ${videoKey}`)
+    return { videoId, r2Url: videoUrl }
   } catch (err) {
     console.error('🎬 Video generation error:', err.message)
     // Mark error in DB if we have a record
@@ -2407,12 +2417,13 @@ async function findPhotographerEmails(city, state) {
     console.log(`Finding photographers in ${city}, ${state}`)
 
     const query = encodeURIComponent('wedding photographer')
-    const near = encodeURIComponent(`${city}, ${state}`)
+    const near = encodeURIComponent(`${city}, ${state}, USA`)
 
     const searchRes = await fetch(
       `https://api.foursquare.com/v3/places/search` +
-      `?query=${query}&near=${near}&limit=50` +
-      `&categories=11134`,
+      `?query=${query}` +
+      `&near=${near}` +
+      `&limit=50`,
       {
         headers: {
           'Authorization': FOURSQUARE_API_KEY,
@@ -2428,6 +2439,14 @@ async function findPhotographerEmails(city, state) {
     }
 
     const searchData = await searchRes.json()
+    console.log('Foursquare response status:', searchRes.status)
+    console.log('Foursquare results count:', searchData.results?.length || 0)
+    console.log('Foursquare error if any:', searchData.message || 'none')
+
+    if (!searchData.results?.length) {
+      console.log('Full Foursquare response:', JSON.stringify(searchData).slice(0, 500))
+    }
+
     const places = searchData.results || []
 
     console.log(`Foursquare found ${places.length} photographers`)

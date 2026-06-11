@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
+import ConfirmModal from '../../components/ConfirmModal'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
@@ -39,6 +40,7 @@ export default function ContentEngine() {
   const [videoTitle, setVideoTitle] = useState('')
   const [videoGenerating, setVideoGenerating] = useState(false)
   const videoPolling = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [deleteVideoId, setDeleteVideoId] = useState<number | null>(null)
 
   const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
 
@@ -798,6 +800,18 @@ export default function ContentEngine() {
       {/* Videos tab */}
       {activeTab === 'videos' && (
         <div>
+          <ConfirmModal
+            open={deleteVideoId !== null}
+            title="Delete this video"
+            message="This will permanently remove the video record. This cannot be undone."
+            confirmLabel="Delete Video"
+            danger={true}
+            onConfirm={async () => {
+              if (deleteVideoId !== null) await handleDeleteVideo(deleteVideoId)
+              setDeleteVideoId(null)
+            }}
+            onCancel={() => setDeleteVideoId(null)}
+          />
           <div style={{
             background: 'white', borderRadius: 12,
             padding: 20, marginBottom: 20,
@@ -911,7 +925,7 @@ export default function ContentEngine() {
                   )}
                   {(v.status === 'error' || v.status === 'done') && (
                     <button
-                      onClick={() => handleDeleteVideo(v.id)}
+                      onClick={() => setDeleteVideoId(v.id)}
                       style={{
                         fontSize: 12, padding: '4px 10px',
                         border: '1px solid #FCA5A5',
