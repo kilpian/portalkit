@@ -92,6 +92,9 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
+const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY
+const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX
+
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
 async function sendBrevoEmail({ from, to, subject, html }) {
@@ -2360,6 +2363,172 @@ async function sendColdOutreach() {
   }
 }
 
+async function findPhotographerEmails(city, state = 'USA', count = 20) {
+  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
+    console.log('Google Search not configured')
+    return []
+  }
+
+  try {
+    const query = encodeURIComponent(
+      `wedding photographer ${city} ${state} contact email`
+    )
+
+    const results = []
+
+    // Google CSE returns max 10 per page
+    for (let start = 1; start <= 2; start += 10) {
+      const searchRes = await fetch(
+        `https://customsearch.googleapis.com/customsearch/v1` +
+        `?key=${GOOGLE_SEARCH_API_KEY}` +
+        `&cx=${GOOGLE_SEARCH_CX}` +
+        `&q=${query}` +
+        `&num=10` +
+        `&start=${start}`
+      )
+
+      if (!searchRes.ok) {
+        const err = await searchRes.json()
+        console.error('Google CSE error:', err?.error?.message)
+        break
+      }
+
+      const data = await searchRes.json()
+      const items = data.items || []
+      results.push(...items)
+
+      if (items.length < 10) break
+
+      // Respect rate limits
+      await new Promise(r => setTimeout(r, 1000))
+    }
+
+    console.log(
+      `Google CSE found ${results.length} sites for ${city}`
+    )
+
+    const foundEmails = []
+
+    for (const result of results.slice(0, 12)) {
+      try {
+        const siteRes = await fetch(result.link, {
+          signal: AbortSignal.timeout(6000),
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
+              'AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
+          }
+        })
+
+        if (!siteRes.ok) continue
+
+        const html = await siteRes.text()
+
+        // Extract emails
+        const emailRegex =
+          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+        const rawEmails = html.match(emailRegex) || []
+
+        const filtered = rawEmails.filter(email => {
+          const lower = email.toLowerCase()
+          return !lower.includes('example')
+            && !lower.includes('sentry')
+            && !lower.includes('google')
+            && !lower.includes('schema')
+            && !lower.includes('w3.org')
+            && !lower.includes('adobe')
+            && !lower.includes('@2x')
+            && !lower.includes('.png')
+            && !lower.includes('.jpg')
+            && !lower.includes('.gif')
+            && !lower.includes('wordpress')
+            && email.length < 60
+            && email.length > 6
+        })
+
+        // Get business name
+        const titleMatch = html.match(
+          /<title[^>]*>([^<]+)<\/title>/i
+        )
+        const businessName = titleMatch
+          ? titleMatch[1]
+              .replace(/\s*[-|–].*$/, '')
+              .replace(/\s*\|.*$/, '')
+              .trim()
+              .slice(0, 80)
+          : result.title || ''
+
+        // Try to get first name from meta
+        const authorMatch = html.match(
+          /name=["']author["'][^>]+content=["']([^"']+)/i
+        )
+        const firstName = authorMatch
+          ? authorMatch[1].split(' ')[0].trim()
+          : ''
+
+        const uniqueEmails = [...new Set(filtered)]
+
+        for (const email of uniqueEmails.slice(0, 2)) {
+          foundEmails.push({
+            email: email.toLowerCase().trim(),
+            business_name: businessName,
+            first_name: firstName,
+            note: `${city}, ${state} — via Google search`
+          })
+        }
+
+        await new Promise(r => setTimeout(r, 800))
+
+      } catch {
+        continue
+      }
+    }
+
+    // Deduplicate
+    const seen = new Set()
+    const unique = foundEmails.filter(c => {
+      if (seen.has(c.email)) return false
+      seen.add(c.email)
+      return true
+    })
+
+    console.log(
+      `Found ${unique.length} unique emails in ${city}`
+    )
+    return unique
+
+  } catch (err) {
+    console.error('Email finder error:', err.message)
+    return []
+  }
+}
+
+async function importFoundEmails(emails) {
+  let added = 0
+  let skipped = 0
+  for (const contact of emails) {
+    try {
+      const result = await pool.query(
+        `INSERT INTO cold_contacts
+           (email, first_name, business_name, status, note)
+         VALUES ($1, $2, $3, 'queued', $4)
+         ON CONFLICT (email) DO NOTHING`,
+        [
+          contact.email,
+          contact.first_name || null,
+          contact.business_name || null,
+          contact.note || null
+        ]
+      )
+      if (result.rowCount > 0) added++
+      else skipped++
+    } catch {
+      skipped++
+    }
+  }
+  return { added, skipped }
+}
+
 async function runDailyJobs() {
   const now = new Date()
   const hour = now.getUTCHours()
@@ -2376,6 +2545,24 @@ async function runDailyJobs() {
   }
   if (day === 3 && hour === 9) {
     await monitorRedditAndGenerateContent().catch(e => console.error('Reddit monitor error:', e.message))
+  }
+  const isSunday = day === 0
+  const isAutoFillHour = hour === 6
+  if (isSunday && isAutoFillHour && GOOGLE_SEARCH_API_KEY && GOOGLE_SEARCH_CX) {
+    const targetCities = [
+      { city: 'Austin', state: 'TX' },
+      { city: 'Nashville', state: 'TN' },
+      { city: 'Denver', state: 'CO' },
+      { city: 'Charlotte', state: 'NC' },
+      { city: 'Portland', state: 'OR' },
+    ]
+    for (const { city, state } of targetCities) {
+      const emails = await findPhotographerEmails(city, state, 20)
+        .catch(e => { console.error('Auto-finder error:', e.message); return [] })
+      const result = await importFoundEmails(emails)
+      console.log(`Auto-finder ${city}: +${result.added} contacts`)
+      await new Promise(r => setTimeout(r, 3000))
+    }
   }
 }
 
@@ -6569,6 +6756,23 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
       return res.status(500).json({ error: 'Brevo send failed' })
     }
     res.json({ success: true, messageId: result.messageId })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/admin/find-emails — search Google CSE for photographer emails and import them
+app.post('/api/admin/find-emails', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  const { city, state = 'USA', count = 20 } = req.body
+  if (!city) return res.status(400).json({ error: 'city required' })
+  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
+    return res.status(503).json({ error: 'GOOGLE_SEARCH_API_KEY / GOOGLE_SEARCH_CX not configured' })
+  }
+  try {
+    const emails = await findPhotographerEmails(city, state, count)
+    const { added, skipped } = await importFoundEmails(emails)
+    res.json({ found: emails.length, added, skipped })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

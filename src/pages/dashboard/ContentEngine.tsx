@@ -28,6 +28,12 @@ export default function ContentEngine() {
   const [testingEmail, setTestingEmail] = useState('')
   const [testSending, setTestSending] = useState(false)
 
+  // City search state
+  const [searchCity, setSearchCity] = useState('')
+  const [searchState, setSearchState] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchResult, setSearchResult] = useState<any>(null)
+
   // Video state
   const [videoScript, setVideoScript] = useState('')
   const [videoTitle, setVideoTitle] = useState('')
@@ -202,6 +208,33 @@ export default function ContentEngine() {
       setImportResult({ error: 'Import failed' })
     } finally {
       setImporting(false)
+    }
+  }
+
+  const handleFindEmails = async () => {
+    if (!searchCity.trim()) return
+    setSearching(true)
+    setSearchResult(null)
+    try {
+      const res = await fetch(`${API_URL}/api/admin/find-emails`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
+        },
+        body: JSON.stringify({ city: searchCity, state: searchState || 'USA' })
+      })
+      const data = await res.json()
+      if (data.error) {
+        showToast(data.error, 'error')
+      } else {
+        setSearchResult(data)
+        fetchOutreachStats()
+      }
+    } catch {
+      showToast('Failed to connect', 'error')
+    } finally {
+      setSearching(false)
     }
   }
 
@@ -582,6 +615,63 @@ export default function ContentEngine() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div style={{
+            background: 'white', borderRadius: 12,
+            padding: 20, marginBottom: 20,
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>
+              Find Photographers by City
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Uses Google Custom Search to scrape photographer websites and extract contact emails. Requires GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX in Railway.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input
+                type="text"
+                value={searchCity}
+                onChange={e => setSearchCity(e.target.value)}
+                placeholder="City (e.g. Austin)"
+                style={{
+                  flex: 2, padding: '9px 14px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, fontSize: 13
+                }}
+              />
+              <input
+                type="text"
+                value={searchState}
+                onChange={e => setSearchState(e.target.value)}
+                placeholder="State (e.g. TX)"
+                style={{
+                  flex: 1, padding: '9px 14px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, fontSize: 13
+                }}
+              />
+              <button
+                onClick={handleFindEmails}
+                disabled={searching || !searchCity.trim()}
+                style={{
+                  background: '#1B4332', color: 'white', border: 'none',
+                  padding: '9px 16px', borderRadius: 8, fontSize: 14,
+                  fontWeight: 600, cursor: 'pointer',
+                  opacity: searching ? 0.7 : 1, whiteSpace: 'nowrap' as const
+                }}
+              >
+                {searching ? 'Searching...' : 'Find & Import'}
+              </button>
+            </div>
+            {searchResult && (
+              <div style={{
+                padding: '10px 14px', background: '#F0FDF4',
+                border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13
+              }}>
+                Found {searchResult.found} emails. Added {searchResult.added} new contacts, skipped {searchResult.skipped} duplicates.
+              </div>
+            )}
           </div>
 
           <div style={{
