@@ -1823,23 +1823,39 @@ async function postToX(content) {
 }
 
 async function generateVoiceAudio(text, outputPath) {
-  if (!ELEVENLABS_API_KEY) throw new Error('ElevenLabs not configured')
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': ELEVENLABS_API_KEY,
-      'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg'
-    },
-    body: JSON.stringify({
-      text,
-      model_id: 'eleven_monolingual_v1',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-    })
-  })
-  if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`)
-  const buffer = Buffer.from(await res.arrayBuffer())
-  fs.writeFileSync(outputPath, buffer)
+  if (!ELEVENLABS_API_KEY) {
+    console.log('🎬 ElevenLabs not configured - silent video')
+    return null
+  }
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg'
+        },
+        body: JSON.stringify({
+          text: text.slice(0, 800),
+          model_id: 'eleven_turbo_v2',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        })
+      }
+    )
+    if (!response.ok) {
+      console.log('🎬 ElevenLabs error:', response.status, '- generating silent video instead')
+      return null
+    }
+    const buffer = await response.arrayBuffer()
+    fs.writeFileSync(outputPath, Buffer.from(buffer))
+    console.log('🎬 Audio generated:', outputPath)
+    return outputPath
+  } catch (err) {
+    console.log('🎬 Audio failed:', err.message, '- silent video instead')
+    return null
+  }
 }
 
 async function generateVideoFrames(text, outputDir, durationSeconds) {
@@ -1955,15 +1971,13 @@ async function generateSocialVideo(script, title, postId) {
 
     const durationSeconds = Math.ceil(script.split(' ').length / 2.5)
 
-    // Generate audio and frames in parallel
-    const [,] = await Promise.all([
-      ELEVENLABS_API_KEY
-        ? generateVoiceAudio(script, audioPath)
-        : Promise.resolve(),
+    // Generate audio (optional) and frames in parallel
+    const [audioResult] = await Promise.all([
+      generateVoiceAudio(script, audioPath),
       generateVideoFrames(script, framesDir, durationSeconds)
     ])
 
-    await renderVideo(framesDir, audioPath, outputPath)
+    await renderVideo(framesDir, audioResult ? audioPath : null, outputPath)
 
     // Upload to R2
     const fileBuffer = fs.readFileSync(outputPath)
@@ -2384,181 +2398,217 @@ const US_CITIES = [
 async function findPhotographerEmails(city, state) {
   try {
     const citySlug = city.toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
 
     const stateSlug = (state || 'us').toLowerCase()
-      .replace(/[^a-z]+/g, '')
       .slice(0, 2)
 
-    const url = `https://www.theknot.com/marketplace/` +
-      `wedding-photographers-${citySlug}-${stateSlug}`
+    console.log(`Scraping photographers in ${city}, ${state}`)
 
-    console.log('Scraping The Knot:', url)
+    const photographerSites = []
 
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(10000),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
-          'Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-          'Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,' +
-          'application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
-      }
-    })
+    // SOURCE 1: WeddingWire directory
+    const wwUrl = `https://www.weddingwire.com/` +
+      `wedding-photographers/${citySlug}--${stateSlug}`
 
-    if (!res.ok) {
-      console.error('The Knot fetch failed:', res.status)
-      return []
-    }
+    try {
+      const wwRes = await fetch(wwUrl, {
+        signal: AbortSignal.timeout(10000),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
+            'Intel Mac OS X 10_15_7) ' +
+            'AppleWebKit/537.36 Chrome/120.0.0.0 ' +
+            'Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      })
 
-    const html = await res.text()
+      if (wwRes.ok) {
+        const wwHtml = await wwRes.text()
 
-    // Extract vendor profile URLs from The Knot listing
-    const profileRegex = /href="(\/marketplace\/[^"]+)"/g
-    const profileUrls = []
-    let match
-
-    while ((match = profileRegex.exec(html)) !== null) {
-      const path = match[1]
-      if (path.includes('/marketplace/') &&
-          !path.includes('?') &&
-          path.split('/').length === 3 &&
-          !profileUrls.includes(path)) {
-        profileUrls.push(path)
-      }
-    }
-
-    console.log(
-      `Found ${profileUrls.length} profiles in ${city}`
-    )
-
-    const foundEmails = []
-
-    // Visit each profile to get their website
-    for (const profilePath of profileUrls.slice(0, 15)) {
-      try {
-        await new Promise(r => setTimeout(r, 800))
-
-        const profileRes = await fetch(
-          `https://www.theknot.com${profilePath}`,
-          {
-            signal: AbortSignal.timeout(8000),
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
-                'Intel Mac OS X 10_15_7) ' +
-                'AppleWebKit/537.36 Chrome/120.0.0.0 ' +
-                'Safari/537.36'
-            }
+        const vendorLinks = []
+        const linkRegex = /href="(\/wedding-photography\/[^"?#]+)"/g
+        let m
+        while ((m = linkRegex.exec(wwHtml)) !== null) {
+          if (!vendorLinks.includes(m[1])) {
+            vendorLinks.push(m[1])
           }
-        )
-
-        if (!profileRes.ok) continue
-
-        const profileHtml = await profileRes.text()
-
-        // Extract business name
-        const nameMatch = profileHtml.match(
-          /<h1[^>]*>([^<]+)<\/h1>/i
-        )
-        const businessName = nameMatch
-          ? nameMatch[1].trim().slice(0, 80)
-          : ''
-
-        // Extract website URL from profile
-        const websiteMatch = profileHtml.match(
-          /href="(https?:\/\/(?!www\.theknot\.com)[^"]+)"[^>]*>\s*(?:Visit Website|website|Website)\s*/i
-        )
-
-        // Also look for email directly on profile
-        const emailRegex =
-          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-        const profileEmails = profileHtml.match(emailRegex) || []
-
-        const cleanEmails = profileEmails.filter(e => {
-          const l = e.toLowerCase()
-          return !l.includes('theknot')
-            && !l.includes('example')
-            && !l.includes('sentry')
-            && !l.includes('google')
-            && !l.includes('schema')
-            && !l.includes('.png')
-            && !l.includes('.jpg')
-            && e.length < 60
-        })
-
-        if (cleanEmails.length) {
-          for (const email of cleanEmails.slice(0, 1)) {
-            foundEmails.push({
-              email: email.toLowerCase().trim(),
-              business_name: businessName,
-              first_name: '',
-              note: `${city} via The Knot`
-            })
-          }
-          continue
         }
 
-        // If no email on profile, visit their website
-        if (websiteMatch?.[1]) {
+        console.log(`WeddingWire: ${vendorLinks.length} profiles`)
+
+        for (const link of vendorLinks.slice(0, 15)) {
           try {
-            await new Promise(r => setTimeout(r, 600))
+            await new Promise(r => setTimeout(r, 700))
 
-            const siteRes = await fetch(websiteMatch[1], {
-              signal: AbortSignal.timeout(6000),
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
-                  'Intel Mac OS X 10_15_7) ' +
-                  'AppleWebKit/537.36 Chrome/120.0.0.0'
+            const vendorRes = await fetch(
+              `https://www.weddingwire.com${link}`,
+              {
+                signal: AbortSignal.timeout(8000),
+                headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Chrome/120.0.0.0' }
               }
-            })
+            )
 
-            if (!siteRes.ok) continue
+            if (!vendorRes.ok) continue
 
-            const siteHtml = await siteRes.text()
-            const siteEmails = siteHtml.match(emailRegex) || []
+            const vendorHtml = await vendorRes.text()
 
-            const cleanSiteEmails = siteEmails.filter(e => {
+            const nameMatch = vendorHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+            const businessName = nameMatch ? nameMatch[1].trim().slice(0, 80) : ''
+
+            const websiteMatch = vendorHtml.match(
+              /href="(https?:\/\/(?!www\.weddingwire)[^"]+)"[^>]*>(?:Website|Visit)[^<]*<\/a>/i
+            )
+
+            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+            const vendorEmails = vendorHtml.match(emailRegex) || []
+
+            const cleanEmails = vendorEmails.filter(e => {
               const l = e.toLowerCase()
-              return !l.includes('example')
+              return !l.includes('weddingwire')
+                && !l.includes('xo')
+                && !l.includes('example')
                 && !l.includes('sentry')
                 && !l.includes('google')
-                && !l.includes('schema')
-                && !l.includes('wordpress')
                 && !l.includes('.png')
                 && !l.includes('.jpg')
                 && e.length < 60
                 && e.length > 6
             })
 
-            if (cleanSiteEmails.length) {
-              foundEmails.push({
-                email: cleanSiteEmails[0].toLowerCase().trim(),
+            if (cleanEmails.length) {
+              photographerSites.push({
+                email: cleanEmails[0].toLowerCase(),
                 business_name: businessName,
                 first_name: '',
-                note: `${city} via The Knot website`
+                note: `${city}, ${state} via WeddingWire`
               })
+              continue
             }
+
+            if (websiteMatch?.[1]) {
+              try {
+                await new Promise(r => setTimeout(r, 500))
+                const siteRes = await fetch(websiteMatch[1], {
+                  signal: AbortSignal.timeout(6000),
+                  headers: { 'User-Agent': 'Mozilla/5.0' }
+                })
+                if (!siteRes.ok) continue
+
+                const siteHtml = await siteRes.text()
+                const siteEmails = (siteHtml.match(emailRegex) || []).filter(e => {
+                  const l = e.toLowerCase()
+                  return !l.includes('example')
+                    && !l.includes('sentry')
+                    && !l.includes('schema')
+                    && !l.includes('wordpress')
+                    && !l.includes('.png')
+                    && !l.includes('.jpg')
+                    && e.length < 60
+                    && e.length > 6
+                })
+
+                if (siteEmails.length) {
+                  photographerSites.push({
+                    email: siteEmails[0].toLowerCase(),
+                    business_name: businessName,
+                    first_name: '',
+                    note: `${city}, ${state} via WeddingWire`
+                  })
+                }
+              } catch { continue }
+            }
+
           } catch { continue }
         }
-
-      } catch { continue }
+      }
+    } catch (err) {
+      console.log('WeddingWire fetch error:', err.message)
     }
 
-    // Deduplicate
+    // SOURCE 2: Zola vendor directory
+    try {
+      const zolaUrl = `https://www.zola.com/` +
+        `wedding-vendors/wedding-photographers/` +
+        `${stateSlug}/${citySlug}`
+
+      const zolaRes = await fetch(zolaUrl, {
+        signal: AbortSignal.timeout(8000),
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Chrome/120.0' }
+      })
+
+      if (zolaRes.ok) {
+        const zolaHtml = await zolaRes.text()
+
+        const zolaLinks = []
+        const zolaRegex = /href="(\/wedding-vendors\/[^"?#]+-photographer[^"?#]*)"/gi
+        let zm
+        while ((zm = zolaRegex.exec(zolaHtml)) !== null) {
+          if (!zolaLinks.includes(zm[1]) && zm[1].split('/').length > 3) {
+            zolaLinks.push(zm[1])
+          }
+        }
+
+        console.log(`Zola: ${zolaLinks.length} profiles`)
+
+        for (const link of zolaLinks.slice(0, 10)) {
+          try {
+            await new Promise(r => setTimeout(r, 600))
+
+            const vendorRes = await fetch(
+              `https://www.zola.com${link}`,
+              {
+                signal: AbortSignal.timeout(7000),
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+              }
+            )
+
+            if (!vendorRes.ok) continue
+
+            const vendorHtml = await vendorRes.text()
+            const nameMatch = vendorHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+            const businessName = nameMatch ? nameMatch[1].trim() : ''
+
+            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+            const emails = (vendorHtml.match(emailRegex) || []).filter(e => {
+              const l = e.toLowerCase()
+              return !l.includes('zola')
+                && !l.includes('example')
+                && !l.includes('sentry')
+                && !l.includes('.png')
+                && !l.includes('.jpg')
+                && e.length < 60
+                && e.length > 6
+            })
+
+            if (emails.length) {
+              photographerSites.push({
+                email: emails[0].toLowerCase(),
+                business_name: businessName,
+                first_name: '',
+                note: `${city}, ${state} via Zola`
+              })
+            }
+
+          } catch { continue }
+        }
+      }
+    } catch (err) {
+      console.log('Zola fetch error:', err.message)
+    }
+
+    // Deduplicate by email
     const seen = new Set()
-    const unique = foundEmails.filter(c => {
-      if (seen.has(c.email)) return false
-      seen.add(c.email)
+    const unique = photographerSites.filter(c => {
+      const email = c.email?.trim()
+      if (!email || seen.has(email)) return false
+      seen.add(email)
       return true
     })
 
-    console.log(
-      `Found ${unique.length} emails for ${city}`
-    )
+    console.log(`Total unique emails found in ${city}: ${unique.length}`)
     return unique
 
   } catch (err) {
