@@ -92,7 +92,7 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
-const FOURSQUARE_API_KEY = process.env.FOURSQUARE_API_KEY
+const YELP_API_KEY = process.env.YELP_API_KEY
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
@@ -1990,11 +1990,25 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
 
 async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
   if (!ffmpeg) throw new Error('FFmpeg not available')
+
+  const frameFiles = fs.readdirSync(framesDir)
+    .filter(f => f.endsWith('.png'))
+    .sort()
+  console.log('🎬 Frames to render:', frameFiles.length,
+    'first:', frameFiles[0], 'last:', frameFiles[frameFiles.length - 1])
+  if (frameFiles.length === 0) {
+    throw new Error('No frames found in ' + framesDir)
+  }
+
+  const hasAudio = !!(audioPath && fs.existsSync(audioPath))
+
   return new Promise((resolve, reject) => {
+    const globPattern = path.join(framesDir, 'frame_*.png')
     const cmd = ffmpeg()
-    cmd.input(path.join(framesDir, 'frame-%05d.png'))
-       .inputOptions([`-framerate ${fps}`])
-    if (fs.existsSync(audioPath)) {
+    cmd.input(globPattern)
+       .inputOption('-pattern_type glob')
+       .inputFPS(fps)
+    if (hasAudio) {
       cmd.input(audioPath)
     }
     cmd.outputOptions([
@@ -2002,7 +2016,7 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
       '-pix_fmt yuv420p',
       '-crf 23',
       '-preset fast',
-      ...(fs.existsSync(audioPath) ? ['-c:a aac', '-shortest'] : [])
+      ...(hasAudio ? ['-c:a aac', '-shortest'] : [])
     ])
     cmd.output(outputPath)
     cmd.on('end', resolve)
@@ -2467,69 +2481,52 @@ const US_CITIES = [
 ]
 
 async function findPhotographerEmails(city, state) {
-  if (!FOURSQUARE_API_KEY) {
-    console.log('Foursquare not configured')
+  if (!YELP_API_KEY) {
+    console.log('Yelp API not configured')
     return []
   }
 
   try {
     console.log(`Finding photographers in ${city}, ${state}`)
 
-    const query = encodeURIComponent('wedding photographer')
-    const near = encodeURIComponent(`${city}, ${state}, USA`)
-
-    console.log('Foursquare key starts with:', FOURSQUARE_API_KEY?.slice(0, 4))
-    if (!FOURSQUARE_API_KEY?.startsWith('fsq3')) {
-      console.warn('WARNING: Foursquare key should start with fsq3 - check Railway env var')
-    }
+    const location = encodeURIComponent(`${city}, ${state}`)
 
     const searchRes = await fetch(
-      `https://api.foursquare.com/v3/places/search` +
-      `?query=${query}` +
-      `&near=${near}` +
+      `https://api.yelp.com/v3/businesses/search` +
+      `?term=wedding+photographer` +
+      `&location=${location}` +
+      `&categories=photographers` +
       `&limit=50`,
       {
         headers: {
-          'Authorization': FOURSQUARE_API_KEY,
-          'Accept': 'application/json',
-          'X-Places-Api-Version': '20240101'
+          'Authorization': `Bearer ${YELP_API_KEY}`,
+          'Accept': 'application/json'
         }
       }
     )
 
     if (!searchRes.ok) {
       const err = await searchRes.text()
-      console.error('Foursquare error:', searchRes.status, err)
+      console.error('Yelp error:', searchRes.status, err)
       return []
     }
 
     const searchData = await searchRes.json()
-    console.log('Foursquare response status:', searchRes.status)
-    console.log('Foursquare results count:', searchData.results?.length || 0)
-    console.log('Foursquare error if any:', searchData.message || 'none')
+    const businesses = searchData.businesses || []
 
-    if (!searchData.results?.length) {
-      console.log('Full Foursquare response:', JSON.stringify(searchData).slice(0, 500))
-    }
-
-    const places = searchData.results || []
-
-    console.log(`Foursquare found ${places.length} photographers`)
+    console.log(`Yelp found ${businesses.length} businesses`)
 
     const foundEmails = []
 
-    for (const place of places) {
+    for (const biz of businesses) {
       try {
         await new Promise(r => setTimeout(r, 400))
 
         const detailRes = await fetch(
-          `https://api.foursquare.com/v3/places/${place.fsq_id}` +
-          `?fields=name,website,social_media`,
+          `https://api.yelp.com/v3/businesses/${biz.id}`,
           {
             headers: {
-              'Authorization': FOURSQUARE_API_KEY,
-              'Accept': 'application/json',
-              'X-Places-Api-Version': '20240101'
+              'Authorization': `Bearer ${YELP_API_KEY}`
             }
           }
         )
@@ -2537,17 +2534,20 @@ async function findPhotographerEmails(city, state) {
         if (!detailRes.ok) continue
 
         const detail = await detailRes.json()
-        const businessName = detail.name || place.name || ''
-        const websiteUrl = detail.website
+        const businessName = biz.name || ''
+        const targetUrl = detail.website || null
 
-        if (!websiteUrl) continue
+        if (!targetUrl) {
+          console.log(`No website for ${businessName}`)
+          continue
+        }
 
-        console.log(`Scraping: ${businessName}`)
+        console.log(`Scraping: ${businessName} - ${targetUrl}`)
 
         try {
-          await new Promise(r => setTimeout(r, 500))
+          await new Promise(r => setTimeout(r, 600))
 
-          const siteRes = await fetch(websiteUrl, {
+          const siteRes = await fetch(targetUrl, {
             signal: AbortSignal.timeout(7000),
             headers: {
               'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
@@ -2566,14 +2566,14 @@ async function findPhotographerEmails(city, state) {
 
           if (!emails.length) {
             try {
-              const baseUrl = new URL(websiteUrl).origin
-              const contactRes = await fetch(`${baseUrl}/contact`, {
+              const base = new URL(targetUrl).origin
+              const cRes = await fetch(`${base}/contact`, {
                 signal: AbortSignal.timeout(5000),
                 headers: { 'User-Agent': 'Mozilla/5.0' }
               })
-              if (contactRes.ok) {
-                const contactHtml = await contactRes.text()
-                emails = contactHtml.match(emailRegex) || []
+              if (cRes.ok) {
+                const cHtml = await cRes.text()
+                emails = cHtml.match(emailRegex) || []
               }
             } catch {}
           }
@@ -2586,6 +2586,7 @@ async function findPhotographerEmails(city, state) {
               && !l.includes('schema')
               && !l.includes('wordpress')
               && !l.includes('wix')
+              && !l.includes('yelp')
               && !l.includes('squarespace')
               && !l.includes('jquery')
               && !l.includes('@2x')
@@ -2604,9 +2605,9 @@ async function findPhotographerEmails(city, state) {
               email: email.toLowerCase().trim(),
               business_name: businessName,
               first_name: firstName,
-              note: `${city}, ${state} via Foursquare`
+              note: `${city}, ${state} via Yelp`
             })
-            console.log(`Found: ${email} (${businessName})`)
+            console.log(`✓ Found: ${email} (${businessName})`)
           }
 
         } catch (siteErr) {
@@ -2614,7 +2615,7 @@ async function findPhotographerEmails(city, state) {
         }
 
       } catch (err) {
-        console.log('Place detail error:', err.message)
+        console.log('Business detail error:', err.message)
       }
     }
 
@@ -2679,7 +2680,7 @@ async function runDailyJobs() {
   }
   const isSunday = day === 0
   const isAutoFillHour = hour === 6
-  if (isSunday && isAutoFillHour && FOURSQUARE_API_KEY) {
+  if (isSunday && isAutoFillHour && YELP_API_KEY) {
     const { rows: queuedRows } = await pool.query(
       `SELECT COUNT(*) FROM cold_contacts WHERE status='queued'`
     ).catch(() => ({ rows: [{ count: '999' }] }))
@@ -2694,8 +2695,7 @@ async function runDailyJobs() {
   }
 }
 
-runDailyJobs()
-setInterval(runDailyJobs, 60 * 60 * 1000)
+// runDailyJobs is started in startServer() after initDb() completes
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization
@@ -6889,13 +6889,13 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
   }
 })
 
-// POST /api/admin/find-emails — Foursquare + website scrape for photographer emails
+// POST /api/admin/find-emails — Yelp + website scrape for photographer emails
 app.post('/api/admin/find-emails', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { city, state } = req.body
   if (!city) return res.status(400).json({ error: 'city required' })
-  if (!FOURSQUARE_API_KEY) {
-    return res.status(400).json({ error: 'FOURSQUARE_API_KEY not set in Railway' })
+  if (!YELP_API_KEY) {
+    return res.status(400).json({ error: 'YELP_API_KEY not set in Railway' })
   }
   try {
     const emails = await findPhotographerEmails(city, state)
@@ -6951,6 +6951,11 @@ async function startServer() {
   console.log('🤖 Anthropic configured:', !!process.env.ANTHROPIC_API_KEY)
   await initDb()
   console.log('DB init complete, starting HTTP listener...')
+
+  // Start cron jobs only after tables are guaranteed to exist
+  runDailyJobs()
+  setInterval(runDailyJobs, 60 * 60 * 1000)
+
   const server = app.listen(PORT, () => {
     console.log(`🚀 PortalKit server running on http://localhost:${PORT}`)
   })
