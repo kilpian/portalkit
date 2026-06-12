@@ -92,8 +92,6 @@ let ffmpeg = null
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
 
-const YELP_API_KEY = process.env.YELP_API_KEY
-
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
 async function sendBrevoEmail({ from, to, subject, html }) {
@@ -1260,7 +1258,8 @@ async function initDb() {
           source TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
-      `).catch(e => console.error('tool_leads:', e.message))
+      `)
+      console.log('✅ tool_leads table ready')
 
       await pool.query(`
         CREATE TABLE IF NOT EXISTS tool_lead_nurture (
@@ -1270,7 +1269,8 @@ async function initDb() {
           sent_at TIMESTAMPTZ DEFAULT NOW(),
           UNIQUE(email, email_type)
         );
-      `).catch(() => {})
+      `)
+      console.log('✅ tool_lead_nurture table ready')
 
       // ── Feature: Cold Outreach Engine ────────────────────────
       await pool.query(`
@@ -1839,6 +1839,9 @@ async function generateVoiceAudio(text, outputPath) {
     console.log('🎬 ElevenLabs not configured - silent video')
     return null
   }
+  console.log('🎬 ElevenLabs key length:',
+    ELEVENLABS_API_KEY?.length,
+    'first 4:', ELEVENLABS_API_KEY?.slice(0, 4))
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
@@ -2481,141 +2484,157 @@ const US_CITIES = [
 ]
 
 async function findPhotographerEmails(city, state) {
-  if (!YELP_API_KEY) {
-    console.log('Yelp API not configured')
-    return []
-  }
-
   try {
     console.log(`Finding photographers in ${city}, ${state}`)
 
-    const location = encodeURIComponent(`${city}, ${state}`)
+    // Public SearXNG instances - try each until one works
+    const searxInstances = [
+      'https://searx.be',
+      'https://search.sapti.me',
+      'https://searx.tiekoetter.com',
+      'https://search.bus-hit.me',
+      'https://paulgo.io'
+    ]
 
-    const searchRes = await fetch(
-      `https://api.yelp.com/v3/businesses/search` +
-      `?term=wedding+photographer` +
-      `&location=${location}` +
-      `&categories=photographers` +
-      `&limit=50`,
-      {
-        headers: {
-          'Authorization': `Bearer ${YELP_API_KEY}`,
-          'Accept': 'application/json'
-        }
-      }
+    const query = encodeURIComponent(
+      `wedding photographer ${city} ${state} contact email`
     )
 
-    if (!searchRes.ok) {
-      const err = await searchRes.text()
-      console.error('Yelp error:', searchRes.status, err)
-      return []
-    }
+    let results = []
 
-    const searchData = await searchRes.json()
-    const businesses = searchData.businesses || []
-
-    console.log(`Yelp found ${businesses.length} businesses`)
-
-    const foundEmails = []
-
-    for (const biz of businesses) {
+    for (const instance of searxInstances) {
       try {
-        await new Promise(r => setTimeout(r, 400))
-
-        const detailRes = await fetch(
-          `https://api.yelp.com/v3/businesses/${biz.id}`,
+        console.log(`Trying SearXNG: ${instance}`)
+        const res = await fetch(
+          `${instance}/search?q=${query}&format=json&categories=general`,
           {
+            signal: AbortSignal.timeout(8000),
             headers: {
-              'Authorization': `Bearer ${YELP_API_KEY}`
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'application/json'
             }
           }
         )
 
-        if (!detailRes.ok) continue
-
-        const detail = await detailRes.json()
-        const businessName = biz.name || ''
-        const targetUrl = detail.website || null
-
-        if (!targetUrl) {
-          console.log(`No website for ${businessName}`)
+        if (!res.ok) {
+          console.log(`${instance} returned ${res.status}, trying next`)
           continue
         }
 
-        console.log(`Scraping: ${businessName} - ${targetUrl}`)
+        const data = await res.json()
+        results = data.results || []
 
-        try {
-          await new Promise(r => setTimeout(r, 600))
+        if (results.length > 0) {
+          console.log(`SearXNG ${instance}: ${results.length} results`)
+          break
+        }
+      } catch (err) {
+        console.log(`${instance} failed: ${err.message}, trying next`)
+        continue
+      }
+    }
 
-          const siteRes = await fetch(targetUrl, {
-            signal: AbortSignal.timeout(7000),
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; ' +
-                'Intel Mac OS X 10_15_7) ' +
-                'AppleWebKit/537.36 Chrome/120.0.0.0'
-            }
-          })
+    if (!results.length) {
+      console.log('All SearXNG instances failed or returned 0 results')
+      return []
+    }
 
-          if (!siteRes.ok) continue
+    const foundEmails = []
+    const processedUrls = new Set()
 
-          const siteHtml = await siteRes.text()
+    for (const result of results.slice(0, 15)) {
+      const url = result.url
+      if (!url || processedUrls.has(url)) continue
 
-          const emailRegex =
-            /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-          let emails = siteHtml.match(emailRegex) || []
+      // Skip non-photographer URLs
+      if (url.includes('yelp.com') ||
+          url.includes('facebook.com') ||
+          url.includes('instagram.com') ||
+          url.includes('pinterest.com') ||
+          url.includes('wikipedia.org') ||
+          url.includes('youtube.com')) continue
 
-          if (!emails.length) {
-            try {
-              const base = new URL(targetUrl).origin
-              const cRes = await fetch(`${base}/contact`, {
-                signal: AbortSignal.timeout(5000),
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-              })
-              if (cRes.ok) {
-                const cHtml = await cRes.text()
-                emails = cHtml.match(emailRegex) || []
-              }
-            } catch {}
+      processedUrls.add(url)
+
+      try {
+        await new Promise(r => setTimeout(r, 600))
+
+        const siteRes = await fetch(url, {
+          signal: AbortSignal.timeout(7000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
           }
+        })
 
-          const filtered = emails.filter(e => {
-            const l = e.toLowerCase()
-            return !l.includes('example')
-              && !l.includes('sentry')
-              && !l.includes('google')
-              && !l.includes('schema')
-              && !l.includes('wordpress')
-              && !l.includes('wix')
-              && !l.includes('yelp')
-              && !l.includes('squarespace')
-              && !l.includes('jquery')
-              && !l.includes('@2x')
-              && !l.includes('.png')
-              && !l.includes('.jpg')
-              && !l.includes('.gif')
-              && e.length < 60
-              && e.length > 6
-          })
+        if (!siteRes.ok) continue
 
-          const email = [...new Set(filtered)][0]
+        const html = await siteRes.text()
 
-          if (email) {
-            const firstName = businessName.split(' ')[0]
-            foundEmails.push({
-              email: email.toLowerCase().trim(),
-              business_name: businessName,
-              first_name: firstName,
-              note: `${city}, ${state} via Yelp`
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+        let emails = html.match(emailRegex) || []
+
+        // If no email on homepage, try /contact
+        if (!emails.length) {
+          try {
+            const base = new URL(url).origin
+            const cRes = await fetch(`${base}/contact`, {
+              signal: AbortSignal.timeout(5000),
+              headers: { 'User-Agent': 'Mozilla/5.0' }
             })
-            console.log(`✓ Found: ${email} (${businessName})`)
-          }
+            if (cRes.ok) {
+              emails = (await cRes.text()).match(emailRegex) || []
+            }
+          } catch {}
+        }
 
-        } catch (siteErr) {
-          console.log('Site scrape failed:', siteErr.message)
+        const filtered = emails.filter(e => {
+          const l = e.toLowerCase()
+          return !l.includes('example')
+            && !l.includes('sentry')
+            && !l.includes('google')
+            && !l.includes('schema.org')
+            && !l.includes('w3.org')
+            && !l.includes('wordpress')
+            && !l.includes('jquery')
+            && !l.includes('cloudflare')
+            && !l.includes('cdn-')
+            && !l.includes('.min.')
+            && !l.includes('@2x')
+            && !l.includes('.png')
+            && !l.includes('.jpg')
+            && !l.includes('.gif')
+            && !l.includes('.svg')
+            && !l.includes('.css')
+            && !l.includes('.js')
+            && e.length < 60
+            && e.length > 6
+            && e.split('@')[1]?.includes('.')
+        })
+
+        const email = [...new Set(filtered)][0]
+
+        if (email) {
+          // Extract business name from page title
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          const businessName = (titleMatch?.[1] || result.title || '')
+            .replace(/\s*[-|–|•|·].*$/, '')
+            .replace(/\s*\|.*$/, '')
+            .trim()
+            .slice(0, 80)
+
+          const firstName = businessName.split(' ')[0] || ''
+
+          foundEmails.push({
+            email: email.toLowerCase().trim(),
+            business_name: businessName,
+            first_name: firstName,
+            note: `${city}, ${state}`
+          })
+          console.log(`✓ Found: ${email} (${businessName})`)
         }
 
       } catch (err) {
-        console.log('Business detail error:', err.message)
+        console.log(`Scrape failed for ${url}: ${err.message}`)
       }
     }
 
@@ -2680,17 +2699,20 @@ async function runDailyJobs() {
   }
   const isSunday = day === 0
   const isAutoFillHour = hour === 6
-  if (isSunday && isAutoFillHour && YELP_API_KEY) {
-    const { rows: queuedRows } = await pool.query(
-      `SELECT COUNT(*) FROM cold_contacts WHERE status='queued'`
+  if (isSunday && isAutoFillHour) {
+    const queueCheck = await pool.query(
+      'SELECT COUNT(*) as count FROM cold_contacts WHERE status=$1',
+      ['queued']
     ).catch(() => ({ rows: [{ count: '999' }] }))
-    const queued = parseInt(queuedRows[0].count)
+    const queued = parseInt(queueCheck.rows[0]?.count || '0')
     if (queued < 100) {
-      const cityData = US_CITIES[Math.floor(Math.random() * US_CITIES.length)]
-      const emails = await findPhotographerEmails(cityData[0], cityData[1])
-        .catch(e => { console.error('Auto-finder error:', e.message); return [] })
-      const result = await importFoundEmails(emails)
-      console.log(`Auto-finder ${cityData[0]}: +${result.added} contacts`)
+      const cityData = US_CITIES[
+        Math.floor(Math.random() * US_CITIES.length)
+      ]
+      findPhotographerEmails(cityData[0], cityData[1])
+        .then(importFoundEmails)
+        .then(r => console.log(`Auto-fill: +${r.added} from ${cityData[0]}`))
+        .catch(e => console.error('Auto-fill:', e.message))
     }
   }
 }
@@ -6889,21 +6911,22 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
   }
 })
 
-// POST /api/admin/find-emails — Yelp + website scrape for photographer emails
+// POST /api/admin/find-emails — SearXNG search + website scrape for photographer emails
 app.post('/api/admin/find-emails', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  const { city, state } = req.body
+  const { city, state = 'USA' } = req.body
   if (!city) return res.status(400).json({ error: 'city required' })
-  if (!YELP_API_KEY) {
-    return res.status(400).json({ error: 'YELP_API_KEY not set in Railway' })
-  }
-  try {
-    const emails = await findPhotographerEmails(city, state)
-    const { added, skipped } = await importFoundEmails(emails)
-    res.json({ found: emails.length, added, skipped })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+
+  // Respond immediately, run in background
+  res.json({
+    success: true,
+    message: `Finding photographers in ${city}. Check stats in 60 seconds.`
+  })
+
+  findPhotographerEmails(city, state)
+    .then(emails => importFoundEmails(emails))
+    .then(r => console.log(`Find emails complete: +${r.added} added`))
+    .catch(err => console.error('Find emails error:', err.message))
 })
 
 // POST /api/admin/generate-video — queue a video for a specific post

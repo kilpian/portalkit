@@ -641,7 +641,7 @@ export default function ContentEngine() {
               Find Photographers by City
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Enter any US city to find wedding photographers from The Knot directory. Runs automatically every Sunday.
+              Enter any US city. We search public directories and extract photographer contact emails automatically. No API keys needed. Queue updates in ~60 seconds.
             </p>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <input
@@ -684,7 +684,7 @@ export default function ContentEngine() {
                 padding: '10px 14px', background: '#F0FDF4',
                 border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13
               }}>
-                Found {searchResult.found} emails. Added {searchResult.added} new contacts, skipped {searchResult.skipped} duplicates.
+                {searchResult.message || `Found ${searchResult.found} emails. Added ${searchResult.added} new contacts, skipped ${searchResult.skipped} duplicates.`}
               </div>
             )}
           </div>
