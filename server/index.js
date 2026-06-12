@@ -1882,7 +1882,9 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
 
   const width = 1080
   const height = 1920
-  const fps = 30
+  // Visuals only change per text chunk, so generate at 6fps and let
+  // ffmpeg output 30fps — 5x fewer frames to encode on Railway.
+  const fps = 6
   const totalFrames = durationSeconds * fps
 
   // Split text into chunks of 6 words each
@@ -1893,7 +1895,8 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
   }
   if (!chunks.length) chunks.push(text.slice(0, 50))
 
-  const framesPerChunk = Math.max(Math.floor(totalFrames / chunks.length), 30)
+  const framesPerChunk = Math.max(Math.floor(totalFrames / chunks.length), fps)
+  const expectedTotal = Math.max(chunks.length * framesPerChunk, totalFrames)
   let frameCount = 0
 
   for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
@@ -1970,19 +1973,20 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
       ctx.textBaseline = 'middle'
       ctx.fillText('getportalkit.com', width / 2, height - 160)
 
-      // Progress bar
-      const progress = chunkIdx / chunks.length
+      // Progress bar (smooth, per-frame)
+      const progress = Math.min(frameCount / expectedTotal, 1)
       ctx.fillStyle = 'rgba(255,255,255,0.15)'
       ctx.fillRect(40, height - 60, width - 80, 6)
       ctx.fillStyle = '#C9A84C'
       ctx.fillRect(40, height - 60, (width - 80) * progress, 6)
 
-      // Save frame
+      // Save as JPEG: no alpha channel, so ffmpeg's RGBA→yuv420p
+      // path (which produced solid-green output on Railway) is bypassed.
       const framePath = path.join(
         outputDir,
-        'frame_' + String(frameCount).padStart(5, '0') + '.png'
+        'frame_' + String(frameCount).padStart(5, '0') + '.jpg'
       )
-      fs.writeFileSync(framePath, canvas.toBuffer('image/png'))
+      fs.writeFileSync(framePath, canvas.toBuffer('image/jpeg', 92))
       frameCount++
     }
   }
@@ -1991,11 +1995,11 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
   return outputDir
 }
 
-async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
+async function renderVideo(framesDir, audioPath, outputPath, fps = 6) {
   if (!ffmpeg) throw new Error('FFmpeg not available')
 
   const frameFiles = fs.readdirSync(framesDir)
-    .filter(f => f.endsWith('.png'))
+    .filter(f => f.endsWith('.jpg'))
     .sort()
   console.log('🎬 Frames to render:', frameFiles.length,
     'first:', frameFiles[0], 'last:', frameFiles[frameFiles.length - 1])
@@ -2006,22 +2010,24 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 30) {
   const hasAudio = !!(audioPath && fs.existsSync(audioPath))
 
   return new Promise((resolve, reject) => {
-    const globPattern = path.join(framesDir, 'frame_*.png')
+    const globPattern = path.join(framesDir, 'frame_*.jpg')
     const cmd = ffmpeg()
     cmd.input(globPattern)
-       .inputOption('-pattern_type glob')
-       .inputFPS(fps)
+       .inputOptions(['-pattern_type glob', '-framerate ' + fps])
     if (hasAudio) {
       cmd.input(audioPath)
     }
     cmd.outputOptions([
+      '-vf format=yuv420p',
       '-c:v libx264',
-      '-pix_fmt yuv420p',
+      '-r 30',
       '-crf 23',
       '-preset fast',
+      '-movflags +faststart',
       ...(hasAudio ? ['-c:a aac', '-shortest'] : [])
     ])
     cmd.output(outputPath)
+    cmd.on('start', c => console.log('🎬 FFmpeg:', c))
     cmd.on('end', resolve)
     cmd.on('error', reject)
     cmd.run()
@@ -2079,7 +2085,7 @@ async function generateSocialVideo(script, title, postId) {
       : null
 
     await pool.query(
-      `UPDATE generated_videos SET status='done', r2_url=$1, completed_at=NOW() WHERE id=$2`,
+      `UPDATE generated_videos SET status='ready', r2_url=$1, completed_at=NOW() WHERE id=$2`,
       [videoUrl, videoId]
     )
 
@@ -2483,79 +2489,161 @@ const US_CITIES = [
   ['Cincinnati', 'oh'], ['Cleveland', 'oh']
 ]
 
+const SEARCH_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+// Directories/aggregators/socials — never the photographer's own site
+const SKIP_DOMAINS = [
+  'theknot.com', 'weddingwire.com', 'zola.com', 'yelp.com',
+  'facebook.com', 'instagram.com', 'pinterest.', 'youtube.com',
+  'google.com', 'wikipedia.org', 'thumbtack.com', 'expertise.com',
+  'tripadvisor.', 'bark.com', 'linkedin.com', 'twitter.com',
+  'x.com', 'tiktok.com', 'reddit.com', 'yellowpages.com',
+  'bbb.org', 'angi.com', 'houzz.com', 'eventective.com',
+  'gigsalad.com', 'herecomestheguide.com', 'junebugweddings.com',
+  'fearlessphotographers.com', 'weddingchicks.com', 'peerspace.com',
+  'snappr.com', 'zankyou.', 'smugmug.com', 'anthropic.com',
+  'bing.com', 'duckduckgo.com', 'maps.', 'medium.com', 'quora.com',
+  'weddingrule.com', 'caratsandcake.com', 'wezoree.com', 'vogue.com'
+]
+
+function isBusinessSiteUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return !SKIP_DOMAINS.some(d => host.includes(d))
+  } catch {
+    return false
+  }
+}
+
+// Primary discovery: Anthropic web search server tool (uses existing
+// ANTHROPIC_API_KEY — no new credentials). The model only DISCOVERS
+// websites; emails are always scraped from the actual pages, never
+// generated, so nothing can be hallucinated.
+async function discoverSitesViaAnthropic(city, state) {
+  if (!anthropic) return []
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2500,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+      messages: [{
+        role: 'user',
+        content: `Search the web for independent wedding photographers based in ${city}, ${String(state || '').toUpperCase()}. I need their OWN business websites (their own domains) — NOT directories like The Knot, WeddingWire, Yelp, Thumbtack, or social media profiles. List every photographer business website URL you find, one per line.`
+      }]
+    })
+    const urls = new Set()
+    for (const block of msg.content || []) {
+      if (block.type === 'text' && block.text) {
+        for (const m of block.text.match(/https?:\/\/[^\s)\]"'<>,]+/g) || []) {
+          urls.add(m.replace(/[.,;]+$/, ''))
+        }
+      }
+      if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+        for (const r of block.content) {
+          if (r && r.url) urls.add(r.url)
+        }
+      }
+    }
+    console.log(`🔎 Anthropic web search: ${urls.size} URLs`)
+    return [...urls]
+  } catch (err) {
+    console.log('🔎 Anthropic web search failed:', err.message)
+    return []
+  }
+}
+
+// Fallback 1: DuckDuckGo HTML endpoint (keyless)
+async function discoverSitesViaDuckDuckGo(city, state) {
+  try {
+    const q = encodeURIComponent(`wedding photographer ${city} ${state} contact`)
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${q}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': SEARCH_UA, 'Accept': 'text/html' }
+    })
+    if (!res.ok) {
+      console.log(`🔎 DuckDuckGo returned ${res.status}`)
+      return []
+    }
+    const html = await res.text()
+    const urls = new Set()
+    for (const m of html.matchAll(/uddg=([^&"']+)/g)) {
+      try {
+        const decoded = decodeURIComponent(m[1])
+        if (decoded.startsWith('http')) urls.add(decoded)
+      } catch {}
+    }
+    console.log(`🔎 DuckDuckGo: ${urls.size} URLs`)
+    return [...urls]
+  } catch (err) {
+    console.log('🔎 DuckDuckGo failed:', err.message)
+    return []
+  }
+}
+
+// Fallback 2: Bing HTML scrape (keyless)
+async function discoverSitesViaBing(city, state) {
+  try {
+    const q = encodeURIComponent(`wedding photographer ${city} ${state}`)
+    const res = await fetch(`https://www.bing.com/search?q=${q}&count=30`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': SEARCH_UA, 'Accept': 'text/html' }
+    })
+    if (!res.ok) {
+      console.log(`🔎 Bing returned ${res.status}`)
+      return []
+    }
+    const html = await res.text()
+    const urls = new Set()
+    for (const m of html.matchAll(/<h2><a[^>]+href="(https?:\/\/[^"]+)"/g)) {
+      urls.add(m[1])
+    }
+    for (const m of html.matchAll(/<cite[^>]*>(https?:\/\/[^<\s]+)/g)) {
+      urls.add(m[1])
+    }
+    console.log(`🔎 Bing: ${urls.size} URLs`)
+    return [...urls]
+  } catch (err) {
+    console.log('🔎 Bing failed:', err.message)
+    return []
+  }
+}
+
 async function findPhotographerEmails(city, state) {
   try {
     console.log(`Finding photographers in ${city}, ${state}`)
 
-    // Public SearXNG instances - try each until one works
-    const searxInstances = [
-      'https://searx.be',
-      'https://search.sapti.me',
-      'https://searx.tiekoetter.com',
-      'https://search.bus-hit.me',
-      'https://paulgo.io'
-    ]
-
-    const query = encodeURIComponent(
-      `wedding photographer ${city} ${state} contact email`
-    )
-
-    let results = []
-
-    for (const instance of searxInstances) {
-      try {
-        console.log(`Trying SearXNG: ${instance}`)
-        const res = await fetch(
-          `${instance}/search?q=${query}&format=json&categories=general`,
-          {
-            signal: AbortSignal.timeout(8000),
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'application/json'
-            }
-          }
-        )
-
-        if (!res.ok) {
-          console.log(`${instance} returned ${res.status}, trying next`)
-          continue
-        }
-
-        const data = await res.json()
-        results = data.results || []
-
-        if (results.length > 0) {
-          console.log(`SearXNG ${instance}: ${results.length} results`)
-          break
-        }
-      } catch (err) {
-        console.log(`${instance} failed: ${err.message}, trying next`)
-        continue
-      }
+    // Hybrid discovery: Anthropic web search first, keyless HTML
+    // search engines as fallbacks. Aggregate until we have enough
+    // candidate business sites.
+    let candidateUrls = await discoverSitesViaAnthropic(city, state)
+    if (candidateUrls.length < 10) {
+      candidateUrls = candidateUrls.concat(await discoverSitesViaDuckDuckGo(city, state))
+    }
+    if (candidateUrls.length < 10) {
+      candidateUrls = candidateUrls.concat(await discoverSitesViaBing(city, state))
     }
 
-    if (!results.length) {
-      console.log('All SearXNG instances failed or returned 0 results')
+    // One URL per domain, skip directories/socials
+    const byDomain = new Map()
+    for (const url of candidateUrls) {
+      if (!isBusinessSiteUrl(url)) continue
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '')
+        if (!byDomain.has(domain)) byDomain.set(domain, url)
+      } catch {}
+    }
+
+    const sites = [...byDomain.values()].slice(0, 20)
+    console.log(`🔎 ${sites.length} candidate photographer sites to scrape`)
+
+    if (!sites.length) {
+      console.log('All discovery methods returned 0 usable sites')
       return []
     }
 
     const foundEmails = []
-    const processedUrls = new Set()
 
-    for (const result of results.slice(0, 15)) {
-      const url = result.url
-      if (!url || processedUrls.has(url)) continue
-
-      // Skip non-photographer URLs
-      if (url.includes('yelp.com') ||
-          url.includes('facebook.com') ||
-          url.includes('instagram.com') ||
-          url.includes('pinterest.com') ||
-          url.includes('wikipedia.org') ||
-          url.includes('youtube.com')) continue
-
-      processedUrls.add(url)
-
+    for (const url of sites) {
       try {
         await new Promise(r => setTimeout(r, 600))
 
@@ -2590,6 +2678,19 @@ async function findPhotographerEmails(city, state) {
         const filtered = emails.filter(e => {
           const l = e.toLowerCase()
           return !l.includes('example')
+            && !l.includes('@domain.')
+            && !l.includes('@email.')
+            && !l.includes('@yourdomain')
+            && !l.includes('@mail.com')
+            && !l.startsWith('user@')
+            && !l.startsWith('name@')
+            && !l.startsWith('email@')
+            && !l.startsWith('your@')
+            && !l.startsWith('info@example')
+            && !l.includes('yourname')
+            && !l.includes('youremail')
+            && !l.includes('@test.')
+            && !l.includes('placeholder')
             && !l.includes('sentry')
             && !l.includes('google')
             && !l.includes('schema.org')
@@ -2616,7 +2717,7 @@ async function findPhotographerEmails(city, state) {
         if (email) {
           // Extract business name from page title
           const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-          const businessName = (titleMatch?.[1] || result.title || '')
+          const businessName = (titleMatch?.[1] || new URL(url).hostname.replace(/^www\./, '') || '')
             .replace(/\s*[-|–|•|·].*$/, '')
             .replace(/\s*\|.*$/, '')
             .trim()
@@ -6849,17 +6950,41 @@ app.post('/api/admin/cold-contacts/import', async (req, res) => {
 app.get('/api/admin/cold-contacts/stats', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   try {
-    const stats = await pool.query(`
-      SELECT status, COUNT(*)::int as count
-      FROM cold_contacts
-      GROUP BY status
-    `)
-    const total = await pool.query(
-      'SELECT COUNT(*)::int as count FROM cold_contacts'
-    )
+    const [stats, total, queuedToday, sentToday, recentSends, replies] = await Promise.all([
+      pool.query(`
+        SELECT status, COUNT(*)::int as count
+        FROM cold_contacts
+        GROUP BY status
+      `),
+      pool.query('SELECT COUNT(*)::int as count FROM cold_contacts'),
+      pool.query(
+        `SELECT COUNT(*)::int as count FROM cold_contacts
+         WHERE created_at >= CURRENT_DATE`
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int as count FROM cold_contacts
+         WHERE sent_at >= CURRENT_DATE`
+      ),
+      pool.query(
+        `SELECT email, business_name, status, sent_at
+         FROM cold_contacts
+         WHERE sent_at IS NOT NULL
+         ORDER BY sent_at DESC LIMIT 10`
+      ),
+      pool.query(
+        `SELECT email, business_name, sent_at
+         FROM cold_contacts
+         WHERE status='replied'
+         ORDER BY sent_at DESC NULLS LAST LIMIT 20`
+      )
+    ])
     res.json({
       byStatus: stats.rows,
-      total: total.rows[0]?.count || 0
+      total: total.rows[0]?.count || 0,
+      queuedToday: queuedToday.rows[0]?.count || 0,
+      sentToday: sentToday.rows[0]?.count || 0,
+      recentSends: recentSends.rows,
+      replies: replies.rows
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -6911,7 +7036,7 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
   }
 })
 
-// POST /api/admin/find-emails — SearXNG search + website scrape for photographer emails
+// POST /api/admin/find-emails — web discovery + website scrape for photographer emails
 app.post('/api/admin/find-emails', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { city, state = 'USA' } = req.body

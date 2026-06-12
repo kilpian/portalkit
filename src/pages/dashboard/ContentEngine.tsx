@@ -475,6 +475,21 @@ export default function ContentEngine() {
                   }}>
                     {post.angle || 'post'}
                   </span>
+                  {post.postproxy_id?.startsWith('x:') ? (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                      background: '#0F172A', color: 'white'
+                    }}>
+                      𝕏 Tweeted
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+                      background: '#F1F5F9', color: '#64748B'
+                    }}>
+                      Not tweeted
+                    </span>
+                  )}
                   <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
                     {post.scheduled_for
                       ? new Date(post.scheduled_for).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -604,10 +619,10 @@ export default function ContentEngine() {
         <div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 12, marginBottom: 24
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: 12, marginBottom: 12
           }}>
-            {['queued', 'sent', 'opted_out', 'bounced'].map(s => (
+            {['queued', 'sent', 'replied', 'opted_out', 'bounced'].map(s => (
               <div key={s} style={{
                 background: 'white', borderRadius: 10,
                 padding: 16, border: '1px solid var(--border-subtle)'
@@ -622,7 +637,7 @@ export default function ContentEngine() {
                 </div>
                 <div style={{
                   fontSize: 26, fontWeight: 800,
-                  color: '#1B4332'
+                  color: s === 'replied' ? '#059669' : '#1B4332'
                 }}>
                   {outreachStats?.byStatus?.find(
                     (b: any) => b.status === s
@@ -630,6 +645,112 @@ export default function ContentEngine() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 12, marginBottom: 24
+          }}>
+            <div style={{
+              background: 'white', borderRadius: 10,
+              padding: 16, border: '1px solid var(--border-subtle)'
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase' as const, marginBottom: 6
+              }}>
+                Queued Today
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#C9A84C' }}>
+                {outreachStats?.queuedToday || 0}
+              </div>
+            </div>
+            <div style={{
+              background: 'white', borderRadius: 10,
+              padding: 16, border: '1px solid var(--border-subtle)'
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase' as const, marginBottom: 6
+              }}>
+                Sent Today
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#1B4332' }}>
+                {outreachStats?.sentToday || 0}
+              </div>
+            </div>
+          </div>
+
+          {(outreachStats?.replies?.length > 0) && (
+            <div style={{
+              background: 'white', borderRadius: 12,
+              padding: 20, marginBottom: 20,
+              border: '1px solid #A7F3D0'
+            }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#059669' }}>
+                💬 Replies ({outreachStats.replies.length})
+              </h3>
+              {outreachStats.replies.map((r: any, i: number) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 0',
+                  borderBottom: i < outreachStats.replies.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                  fontSize: 13
+                }}>
+                  <span style={{ fontWeight: 600 }}>{r.email}</span>
+                  {r.business_name && (
+                    <span style={{ color: 'var(--text-muted)' }}>{r.business_name}</span>
+                  )}
+                  {r.sent_at && (
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>
+                      sent {new Date(r.sent_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{
+            background: 'white', borderRadius: 12,
+            padding: 20, marginBottom: 20,
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1B4332' }}>
+              Recent Sends
+            </h3>
+            {(!outreachStats?.recentSends || outreachStats.recentSends.length === 0) ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                No emails sent yet. The drip runs daily at 1pm UTC.
+              </p>
+            ) : (
+              outreachStats.recentSends.map((s: any, i: number) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 0',
+                  borderBottom: i < outreachStats.recentSends.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                  fontSize: 13
+                }}>
+                  <span style={{ fontWeight: 600 }}>{s.email}</span>
+                  {s.business_name && (
+                    <span style={{ color: 'var(--text-muted)' }}>{s.business_name}</span>
+                  )}
+                  <span style={{
+                    marginLeft: 'auto', fontSize: 11, fontWeight: 700,
+                    padding: '2px 8px', borderRadius: 99,
+                    background: s.status === 'replied' ? '#F0FDF4' : '#F8FAFC',
+                    color: s.status === 'replied' ? '#059669' : '#64748B',
+                    textTransform: 'uppercase' as const
+                  }}>
+                    {s.status}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 130, textAlign: 'right' as const }}>
+                    {new Date(s.sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
 
           <div style={{
@@ -641,7 +762,7 @@ export default function ContentEngine() {
               Find Photographers by City
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Enter any US city. We search public directories and extract photographer contact emails automatically. No API keys needed. Queue updates in ~60 seconds.
+              Enter any US city. We search the web for photographer studio websites and scrape their real contact emails. No new API keys needed. Queue updates in ~60 seconds.
             </p>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <input
@@ -821,7 +942,7 @@ export default function ContentEngine() {
               Generate Video
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Renders a 1080x1920 MP4 with voice narration. Requires ElevenLabs + R2 configured in Railway.
+              Renders a branded 1080x1920 MP4. Voice narration is added automatically when ElevenLabs is configured (silent otherwise). Requires R2 in Railway.
             </p>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
               Title (optional)
@@ -873,18 +994,20 @@ export default function ContentEngine() {
               <p style={{ fontSize: 15 }}>No videos generated yet.</p>
             </div>
           ) : (
-            videos.map((v: any) => (
+            videos.map((v: any) => {
+              const isReady = v.status === 'ready' || v.status === 'done'
+              return (
               <div key={v.id} style={{
                 background: 'white', borderRadius: 10, padding: 16, marginBottom: 12,
                 border: '1px solid var(--border-subtle)',
-                borderLeft: `4px solid ${v.status === 'done' ? '#059669' : v.status === 'error' ? '#DC2626' : '#C9A84C'}`,
+                borderLeft: `4px solid ${isReady ? '#059669' : v.status === 'error' ? '#DC2626' : '#C9A84C'}`,
                 boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                    background: v.status === 'done' ? '#F0FDF4' : v.status === 'error' ? '#FEE2E2' : '#FFFBEB',
-                    color: v.status === 'done' ? '#14532D' : v.status === 'error' ? '#991B1B' : '#92400E',
+                    background: isReady ? '#F0FDF4' : v.status === 'error' ? '#FEE2E2' : '#FFFBEB',
+                    color: isReady ? '#14532D' : v.status === 'error' ? '#991B1B' : '#92400E',
                     textTransform: 'uppercase' as const
                   }}>
                     {v.status}
@@ -905,7 +1028,7 @@ export default function ContentEngine() {
                   <p style={{ fontSize: 12, color: '#DC2626', margin: '0 0 8px' }}>Error: {v.error}</p>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-                  {v.status === 'done' && v.r2_url && (
+                  {isReady && v.r2_url && (
                     <a
                       href={v.r2_url}
                       target="_blank"
@@ -923,7 +1046,7 @@ export default function ContentEngine() {
                   {(v.status === 'rendering' || v.status === 'queued') && (
                     <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
                   )}
-                  {(v.status === 'error' || v.status === 'done') && (
+                  {(v.status === 'error' || isReady) && (
                     <button
                       onClick={() => setDeleteVideoId(v.id)}
                       style={{
@@ -939,7 +1062,8 @@ export default function ContentEngine() {
                   )}
                 </div>
               </div>
-            ))
+              )
+            })
           )}
         </div>
       )}

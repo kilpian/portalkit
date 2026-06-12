@@ -42,7 +42,8 @@
       "Bash(grep *)",
       "Bash(mkdir -p /mnt/user-data/outputs)",
       "Read(//mnt/user-data/**)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(awk *)"
     ]
   }
 }
