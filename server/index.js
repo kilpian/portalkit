@@ -72,16 +72,16 @@ if (twitterClient) {
 }
 
 // Video generation deps — loaded via dynamic import (ESM-compatible)
-let sharp = null
+let createCanvas = null
 let ffmpegPath = null
 let ffmpeg = null
 ;(async () => {
   try {
-    const sharpMod = await import('sharp')
-    sharp = sharpMod.default
-    console.log('🎬 Sharp loaded for frame generation')
+    const skia = await import('skia-canvas')
+    createCanvas = (w, h) => new skia.Canvas(w, h)
+    console.log('🎬 skia-canvas loaded (Skia engine)')
   } catch (e) {
-    console.log('🎬 Sharp not available:', e.message)
+    console.log('🎬 skia-canvas not available:', e.message)
   }
   try {
     const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg')
@@ -1841,22 +1841,32 @@ async function postToX(content) {
 }
 
 async function generateVoiceAudio(text, outputPath) {
-  if (!ELEVENLABS_API_KEY) {
-    console.log('🎬 ElevenLabs not configured - silent video')
+  // Try Kokoro TTS first (free, runs locally via ONNX)
+  try {
+    console.log('🎬 Kokoro loading model (first run)...')
+    const { KokoroTTS } = await import('kokoro-js')
+    const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
+    const audio = await tts.generate(text.slice(0, 500), { voice: 'af_heart', speed: 1.0 })
+    const wavPath = outputPath.replace(/\.[^.]+$/, '.wav')
+    await audio.save(wavPath)
+    console.log('🎬 Kokoro TTS audio generated')
+    return wavPath
+  } catch (kokoroErr) {
+    console.log('🎬 Kokoro TTS failed:', kokoroErr.message)
+  }
+
+  // Fall back to ElevenLabs if configured
+  if (!process.env.ELEVENLABS_API_KEY) {
+    console.log('🎬 No voice fallback configured, silent video')
     return null
   }
-  if (!ELEVENLABS_API_KEY.startsWith('sk_')) {
-    console.log('🎬 ElevenLabs key does not start with sk_ (first 4:', ELEVENLABS_API_KEY.slice(0, 4), ') - silent video')
-    return null
-  }
-  console.log('🎬 ElevenLabs key length:', ELEVENLABS_API_KEY.length, 'first 4:', ELEVENLABS_API_KEY.slice(0, 4))
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'}`,
       {
         method: 'POST',
         headers: {
-          'xi-api-key': ELEVENLABS_API_KEY,
+          'xi-api-key': process.env.ELEVENLABS_API_KEY,
           'Content-Type': 'application/json',
           'Accept': 'audio/mpeg'
         },
@@ -1868,22 +1878,21 @@ async function generateVoiceAudio(text, outputPath) {
       }
     )
     if (!response.ok) {
-      console.log('🎬 ElevenLabs error:', response.status, '- generating silent video instead')
+      console.log('🎬 ElevenLabs error:', response.status, '- generating silent video')
       return null
     }
     const buffer = await response.arrayBuffer()
     fs.writeFileSync(outputPath, Buffer.from(buffer))
-    console.log('🎬 Audio generated:', outputPath)
     return outputPath
-  } catch (err) {
-    console.log('🎬 Audio failed:', err.message, '- silent video instead')
+  } catch (elErr) {
+    console.log('🎬 ElevenLabs failed:', elErr.message)
     return null
   }
 }
 
 async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
-  if (!sharp) {
-    console.log('🎬 Sharp not available, skipping frames')
+  if (!createCanvas) {
+    console.log('🎬 skia-canvas not available, skipping frames')
     return null
   }
 
@@ -1902,56 +1911,79 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
   if (!chunks.length) chunks.push('PortalKit')
 
   const framesPerChunk = Math.floor(totalFrames / chunks.length)
-
-  const bgBuffer = await sharp({
-    create: { width: W, height: H, channels: 3, background: { r: 13, g: 27, b: 42 } }
-  }).png().toBuffer()
-
-  function escXml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-  }
-
-  function buildSvg(chunk, chunkIdx) {
-    const progress = (chunkIdx + 1) / chunks.length
-    const barW = Math.max(0, Math.floor((W - 80) * progress))
-
-    const cWords = chunk.split(' ')
-    const lines = []; let cur = ''
-    for (const w of cWords) {
-      const trial = cur ? cur + ' ' + w : w
-      if (trial.length > 25 && cur) { lines.push(cur); cur = w } else cur = trial
-    }
-    if (cur) lines.push(cur)
-
-    const lineH = 90
-    const textStartY = Math.floor((H - lines.length * lineH) / 2)
-
-    const textEls = lines.map((line, i) => {
-      const cy = textStartY + i * lineH + lineH / 2
-      const t = escXml(line)
-      return `<text x="540" y="${cy + 3}" font-family="Arial,Helvetica,sans-serif" font-size="68" font-weight="bold" fill="black" fill-opacity="0.4" text-anchor="middle" dominant-baseline="middle">${t}</text>
-        <text x="540" y="${cy}" font-family="Arial,Helvetica,sans-serif" font-size="68" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${t}</text>`
-    }).join('')
-
-    return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${W}" height="8" fill="#C9A84C"/>
-      <text x="540" y="120" font-family="Arial,Helvetica,sans-serif" font-size="36" font-weight="bold" fill="#C9A84C" text-anchor="middle" dominant-baseline="middle">PORTALKIT</text>
-      <rect x="${W / 2 - 80}" y="148" width="160" height="2" fill="white" fill-opacity="0.2"/>
-      ${textEls}
-      <rect x="80" y="${H - 200}" width="${W - 160}" height="80" fill="#C9A84C"/>
-      <text x="540" y="${H - 160}" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="bold" fill="#0D1B2A" text-anchor="middle" dominant-baseline="middle">getportalkit.com</text>
-      <rect x="40" y="${H - 60}" width="${W - 80}" height="6" fill="white" fill-opacity="0.15"/>
-      <rect x="40" y="${H - 60}" width="${barW}" height="6" fill="#C9A84C"/>
-    </svg>`
-  }
-
   let frameCount = 0
 
   for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
-    const frameBuffer = await sharp(bgBuffer)
-      .composite([{ input: Buffer.from(buildSvg(chunks[chunkIdx], chunkIdx)), top: 0, left: 0 }])
-      .png()
-      .toBuffer()
+    const chunk = chunks[chunkIdx]
+    const canvas = createCanvas(W, H)
+    const ctx = canvas.getContext('2d')
+
+    // Solid navy background — explicit RGB avoids any color-space reinterpretation
+    ctx.fillStyle = '#0D1B2A'
+    ctx.fillRect(0, 0, W, H)
+
+    // Top gold accent bar
+    ctx.fillStyle = '#C9A84C'
+    ctx.fillRect(0, 0, W, 8)
+
+    // Brand name
+    ctx.font = 'bold 36px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('PORTALKIT', W / 2, 120)
+
+    // Divider
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'
+    ctx.fillRect(W / 2 - 80, 148, 160, 2)
+
+    // Word-wrap main text
+    ctx.font = 'bold 68px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    const maxWidth = W - 120
+    const lineHeight = 88
+    const cWords = chunk.split(' ')
+    const lines = []
+    let currentLine = ''
+    for (const word of cWords) {
+      const test = currentLine ? currentLine + ' ' + word : word
+      if (ctx.measureText(test).width > maxWidth && currentLine) {
+        lines.push(currentLine)
+        currentLine = word
+      } else {
+        currentLine = test
+      }
+    }
+    if (currentLine) lines.push(currentLine)
+
+    const totalTextHeight = lines.length * lineHeight
+    const startY = (H - totalTextHeight) / 2
+    lines.forEach((line, i) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'
+      ctx.fillText(line, W / 2 + 3, startY + i * lineHeight + 3)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillText(line, W / 2, startY + i * lineHeight)
+    })
+
+    // CTA bar
+    ctx.fillStyle = 'rgba(201,168,76,0.9)'
+    ctx.fillRect(80, H - 200, W - 160, 80)
+    ctx.fillStyle = '#0D1B2A'
+    ctx.font = 'bold 32px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('getportalkit.com', W / 2, H - 160)
+
+    // Progress bar
+    const progress = (chunkIdx + 1) / chunks.length
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'
+    ctx.fillRect(40, H - 60, W - 80, 6)
+    ctx.fillStyle = '#C9A84C'
+    ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
+
+    // skia-canvas toBuffer() is async and returns correct colors on Linux
+    const frameBuffer = await canvas.toBuffer('image/png')
 
     const thisChunkFrames = chunkIdx === chunks.length - 1
       ? totalFrames - frameCount
@@ -1966,7 +1998,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     }
   }
 
-  console.log('🎬 Generated ' + frameCount + ' frames (Sharp)')
+  console.log('🎬 Generated ' + frameCount + ' frames (skia-canvas)')
   return outputDir
 }
 
