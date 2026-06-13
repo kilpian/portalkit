@@ -18,6 +18,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { TwitterApi } from 'twitter-api-v2'
 import path from 'path'
 import os from 'os'
+import { execSync } from 'child_process'
 
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
@@ -1839,9 +1840,11 @@ async function generateVoiceAudio(text, outputPath) {
     console.log('🎬 ElevenLabs not configured - silent video')
     return null
   }
-  console.log('🎬 ElevenLabs key length:',
-    ELEVENLABS_API_KEY?.length,
-    'first 4:', ELEVENLABS_API_KEY?.slice(0, 4))
+  if (!ELEVENLABS_API_KEY.startsWith('sk_')) {
+    console.log('🎬 ElevenLabs key does not start with sk_ (first 4:', ELEVENLABS_API_KEY.slice(0, 4), ') - silent video')
+    return null
+  }
+  console.log('🎬 ElevenLabs key length:', ELEVENLABS_API_KEY.length, 'first 4:', ELEVENLABS_API_KEY.slice(0, 4))
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
@@ -2034,75 +2037,192 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 6) {
   })
 }
 
+// Find a usable TTF font for FFmpeg drawtext. Checked once, result cached.
+let _fontFileCache = undefined
+function findFontFile() {
+  if (_fontFileCache !== undefined) return _fontFileCache
+  const candidates = [
+    // Linux / Railway (Debian/Ubuntu)
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/truetype/ubuntu/Ubuntu-Bold.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+    '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+    // macOS (local dev)
+    '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+    '/Library/Fonts/Arial Bold.ttf',
+    '/System/Library/Fonts/Supplemental/Arial.ttf',
+    '/System/Library/Fonts/Helvetica.ttc',
+  ]
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) { _fontFileCache = p; console.log('🎬 Font found:', p); return p } } catch {}
+  }
+  // Last resort: search system for any TTF (3 second timeout)
+  try {
+    const found = execSync(
+      "find /usr /nix /Library /System -name '*.ttf' -type f 2>/dev/null | head -1",
+      { timeout: 3000 }
+    ).toString().trim()
+    if (found) { _fontFileCache = found; console.log('🎬 Font found via find:', found); return found }
+  } catch {}
+  _fontFileCache = null
+  console.log('🎬 No font found — install fonts-dejavu-core on Railway for text rendering')
+  return null
+}
+
 async function generateSocialVideo(script, title, postId) {
-  if (!createCanvas || !ffmpeg) {
-    console.log('🎬 Video deps not ready, skipping')
+  if (!ffmpeg) {
+    console.log('🎬 FFmpeg not available, skipping')
     return null
   }
 
   const tmpDir = path.join(os.tmpdir(), `video-${Date.now()}`)
-  const framesDir = path.join(tmpDir, 'frames')
+  fs.mkdirSync(tmpDir, { recursive: true })
   const audioPath = path.join(tmpDir, 'audio.mp3')
   const outputPath = path.join(tmpDir, 'output.mp4')
 
+  let videoId
   try {
-    // Insert queued record
     const { rows } = await pool.query(
       `INSERT INTO generated_videos (post_id, title, script, status) VALUES ($1, $2, $3, 'rendering') RETURNING id`,
       [postId || null, title, script]
     )
-    const videoId = rows[0].id
+    videoId = rows[0].id
+  } catch (err) {
+    console.error('🎬 DB insert error:', err.message)
+    return null
+  }
 
-    const durationSeconds = Math.ceil(script.split(' ').length / 2.5)
+  try {
+    // Voice is optional — catch any error and proceed silent
+    const audioResult = await generateVoiceAudio(script, audioPath)
 
-    // Generate audio (optional) and frames in parallel
-    const [audioResult] = await Promise.all([
-      generateVoiceAudio(script, audioPath),
-      generateVideoFrames(script, framesDir, durationSeconds)
-    ])
+    const W = 1080, H = 1920, D = 30
 
-    await renderVideo(framesDir, audioResult ? audioPath : null, outputPath)
+    // Locate a system font for drawtext
+    const fontFile = findFontFile()
+    // Escape path for FFmpeg filter syntax (colons and spaces are special)
+    const fontEsc = fontFile
+      ? fontFile.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/ /g, '\\ ')
+      : ''
+    const fontArg = fontFile ? `fontfile=${fontEsc}:` : ''
 
-    // Upload to R2
-    const videoBuffer = fs.readFileSync(outputPath)
+    // Sanitize script: strip chars that break FFmpeg filter string parsing
+    const cleanScript = script
+      .replace(/['"\\%]/g, '')
+      .replace(/:/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    // Split into 6-word chunks (each chunk is one "slide")
+    const words = cleanScript.split(' ').filter(Boolean)
+    const chunks = []
+    for (let i = 0; i < words.length; i += 6) {
+      chunks.push(words.slice(i, i + 6).join(' '))
+    }
+    if (!chunks.length) chunks.push('PortalKit')
+
+    const chunkDur = D / chunks.length
+
+    // Write each chunk to its own text file so FFmpeg reads real newlines.
+    // In FFmpeg 4.x, \n in the inline text= option is parsed as literal 'n'
+    // rather than a newline; textfile= bypasses this entirely.
+    function writeChunkFile(chunk, idx) {
+      const ws = chunk.split(' ')
+      const lines = []; let cur = ''
+      for (const w of ws) {
+        const trial = cur ? cur + ' ' + w : w
+        if (trial.length > 22 && cur) { lines.push(cur); cur = w } else cur = trial
+      }
+      if (cur) lines.push(cur)
+      const fp = path.join(tmpDir, `chunk_${idx}.txt`)
+      fs.writeFileSync(fp, lines.join('\n'))
+      return fp
+    }
+
+    // Per-chunk drawtext with enable window (only if font available)
+    const textChunks = fontFile ? chunks.map((chunk, i) => {
+      const t0 = (i * chunkDur).toFixed(3)
+      const t1 = ((i + 1) * chunkDur).toFixed(3)
+      const fp = writeChunkFile(chunk, i)
+      const fpEsc = fp.replace(/:/g, '\\:')
+      return `drawtext=${fontArg}textfile=${fpEsc}:fontcolor=white:fontsize=52:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=14:enable='gte(t,${t0})*lt(t,${t1})'`
+    }) : []
+
+    // Static brand / CTA text (only if font)
+    const brandHeader = fontFile
+      ? `drawtext=${fontArg}text='PORTALKIT':fontcolor=0xC9A84C:fontsize=36:x=(w-text_w)/2:y=100`
+      : null
+    const ctaText = fontFile
+      ? `drawtext=${fontArg}text='getportalkit.com':fontcolor=0x0D1B2A:fontsize=32:x=(w-text_w)/2:y=${H - 172}`
+      : null
+
+    const vfParts = [
+      `drawbox=x=0:y=0:w=${W}:h=8:color=0xC9A84C:t=fill`,
+      brandHeader,
+      `drawbox=x=${W / 2 - 80}:y=148:w=160:h=2:color=white@0.2:t=fill`,
+      ...textChunks,
+      `drawbox=x=80:y=${H - 200}:w=${W - 160}:h=80:color=0xC9A84C:t=fill`,
+      ctaText,
+      `drawbox=x=40:y=${H - 60}:w=${W - 80}:h=6:color=white@0.15:t=fill`,
+      // Animated progress bar width driven by current time t
+      `drawbox=x=40:y=${H - 60}:w='${W - 80}*t/${D}':h=6:color=0xC9A84C:t=fill`,
+    ].filter(Boolean).join(',')
+
+    await new Promise((resolve, reject) => {
+      const cmd = ffmpeg()
+      cmd.input(`color=c=0x0D1B2A:size=${W}x${H}:rate=30:duration=${D}`)
+         .inputFormat('lavfi')
+      if (audioResult) cmd.input(audioPath)
+      cmd.videoFilter(vfParts)
+         .outputOptions([
+           '-c:v libx264',
+           '-pix_fmt yuv420p',
+           '-t', String(D),
+           '-preset fast',
+           '-crf 23',
+           '-movflags +faststart',
+           ...(audioResult ? ['-c:a aac', '-shortest'] : [])
+         ])
+         .output(outputPath)
+         .on('start', c => console.log('🎬 FFmpeg cmd (truncated):', c.slice(0, 400)))
+         .on('end', resolve)
+         .on('error', reject)
+         .run()
+    })
+
     const videoKey = `videos/${Date.now()}-${videoId}.mp4`
-
     if (r2 && fs.existsSync(outputPath)) {
       await r2.send(new PutObjectCommand({
         Bucket: R2_BUCKET,
         Key: videoKey,
-        Body: videoBuffer,
+        Body: fs.readFileSync(outputPath),
         ContentType: 'video/mp4'
       }))
-    }
-
-    if (!process.env.R2_PUBLIC_URL) {
-      console.log('🎬 R2_PUBLIC_URL not set - video rendered but URL unavailable')
     }
 
     const videoUrl = process.env.R2_PUBLIC_URL
       ? `${process.env.R2_PUBLIC_URL}/${videoKey}`
       : null
+    if (!process.env.R2_PUBLIC_URL) console.log('🎬 R2_PUBLIC_URL not set')
 
     await pool.query(
       `UPDATE generated_videos SET status='ready', r2_url=$1, completed_at=NOW() WHERE id=$2`,
       [videoUrl, videoId]
     )
-
     console.log(`🎬 Video ${videoId} ready: ${videoKey}`)
     return { videoId, r2Url: videoUrl }
   } catch (err) {
-    console.error('🎬 Video generation error:', err.message)
-    // Mark error in DB if we have a record
+    console.error('🎬 Video error:', err.message)
     try {
       await pool.query(
-        `UPDATE generated_videos SET status='error', error=$1 WHERE script=$2 AND status='rendering'`,
-        [err.message, script]
+        `UPDATE generated_videos SET status='error', error=$1 WHERE id=$2`,
+        [err.message, videoId]
       )
     } catch {}
     return null
   } finally {
-    // Cleanup temp files
     fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 }
