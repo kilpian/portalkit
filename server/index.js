@@ -72,21 +72,26 @@ if (twitterClient) {
 }
 
 // Video generation deps — loaded via dynamic import (ESM-compatible)
-let createCanvas = null
+let sharp = null
 let ffmpegPath = null
 let ffmpeg = null
 ;(async () => {
   try {
-    const canvasMod = await import('@napi-rs/canvas')
-    createCanvas = canvasMod.createCanvas
+    const sharpMod = await import('sharp')
+    sharp = sharpMod.default
+    console.log('🎬 Sharp loaded for frame generation')
+  } catch (e) {
+    console.log('🎬 Sharp not available:', e.message)
+  }
+  try {
     const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg')
     ffmpegPath = ffmpegInstaller.default?.path || ffmpegInstaller.path
     const fluentMod = await import('fluent-ffmpeg')
     ffmpeg = fluentMod.default
     if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath)
-    console.log('🎬 Video generation deps loaded')
+    console.log('🎬 FFmpeg loaded')
   } catch (e) {
-    console.log('🎬 Video generation deps not available:', e.message)
+    console.log('🎬 FFmpeg not available:', e.message)
   }
 })()
 
@@ -1877,124 +1882,91 @@ async function generateVoiceAudio(text, outputPath) {
 }
 
 async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
-  if (!createCanvas) return null
+  if (!sharp) {
+    console.log('🎬 Sharp not available, skipping frames')
+    return null
+  }
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
   }
 
-  const width = 1080
-  const height = 1920
-  // Visuals only change per text chunk, so generate at 6fps and let
-  // ffmpeg output 30fps — 5x fewer frames to encode on Railway.
-  const fps = 6
-  const totalFrames = durationSeconds * fps
+  const W = 1080, H = 1920
+  const totalFrames = durationSeconds * 30  // 900 frames at 30fps
 
-  // Split text into chunks of 6 words each
   const words = text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.length > 0)
   const chunks = []
   for (let i = 0; i < words.length; i += 6) {
     chunks.push(words.slice(i, i + 6).join(' '))
   }
-  if (!chunks.length) chunks.push(text.slice(0, 50))
+  if (!chunks.length) chunks.push('PortalKit')
 
-  const framesPerChunk = Math.max(Math.floor(totalFrames / chunks.length), fps)
-  const expectedTotal = Math.max(chunks.length * framesPerChunk, totalFrames)
+  const framesPerChunk = Math.floor(totalFrames / chunks.length)
+
+  const bgBuffer = await sharp({
+    create: { width: W, height: H, channels: 3, background: { r: 13, g: 27, b: 42 } }
+  }).png().toBuffer()
+
+  function escXml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+  }
+
+  function buildSvg(chunk, chunkIdx) {
+    const progress = (chunkIdx + 1) / chunks.length
+    const barW = Math.max(0, Math.floor((W - 80) * progress))
+
+    const cWords = chunk.split(' ')
+    const lines = []; let cur = ''
+    for (const w of cWords) {
+      const trial = cur ? cur + ' ' + w : w
+      if (trial.length > 25 && cur) { lines.push(cur); cur = w } else cur = trial
+    }
+    if (cur) lines.push(cur)
+
+    const lineH = 90
+    const textStartY = Math.floor((H - lines.length * lineH) / 2)
+
+    const textEls = lines.map((line, i) => {
+      const cy = textStartY + i * lineH + lineH / 2
+      const t = escXml(line)
+      return `<text x="540" y="${cy + 3}" font-family="Arial,Helvetica,sans-serif" font-size="68" font-weight="bold" fill="black" fill-opacity="0.4" text-anchor="middle" dominant-baseline="middle">${t}</text>
+        <text x="540" y="${cy}" font-family="Arial,Helvetica,sans-serif" font-size="68" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${t}</text>`
+    }).join('')
+
+    return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${W}" height="8" fill="#C9A84C"/>
+      <text x="540" y="120" font-family="Arial,Helvetica,sans-serif" font-size="36" font-weight="bold" fill="#C9A84C" text-anchor="middle" dominant-baseline="middle">PORTALKIT</text>
+      <rect x="${W / 2 - 80}" y="148" width="160" height="2" fill="white" fill-opacity="0.2"/>
+      ${textEls}
+      <rect x="80" y="${H - 200}" width="${W - 160}" height="80" fill="#C9A84C"/>
+      <text x="540" y="${H - 160}" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="bold" fill="#0D1B2A" text-anchor="middle" dominant-baseline="middle">getportalkit.com</text>
+      <rect x="40" y="${H - 60}" width="${W - 80}" height="6" fill="white" fill-opacity="0.15"/>
+      <rect x="40" y="${H - 60}" width="${barW}" height="6" fill="#C9A84C"/>
+    </svg>`
+  }
+
   let frameCount = 0
 
   for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
-    const chunk = chunks[chunkIdx]
-    const framesToRender = chunkIdx === chunks.length - 1
-      ? Math.max(framesPerChunk, totalFrames - frameCount)
+    const frameBuffer = await sharp(bgBuffer)
+      .composite([{ input: Buffer.from(buildSvg(chunks[chunkIdx], chunkIdx)), top: 0, left: 0 }])
+      .png()
+      .toBuffer()
+
+    const thisChunkFrames = chunkIdx === chunks.length - 1
+      ? totalFrames - frameCount
       : framesPerChunk
 
-    for (let f = 0; f < framesToRender; f++) {
-      const canvas = createCanvas(width, height)
-      const ctx = canvas.getContext('2d')
-
-      // Solid dark background (no gradient for reliability)
-      ctx.fillStyle = '#0D1B2A'
-      ctx.fillRect(0, 0, width, height)
-
-      // Top accent bar
-      ctx.fillStyle = '#C9A84C'
-      ctx.fillRect(0, 0, width, 8)
-
-      // Brand name
-      ctx.fillStyle = '#C9A84C'
-      ctx.font = 'bold 36px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('PORTALKIT', width / 2, 120)
-
-      // Divider line
-      ctx.fillStyle = 'rgba(255,255,255,0.2)'
-      ctx.fillRect(width / 2 - 80, 145, 160, 2)
-
-      // Main text - white, large, centered
-      ctx.fillStyle = '#FFFFFF'
-      ctx.font = 'bold 68px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-
-      // Word wrap
-      const maxWidth = width - 120
-      const lineHeight = 88
-      const cWords = chunk.split(' ')
-      const lines = []
-      let currentLine = ''
-
-      for (const word of cWords) {
-        const test = currentLine ? currentLine + ' ' + word : word
-        if (ctx.measureText(test).width > maxWidth && currentLine) {
-          lines.push(currentLine)
-          currentLine = word
-        } else {
-          currentLine = test
-        }
-      }
-      if (currentLine) lines.push(currentLine)
-
-      const totalTextHeight = lines.length * lineHeight
-      const startY = (height - totalTextHeight) / 2
-
-      lines.forEach((line, i) => {
-        // Text shadow for readability
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'
-        ctx.fillText(line, width / 2 + 3, startY + i * lineHeight + 3)
-        // Main text
-        ctx.fillStyle = '#FFFFFF'
-        ctx.fillText(line, width / 2, startY + i * lineHeight)
-      })
-
-      // Bottom CTA
-      ctx.fillStyle = 'rgba(201,168,76,0.9)'
-      ctx.fillRect(80, height - 200, width - 160, 80)
-      ctx.fillStyle = '#0D1B2A'
-      ctx.font = 'bold 32px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('getportalkit.com', width / 2, height - 160)
-
-      // Progress bar (smooth, per-frame)
-      const progress = Math.min(frameCount / expectedTotal, 1)
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'
-      ctx.fillRect(40, height - 60, width - 80, 6)
-      ctx.fillStyle = '#C9A84C'
-      ctx.fillRect(40, height - 60, (width - 80) * progress, 6)
-
-      // Save as JPEG: no alpha channel, so ffmpeg's RGBA→yuv420p
-      // path (which produced solid-green output on Railway) is bypassed.
-      const framePath = path.join(
-        outputDir,
-        'frame_' + String(frameCount).padStart(5, '0') + '.jpg'
+    for (let f = 0; f < thisChunkFrames; f++) {
+      fs.writeFileSync(
+        path.join(outputDir, 'frame_' + String(frameCount).padStart(5, '0') + '.png'),
+        frameBuffer
       )
-      fs.writeFileSync(framePath, canvas.toBuffer('image/jpeg', 92))
       frameCount++
     }
   }
 
-  console.log('🎬 Generated ' + frameCount + ' frames')
+  console.log('🎬 Generated ' + frameCount + ' frames (Sharp)')
   return outputDir
 }
 
@@ -2002,7 +1974,7 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 6) {
   if (!ffmpeg) throw new Error('FFmpeg not available')
 
   const frameFiles = fs.readdirSync(framesDir)
-    .filter(f => f.endsWith('.jpg'))
+    .filter(f => f.endsWith('.png'))
     .sort()
   console.log('🎬 Frames to render:', frameFiles.length,
     'first:', frameFiles[0], 'last:', frameFiles[frameFiles.length - 1])
@@ -2013,7 +1985,7 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 6) {
   const hasAudio = !!(audioPath && fs.existsSync(audioPath))
 
   return new Promise((resolve, reject) => {
-    const globPattern = path.join(framesDir, 'frame_*.jpg')
+    const globPattern = path.join(framesDir, 'frame_*.png')
     const cmd = ffmpeg()
     cmd.input(globPattern)
        .inputOptions(['-pattern_type glob', '-framerate ' + fps])
@@ -2079,6 +2051,7 @@ async function generateSocialVideo(script, title, postId) {
 
   const tmpDir = path.join(os.tmpdir(), `video-${Date.now()}`)
   fs.mkdirSync(tmpDir, { recursive: true })
+  const framesDir = path.join(tmpDir, 'frames')
   const audioPath = path.join(tmpDir, 'audio.mp3')
   const outputPath = path.join(tmpDir, 'output.mp4')
 
@@ -2095,102 +2068,11 @@ async function generateSocialVideo(script, title, postId) {
   }
 
   try {
-    // Voice is optional — catch any error and proceed silent
     const audioResult = await generateVoiceAudio(script, audioPath)
+    const framesResult = await generateVideoFrames(script, framesDir)
+    if (!framesResult) throw new Error('Frame generation failed — Sharp unavailable')
 
-    const W = 1080, H = 1920, D = 30
-
-    // Locate a system font for drawtext
-    const fontFile = findFontFile()
-    // Escape path for FFmpeg filter syntax (colons and spaces are special)
-    const fontEsc = fontFile
-      ? fontFile.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/ /g, '\\ ')
-      : ''
-    const fontArg = fontFile ? `fontfile=${fontEsc}:` : ''
-
-    // Sanitize script: strip chars that break FFmpeg filter string parsing
-    const cleanScript = script
-      .replace(/['"\\%]/g, '')
-      .replace(/:/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-
-    // Split into 6-word chunks (each chunk is one "slide")
-    const words = cleanScript.split(' ').filter(Boolean)
-    const chunks = []
-    for (let i = 0; i < words.length; i += 6) {
-      chunks.push(words.slice(i, i + 6).join(' '))
-    }
-    if (!chunks.length) chunks.push('PortalKit')
-
-    const chunkDur = D / chunks.length
-
-    // Write each chunk to its own text file so FFmpeg reads real newlines.
-    // In FFmpeg 4.x, \n in the inline text= option is parsed as literal 'n'
-    // rather than a newline; textfile= bypasses this entirely.
-    function writeChunkFile(chunk, idx) {
-      const ws = chunk.split(' ')
-      const lines = []; let cur = ''
-      for (const w of ws) {
-        const trial = cur ? cur + ' ' + w : w
-        if (trial.length > 22 && cur) { lines.push(cur); cur = w } else cur = trial
-      }
-      if (cur) lines.push(cur)
-      const fp = path.join(tmpDir, `chunk_${idx}.txt`)
-      fs.writeFileSync(fp, lines.join('\n'))
-      return fp
-    }
-
-    // Per-chunk drawtext with enable window (only if font available)
-    const textChunks = fontFile ? chunks.map((chunk, i) => {
-      const t0 = (i * chunkDur).toFixed(3)
-      const t1 = ((i + 1) * chunkDur).toFixed(3)
-      const fp = writeChunkFile(chunk, i)
-      const fpEsc = fp.replace(/:/g, '\\:')
-      return `drawtext=${fontArg}textfile=${fpEsc}:fontcolor=white:fontsize=52:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=14:enable='gte(t,${t0})*lt(t,${t1})'`
-    }) : []
-
-    // Static brand / CTA text (only if font)
-    const brandHeader = fontFile
-      ? `drawtext=${fontArg}text='PORTALKIT':fontcolor=0xC9A84C:fontsize=36:x=(w-text_w)/2:y=100`
-      : null
-    const ctaText = fontFile
-      ? `drawtext=${fontArg}text='getportalkit.com':fontcolor=0x0D1B2A:fontsize=32:x=(w-text_w)/2:y=${H - 172}`
-      : null
-
-    const vfParts = [
-      `drawbox=x=0:y=0:w=${W}:h=8:color=0xC9A84C:t=fill`,
-      brandHeader,
-      `drawbox=x=${W / 2 - 80}:y=148:w=160:h=2:color=white@0.2:t=fill`,
-      ...textChunks,
-      `drawbox=x=80:y=${H - 200}:w=${W - 160}:h=80:color=0xC9A84C:t=fill`,
-      ctaText,
-      `drawbox=x=40:y=${H - 60}:w=${W - 80}:h=6:color=white@0.15:t=fill`,
-      // Animated progress bar width driven by current time t
-      `drawbox=x=40:y=${H - 60}:w='${W - 80}*t/${D}':h=6:color=0xC9A84C:t=fill`,
-    ].filter(Boolean).join(',')
-
-    await new Promise((resolve, reject) => {
-      const cmd = ffmpeg()
-      cmd.input(`color=c=0x0D1B2A:size=${W}x${H}:rate=30:duration=${D}`)
-         .inputFormat('lavfi')
-      if (audioResult) cmd.input(audioPath)
-      cmd.videoFilter(vfParts)
-         .outputOptions([
-           '-c:v libx264',
-           '-pix_fmt yuv420p',
-           '-t', String(D),
-           '-preset fast',
-           '-crf 23',
-           '-movflags +faststart',
-           ...(audioResult ? ['-c:a aac', '-shortest'] : [])
-         ])
-         .output(outputPath)
-         .on('start', c => console.log('🎬 FFmpeg cmd (truncated):', c.slice(0, 400)))
-         .on('end', resolve)
-         .on('error', reject)
-         .run()
-    })
+    await renderVideo(framesDir, audioResult ? audioPath : null, outputPath, 30)
 
     const videoKey = `videos/${Date.now()}-${videoId}.mp4`
     if (r2 && fs.existsSync(outputPath)) {
