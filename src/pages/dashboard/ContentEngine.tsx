@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
-import ConfirmModal from '../../components/ConfirmModal'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
@@ -39,8 +38,13 @@ export default function ContentEngine() {
   const [videoScript, setVideoScript] = useState('')
   const [videoTitle, setVideoTitle] = useState('')
   const [videoGenerating, setVideoGenerating] = useState(false)
-  const videoPolling = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [deleteVideoId, setDeleteVideoId] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [captionVideoId, setCaptionVideoId] = useState<number | null>(null)
+  const [captions, setCaptions] = useState<any>(null)
+  const [generatingCaptions, setGeneratingCaptions] = useState(false)
+
+  // Outreach state
+  const [showAllSends, setShowAllSends] = useState(false)
 
   const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
 
@@ -106,18 +110,14 @@ export default function ContentEngine() {
     fetchVideos()
   }, [isAdmin, fetchPosts, fetchLeads, fetchOutreachStats, fetchVideos])
 
-  // Poll videos while any are rendering
+  // Poll videos while any are rendering — timer clears itself when done
   useEffect(() => {
-    const hasRendering = videos.some(v => v.status === 'rendering' || v.status === 'queued')
-    if (hasRendering && !videoPolling.current) {
-      videoPolling.current = setInterval(fetchVideos, 8000)
-    } else if (!hasRendering && videoPolling.current) {
-      clearInterval(videoPolling.current)
-      videoPolling.current = null
-    }
-    return () => {
-      if (videoPolling.current) clearInterval(videoPolling.current)
-    }
+    const hasRendering = videos.some(
+      (v: any) => v.status === 'rendering' || v.status === 'pending' || v.status === 'queued'
+    )
+    if (!hasRendering) return
+    const timer = setInterval(() => fetchVideos(), 6000)
+    return () => clearInterval(timer)
   }, [videos, fetchVideos])
 
   const handleGenerate = async () => {
@@ -278,6 +278,28 @@ export default function ContentEngine() {
       showToast('Video deleted')
     } catch {
       showToast('Failed to delete', 'error')
+    }
+  }
+
+  const handleGenerateCaptions = async (video: any) => {
+    setGeneratingCaptions(true)
+    setCaptionVideoId(video.id)
+    setCaptions(null)
+    try {
+      const res = await fetch(`${API_URL}/api/admin/generate-captions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
+        },
+        body: JSON.stringify({ script: video.script })
+      })
+      const data = await res.json()
+      setCaptions(data.captions)
+    } catch {
+      showToast('Caption generation failed', 'error')
+    } finally {
+      setGeneratingCaptions(false)
     }
   }
 
@@ -617,300 +639,106 @@ export default function ContentEngine() {
       {/* Outreach tab */}
       {activeTab === 'outreach' && (
         <div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 12, marginBottom: 12
-          }}>
-            {['queued', 'sent', 'replied', 'opted_out', 'bounced'].map(s => (
-              <div key={s} style={{
-                background: 'white', borderRadius: 10,
-                padding: 16, border: '1px solid var(--border-subtle)'
-              }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase' as const,
-                  marginBottom: 6
-                }}>
-                  {s.replace('_', ' ')}
-                </div>
-                <div style={{
-                  fontSize: 26, fontWeight: 800,
-                  color: s === 'replied' ? '#059669' : '#1B4332'
-                }}>
-                  {outreachStats?.byStatus?.find(
-                    (b: any) => b.status === s
-                  )?.count || 0}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 12, marginBottom: 24
-          }}>
-            <div style={{
-              background: 'white', borderRadius: 10,
-              padding: 16, border: '1px solid var(--border-subtle)'
-            }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase' as const, marginBottom: 6
-              }}>
-                Queued Today
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: '#C9A84C' }}>
-                {outreachStats?.queuedToday || 0}
-              </div>
-            </div>
-            <div style={{
-              background: 'white', borderRadius: 10,
-              padding: 16, border: '1px solid var(--border-subtle)'
-            }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase' as const, marginBottom: 6
-              }}>
-                Sent Today
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: '#1B4332' }}>
-                {outreachStats?.sentToday || 0}
-              </div>
-            </div>
-          </div>
-
-          {(outreachStats?.replies?.length > 0) && (
-            <div style={{
-              background: 'white', borderRadius: 12,
-              padding: 20, marginBottom: 20,
-              border: '1px solid #A7F3D0'
-            }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#059669' }}>
-                💬 Replies ({outreachStats.replies.length})
-              </h3>
-              {outreachStats.replies.map((r: any, i: number) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 0',
-                  borderBottom: i < outreachStats.replies.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                  fontSize: 13
-                }}>
-                  <span style={{ fontWeight: 600 }}>{r.email}</span>
-                  {r.business_name && (
-                    <span style={{ color: 'var(--text-muted)' }}>{r.business_name}</span>
-                  )}
-                  {r.sent_at && (
-                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>
-                      sent {new Date(r.sent_at).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{
-            background: 'white', borderRadius: 12,
-            padding: 20, marginBottom: 20,
-            border: '1px solid var(--border-subtle)'
-          }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1B4332' }}>
-              Recent Sends
-            </h3>
-            {(!outreachStats?.recentSends || outreachStats.recentSends.length === 0) ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                No emails sent yet. The drip runs daily at 1pm UTC.
-              </p>
-            ) : (
-              outreachStats.recentSends.map((s: any, i: number) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 0',
-                  borderBottom: i < outreachStats.recentSends.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                  fontSize: 13
-                }}>
-                  <span style={{ fontWeight: 600 }}>{s.email}</span>
-                  {s.business_name && (
-                    <span style={{ color: 'var(--text-muted)' }}>{s.business_name}</span>
-                  )}
-                  <span style={{
-                    marginLeft: 'auto', fontSize: 11, fontWeight: 700,
-                    padding: '2px 8px', borderRadius: 99,
-                    background: s.status === 'replied' ? '#F0FDF4' : '#F8FAFC',
-                    color: s.status === 'replied' ? '#059669' : '#64748B',
-                    textTransform: 'uppercase' as const
-                  }}>
-                    {s.status}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 130, textAlign: 'right' as const }}>
-                    {new Date(s.sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div style={{
-            background: 'white', borderRadius: 12,
-            padding: 20, marginBottom: 20,
-            border: '1px solid var(--border-subtle)'
-          }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>
-              Find Photographers by City
-            </h3>
+          {/* 1. City finder — primary action */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, border: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>Find Photographers by City</h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
               Enter any US city. We search the web for photographer studio websites and scrape their real contact emails. No new API keys needed. Queue updates in ~60 seconds.
             </p>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <input
-                type="text"
-                value={searchCity}
-                onChange={e => setSearchCity(e.target.value)}
-                placeholder="City (e.g. Austin)"
-                style={{
-                  flex: 2, padding: '9px 14px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8, fontSize: 13
-                }}
-              />
-              <input
-                type="text"
-                value={searchState}
-                onChange={e => setSearchState(e.target.value)}
-                placeholder="State (e.g. TX)"
-                style={{
-                  flex: 1, padding: '9px 14px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8, fontSize: 13
-                }}
-              />
-              <button
-                onClick={handleFindEmails}
-                disabled={searching || !searchCity.trim()}
-                style={{
-                  background: '#1B4332', color: 'white', border: 'none',
-                  padding: '9px 16px', borderRadius: 8, fontSize: 14,
-                  fontWeight: 600, cursor: 'pointer',
-                  opacity: searching ? 0.7 : 1, whiteSpace: 'nowrap' as const
-                }}
-              >
+              <input type="text" value={searchCity} onChange={e => setSearchCity(e.target.value)} placeholder="City (e.g. Austin)" style={{ flex: 2, padding: '9px 14px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
+              <input type="text" value={searchState} onChange={e => setSearchState(e.target.value)} placeholder="State (e.g. TX)" style={{ flex: 1, padding: '9px 14px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
+              <button onClick={handleFindEmails} disabled={searching || !searchCity.trim()} style={{ background: '#1B4332', color: 'white', border: 'none', padding: '9px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: searching ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
                 {searching ? 'Searching...' : 'Find & Import'}
               </button>
             </div>
             {searchResult && (
-              <div style={{
-                padding: '10px 14px', background: '#F0FDF4',
-                border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13
-              }}>
+              <div style={{ padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13 }}>
                 {searchResult.message || `Found ${searchResult.found} emails. Added ${searchResult.added} new contacts, skipped ${searchResult.skipped} duplicates.`}
               </div>
             )}
           </div>
 
-          <div style={{
-            background: 'white', borderRadius: 12,
-            padding: 20, marginBottom: 20,
-            border: '1px solid var(--border-subtle)'
-          }}>
-            <h3 style={{
-              fontSize: 14, fontWeight: 700,
-              marginBottom: 6, color: '#1B4332'
-            }}>
-              Import Contacts
-            </h3>
-            <p style={{
-              fontSize: 12, color: 'var(--text-muted)',
-              marginBottom: 12
-            }}>
-              One per line. Format: email OR email,FirstName,BusinessName
-            </p>
-            <textarea
-              value={importText}
-              onChange={e => setImportText(e.target.value)}
-              placeholder={'sarah@sarahphoto.com,Sarah,Sarah Photo Co\nmike@mikeweddings.com'}
-              style={{
-                width: '100%', height: 140,
-                padding: '10px 14px',
-                border: '1px solid var(--border)',
-                borderRadius: 8, fontSize: 13,
-                fontFamily: 'monospace', resize: 'vertical' as const,
-                boxSizing: 'border-box' as const
-              }}
-            />
-            <button
-              onClick={handleImport}
-              disabled={importing || !importText.trim()}
-              style={{
-                marginTop: 10, background: '#1B4332',
-                color: 'white', border: 'none',
-                padding: '10px 20px', borderRadius: 8,
-                fontSize: 14, fontWeight: 600,
-                cursor: 'pointer',
-                opacity: importing ? 0.7 : 1
-              }}
-            >
+          {/* 2. Manual import */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, border: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>Import Contacts</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>One per line. Format: email OR email,FirstName,BusinessName</p>
+            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder={'sarah@sarahphoto.com,Sarah,Sarah Photo Co\nmike@mikeweddings.com'} style={{ width: '100%', height: 100, padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontFamily: 'monospace', resize: 'vertical' as const, boxSizing: 'border-box' as const }} />
+            <button onClick={handleImport} disabled={importing || !importText.trim()} style={{ marginTop: 8, background: '#1B4332', color: 'white', border: 'none', padding: '9px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: importing ? 0.7 : 1 }}>
               {importing ? 'Importing...' : 'Import Contacts'}
             </button>
-
             {importResult && (
-              <div style={{
-                marginTop: 12, padding: '10px 14px',
-                background: '#F0FDF4',
-                border: '1px solid #BBF7D0',
-                borderRadius: 8, fontSize: 13
-              }}>
-                {importResult.error
-                  ? importResult.error
-                  : `Added ${importResult.added} contacts. Skipped ${importResult.skipped}.`
-                }
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13 }}>
+                {importResult.error ? importResult.error : `Added ${importResult.added} contacts. Skipped ${importResult.skipped}.`}
               </div>
             )}
           </div>
 
-          <div style={{
-            background: 'white', borderRadius: 12,
-            padding: 20, border: '1px solid var(--border-subtle)'
-          }}>
-            <h3 style={{
-              fontSize: 14, fontWeight: 700,
-              marginBottom: 12, color: '#1B4332'
-            }}>
-              Send Test Email
-            </h3>
-            <p style={{
-              fontSize: 12, color: 'var(--text-muted)',
-              marginBottom: 10
-            }}>
-              Sends a test cold email to any address so you can see exactly what photographers receive.
-              Requires COLD_EMAIL_FROM to be set in Railway.
-            </p>
+          {/* 3. Stats row — compact chips */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 16 }}>
+            {['queued', 'sent', 'replied', 'opted_out', 'bounced'].map(s => (
+              <div key={s} style={{ background: 'white', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const }}>{s.replace('_', ' ')}</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: s === 'replied' ? '#059669' : '#1B4332' }}>
+                  {outreachStats?.byStatus?.find((b: any) => b.status === s)?.count || 0}
+                </span>
+              </div>
+            ))}
+            <div style={{ background: 'white', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const }}>Today</span>
+              <span style={{ fontSize: 18, fontWeight: 800, color: '#C9A84C' }}>{outreachStats?.sentToday || 0} sent</span>
+            </div>
+          </div>
+
+          {/* 4. Replies */}
+          {(outreachStats?.replies?.length > 0) && (
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, border: '1px solid #A7F3D0' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#059669' }}>💬 Replies ({outreachStats.replies.length})</h3>
+              {outreachStats.replies.map((r: any, i: number) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < outreachStats.replies.length - 1 ? '1px solid var(--border-subtle)' : 'none', fontSize: 13 }}>
+                  <span style={{ fontWeight: 600 }}>{r.email}</span>
+                  {r.business_name && <span style={{ color: 'var(--text-muted)' }}>{r.business_name}</span>}
+                  {r.sent_at && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>sent {new Date(r.sent_at).toLocaleDateString()}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 5. Recent sends — collapsible */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1B4332', margin: 0 }}>
+                Recent Sends {outreachStats?.recentSends?.length ? `(${outreachStats.recentSends.length})` : ''}
+              </h3>
+              {outreachStats?.recentSends?.length > 5 && (
+                <button onClick={() => setShowAllSends(s => !s)} style={{ fontSize: 12, color: '#1B4332', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  {showAllSends ? 'Show less' : `Show all ${outreachStats.recentSends.length}`}
+                </button>
+              )}
+            </div>
+            {(!outreachStats?.recentSends || outreachStats.recentSends.length === 0) ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No emails sent yet. The drip runs daily at 1pm UTC.</p>
+            ) : (
+              (showAllSends ? outreachStats.recentSends : outreachStats.recentSends.slice(0, 5)).map((s: any, i: number, arr: any[]) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < arr.length - 1 ? '1px solid var(--border-subtle)' : 'none', fontSize: 12 }}>
+                  <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{s.email}</span>
+                  {s.business_name && <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{s.business_name}</span>}
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: s.status === 'replied' ? '#F0FDF4' : s.status === 'bounced' ? '#FEE2E2' : '#F8FAFC', color: s.status === 'replied' ? '#059669' : s.status === 'bounced' ? '#991B1B' : '#64748B', textTransform: 'uppercase' as const, flexShrink: 0 }}>
+                    {s.status}
+                  </span>
+                  {s.sent_at && <span style={{ fontSize: 11, color: 'var(--text-dim)', flexShrink: 0 }}>{new Date(s.sent_at).toLocaleDateString()}</span>}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 6. Send test email */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, border: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#1B4332' }}>Send Test Email</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>Sends a test cold email so you can see exactly what photographers receive. Requires COLD_EMAIL_FROM in Railway.</p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="email"
-                value={testingEmail}
-                onChange={e => setTestingEmail(e.target.value)}
-                placeholder="your@email.com"
-                style={{
-                  flex: 1, padding: '9px 14px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8, fontSize: 13
-                }}
-              />
-              <button
-                onClick={handleTestEmail}
-                disabled={testSending || !testingEmail}
-                style={{
-                  background: '#1B4332',
-                  color: 'white', border: 'none',
-                  padding: '9px 16px', borderRadius: 8,
-                  fontSize: 14, fontWeight: 600,
-                  cursor: 'pointer',
-                  opacity: testSending ? 0.7 : 1
-                }}
-              >
+              <input type="email" value={testingEmail} onChange={e => setTestingEmail(e.target.value)} placeholder="your@email.com" style={{ flex: 1, padding: '9px 14px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
+              <button onClick={handleTestEmail} disabled={testSending || !testingEmail} style={{ background: '#1B4332', color: 'white', border: 'none', padding: '9px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: testSending ? 0.7 : 1 }}>
                 {testSending ? 'Sending...' : 'Send Test'}
               </button>
             </div>
@@ -921,18 +749,6 @@ export default function ContentEngine() {
       {/* Videos tab */}
       {activeTab === 'videos' && (
         <div>
-          <ConfirmModal
-            open={deleteVideoId !== null}
-            title="Delete this video"
-            message="This will permanently remove the video record. This cannot be undone."
-            confirmLabel="Delete Video"
-            danger={true}
-            onConfirm={async () => {
-              if (deleteVideoId !== null) await handleDeleteVideo(deleteVideoId)
-              setDeleteVideoId(null)
-            }}
-            onCancel={() => setDeleteVideoId(null)}
-          />
           <div style={{
             background: 'white', borderRadius: 12,
             padding: 20, marginBottom: 20,
@@ -942,7 +758,7 @@ export default function ContentEngine() {
               Generate Video
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Renders a branded 1080x1920 MP4. Voice narration is added automatically when ElevenLabs is configured (silent otherwise). Requires R2 in Railway.
+              Renders a branded 1080x1920 MP4. Voice narration via Kokoro TTS (ElevenLabs fallback). Pexels background auto-selected. Requires R2 in Railway.
             </p>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
               Title (optional)
@@ -996,72 +812,151 @@ export default function ContentEngine() {
           ) : (
             videos.map((v: any) => {
               const isReady = v.status === 'ready' || v.status === 'done'
+              const isDeleting = deleteConfirmId === v.id
+              const showCaptions = captionVideoId === v.id && captions
               return (
-              <div key={v.id} style={{
-                background: 'white', borderRadius: 10, padding: 16, marginBottom: 12,
-                border: '1px solid var(--border-subtle)',
-                borderLeft: `4px solid ${isReady ? '#059669' : v.status === 'error' ? '#DC2626' : '#C9A84C'}`,
-                boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                    background: isReady ? '#F0FDF4' : v.status === 'error' ? '#FEE2E2' : '#FFFBEB',
-                    color: isReady ? '#14532D' : v.status === 'error' ? '#991B1B' : '#92400E',
-                    textTransform: 'uppercase' as const
+                <div key={v.id}>
+                  <div style={{
+                    background: 'white', padding: 16,
+                    borderRadius: showCaptions ? '10px 10px 0 0' : 10,
+                    marginBottom: showCaptions ? 0 : 12,
+                    border: '1px solid var(--border-subtle)',
+                    borderLeft: `4px solid ${isReady ? '#059669' : v.status === 'error' ? '#DC2626' : '#C9A84C'}`,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
                   }}>
-                    {v.status}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {v.title || 'Untitled video'}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                    {new Date(v.created_at).toLocaleDateString()}
-                  </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                        background: isReady ? '#F0FDF4' : v.status === 'error' ? '#FEE2E2' : '#FFFBEB',
+                        color: isReady ? '#14532D' : v.status === 'error' ? '#991B1B' : '#92400E',
+                        textTransform: 'uppercase' as const
+                      }}>
+                        {v.status}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {v.title || 'Untitled video'}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                        {new Date(v.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {v.script && (
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>
+                        {v.script.length > 200 ? v.script.slice(0, 200) + '...' : v.script}
+                      </p>
+                    )}
+                    {v.error && (
+                      <p style={{ fontSize: 12, color: '#DC2626', margin: '0 0 8px' }}>Error: {v.error}</p>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+                      {(v.status === 'rendering' || v.status === 'queued' || v.status === 'pending') && (
+                        <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
+                      )}
+                      {isReady && v.r2_url && (
+                        <>
+                          <a
+                            href={v.r2_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: 12, padding: '5px 12px',
+                              background: '#F8FAFC', border: '1px solid #E2E8F0',
+                              borderRadius: 6, color: '#374151', fontWeight: 600,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            View
+                          </a>
+                          <a
+                            href={v.r2_url}
+                            download
+                            style={{
+                              fontSize: 12, padding: '5px 12px',
+                              background: '#F0FDF4', border: '1px solid #A7F3D0',
+                              borderRadius: 6, color: '#059669', fontWeight: 600,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            Download
+                          </a>
+                          <button
+                            onClick={() => {
+                              if (captionVideoId === v.id) { setCaptionVideoId(null); setCaptions(null) }
+                              else handleGenerateCaptions(v)
+                            }}
+                            disabled={generatingCaptions && captionVideoId === v.id}
+                            style={{
+                              fontSize: 12, padding: '5px 12px',
+                              background: showCaptions ? '#1B4332' : 'white',
+                              border: '1px solid #1B4332',
+                              borderRadius: 6,
+                              color: showCaptions ? 'white' : '#1B4332',
+                              fontWeight: 600, cursor: 'pointer',
+                              opacity: generatingCaptions && captionVideoId === v.id ? 0.6 : 1
+                            }}
+                          >
+                            {generatingCaptions && captionVideoId === v.id ? 'Generating...' : showCaptions ? 'Hide Captions' : 'Captions'}
+                          </button>
+                        </>
+                      )}
+                      {(isReady || v.status === 'error') && (
+                        isDeleting ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                            <span style={{ fontSize: 12, color: '#A32D2D', fontWeight: 600 }}>Delete?</span>
+                            <button
+                              onClick={async () => { await handleDeleteVideo(v.id); setDeleteConfirmId(null) }}
+                              style={{ fontSize: 12, padding: '4px 10px', background: '#DC2626', border: 'none', borderRadius: 6, color: 'white', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              style={{ fontSize: 12, padding: '4px 10px', background: 'white', border: '1px solid #E5E7EB', borderRadius: 6, color: '#6B7280', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(v.id)}
+                            style={{
+                              fontSize: 12, padding: '4px 10px', marginLeft: 'auto',
+                              border: '1px solid #FCA5A5',
+                              borderRadius: 6, background: 'white',
+                              color: '#A32D2D', cursor: 'pointer', fontWeight: 600
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  {showCaptions && (
+                    <div style={{
+                      background: '#F8FAFC', border: '1px solid var(--border-subtle)',
+                      borderTop: 'none', borderRadius: '0 0 10px 10px',
+                      padding: 16, marginBottom: 12
+                    }}>
+                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px', color: '#1B4332' }}>Platform Captions</h4>
+                      {Object.entries(captions).map(([platform, caption]: [string, any]) => (
+                        <div key={platform} style={{ marginBottom: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const }}>{platform}</span>
+                            <button
+                              onClick={() => navigator.clipboard.writeText(String(caption))}
+                              style={{ fontSize: 11, padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 5, background: 'white', cursor: 'pointer', color: 'var(--text-muted)', fontWeight: 600 }}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>{String(caption)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {v.script && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>
-                    {v.script.length > 200 ? v.script.slice(0, 200) + '...' : v.script}
-                  </p>
-                )}
-                {v.error && (
-                  <p style={{ fontSize: 12, color: '#DC2626', margin: '0 0 8px' }}>Error: {v.error}</p>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-                  {isReady && v.r2_url && (
-                    <a
-                      href={v.r2_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'inline-block', fontSize: 12, padding: '5px 12px',
-                        background: '#F0FDF4', border: '1px solid #A7F3D0',
-                        borderRadius: 6, color: '#059669', fontWeight: 600,
-                        textDecoration: 'none'
-                      }}
-                    >
-                      Download MP4
-                    </a>
-                  )}
-                  {(v.status === 'rendering' || v.status === 'queued') && (
-                    <span style={{ fontSize: 12, color: '#92400E' }}>Rendering... (auto-refreshes)</span>
-                  )}
-                  {(v.status === 'error' || isReady) && (
-                    <button
-                      onClick={() => setDeleteVideoId(v.id)}
-                      style={{
-                        fontSize: 12, padding: '4px 10px',
-                        border: '1px solid #FCA5A5',
-                        borderRadius: 6, background: 'white',
-                        color: '#A32D2D', cursor: 'pointer',
-                        fontWeight: 600
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
               )
             })
           )}

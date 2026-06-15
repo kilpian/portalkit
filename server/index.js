@@ -1927,20 +1927,32 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
   }
 
   const W = 1080, H = 1920
-  const totalFrames = durationSeconds * 30  // 900 frames at 30fps
+  const fps = 30
+  const wordsPerMinute = 150
 
-  const words = text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.length > 0)
+  // Split into sentences, group short ones so each slide is a complete thought
+  const sentences = text.replace(/\n/g, ' ').split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0)
   const chunks = []
-  for (let i = 0; i < words.length; i += 6) {
-    chunks.push(words.slice(i, i + 6).join(' '))
+  let current = ''
+  for (const sentence of sentences) {
+    const wc = sentence.split(/\s+/).length
+    if (current && current.split(/\s+/).length + wc > 12) {
+      chunks.push(current.trim())
+      current = sentence
+    } else {
+      current = current ? current + ' ' + sentence : sentence
+    }
   }
-  if (!chunks.length) chunks.push('PortalKit')
+  if (current) chunks.push(current.trim())
+  if (!chunks.length) chunks.push(text.trim() || 'Portal Kit')
 
-  const framesPerChunk = Math.floor(totalFrames / chunks.length)
   let frameCount = 0
 
   for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
     const chunk = chunks[chunkIdx]
+    const wordCount = chunk.split(/\s+/).length
+    const chunkDuration = Math.max(2, Math.ceil((wordCount / wordsPerMinute) * 60))
+    const framesToGenerate = chunkDuration * fps
     const canvas = createCanvas(W, H)
     const ctx = canvas.getContext('2d')
 
@@ -2007,11 +2019,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     // skia-canvas toBuffer() is async and returns correct colors on Linux
     const frameBuffer = await canvas.toBuffer('image/png')
 
-    const thisChunkFrames = chunkIdx === chunks.length - 1
-      ? totalFrames - frameCount
-      : framesPerChunk
-
-    for (let f = 0; f < thisChunkFrames; f++) {
+    for (let f = 0; f < framesToGenerate; f++) {
       fs.writeFileSync(
         path.join(outputDir, 'frame_' + String(frameCount).padStart(5, '0') + '.png'),
         frameBuffer
@@ -2021,7 +2029,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     }
   }
 
-  console.log('🎬 Generated ' + frameCount + ' frames (skia-canvas)')
+  console.log('🎬 Generated ' + frameCount + ' frames (skia-canvas, sentence-based)')
   return outputDir
 }
 
@@ -2147,6 +2155,52 @@ function findFontFile() {
   return null
 }
 
+async function prepareVideoScript(rawScript) {
+  if (!anthropic) return rawScript
+  try {
+    const rewriteRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      messages: [{ role: 'user', content: `Rewrite this social media script for natural text-to-speech audio. Rules:\n- Keep the core message and all key facts\n- Use conversational spoken language\n- Break into short punchy sentences (10-15 words max)\n- Remove hashtags, URLs, special characters\n- Spell out numbers ("31" → "thirty-one")\n- Expand abbreviations\n- Keep total word count similar\n- Do NOT add intro/outro filler words\n- Return ONLY the rewritten script, no explanation\n\nScript: ${rawScript}` }]
+    })
+    let script = rewriteRes.content[0]?.text || rawScript
+    script = script
+      .replace(/PortalKit/gi, 'Portal Kit')
+      .replace(/getportalkit\.com/gi, 'get portal kit dot com')
+      .replace(/portalkit\.com/gi, 'portal kit dot com')
+      .replace(/resending/gi, 're-sending')
+      .replace(/DocuSign/gi, 'Docu Sign')
+      .replace(/Pixieset/gi, 'Pixie set')
+      .replace(/HoneyBook/gi, 'Honey Book')
+      .replace(/Calendly/gi, 'Calendar Lee')
+      .replace(/https?:\/\/[^\s]+/gi, url =>
+        url.replace('https://', '').replace('http://', '')
+          .replace(/\//g, ' slash ').replace(/\./g, ' dot '))
+      .replace(/\s+/g, ' ').trim()
+    console.log('🎬 Script rewritten for TTS')
+    return script
+  } catch (err) {
+    console.log('🎬 Script rewrite failed, using original:', err.message)
+    return rawScript
+  }
+}
+
+async function getPexelsQuery(script) {
+  if (!anthropic) return 'wedding photography couple'
+  try {
+    const res = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 20,
+      messages: [{ role: 'user', content: `What 2-3 word Pexels stock video search term best matches this script theme? Return ONLY the search term, nothing else.\n\nScript: ${script.slice(0, 200)}` }]
+    })
+    const query = res.content[0]?.text?.trim() || 'wedding photography'
+    console.log('🎬 Pexels query:', query)
+    return query
+  } catch {
+    return 'wedding photography couple'
+  }
+}
+
 async function getPexelsBackgroundVideo(query, tmpDir) {
   if (!PEXELS_API_KEY) return null
   try {
@@ -2205,12 +2259,15 @@ async function generateSocialVideo(script, title, postId) {
   }
 
   try {
-    const audioResult = await generateVoiceAudio(script, audioPath)
+    const processedScript = await prepareVideoScript(script)
 
-    const pexelsBgPath = await getPexelsBackgroundVideo('wedding photography couple', tmpDir).catch(() => null)
+    const audioResult = await generateVoiceAudio(processedScript, audioPath)
+
+    const pexelsQuery = await getPexelsQuery(processedScript)
+    const pexelsBgPath = await getPexelsBackgroundVideo(pexelsQuery, tmpDir).catch(() => null)
     console.log('🎬 Pexels background:', pexelsBgPath ? 'ready' : 'not available')
 
-    const framesResult = await generateVideoFrames(script, framesDir)
+    const framesResult = await generateVideoFrames(processedScript, framesDir)
     if (!framesResult) throw new Error('Frame generation failed — skia-canvas unavailable')
 
     await renderVideo(framesDir, audioResult || null, outputPath, 30, pexelsBgPath)
@@ -7111,8 +7168,8 @@ app.get('/api/admin/cold-contacts/stats', async (req, res) => {
       pool.query(
         `SELECT email, business_name, status, sent_at
          FROM cold_contacts
-         WHERE sent_at IS NOT NULL
-         ORDER BY sent_at DESC LIMIT 10`
+         WHERE status IN ('sent', 'replied', 'bounced', 'opted_out')
+         ORDER BY sent_at DESC NULLS LAST LIMIT 20`
       ),
       pool.query(
         `SELECT email, business_name, sent_at
@@ -7222,10 +7279,49 @@ app.get('/api/admin/generated-videos', async (req, res) => {
   }
 })
 
+app.post('/api/admin/generate-captions', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  const { script } = req.body
+  if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
+  try {
+    const captionRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: `Generate social media captions for this video about PortalKit (a client portal SaaS for wedding photographers, $29-39/month, getportalkit.com).\n\nVideo script: ${script}\n\nGenerate ONE caption for each platform. Return as JSON only:\n{\n  "instagram": "caption (max 2200 chars, 3-5 relevant hashtags at end, conversational, emoji OK)",\n  "tiktok": "caption (max 150 chars, 3 hashtags max, hook first, very casual)",\n  "twitter": "caption (max 280 chars, 1-2 hashtags, punchy, no fluff)",\n  "linkedin": "caption (max 700 chars, professional tone, no hashtags, value-first)",\n  "youtube_shorts": "caption (max 100 chars, descriptive, 2 hashtags)"\n}\n\nRules: no em dashes, use contractions, value-first, mention free trial where natural. Return ONLY the JSON.` }]
+    })
+    const text = captionRes.content[0]?.text || '{}'
+    const clean = text.replace(/```json|```/g, '').trim()
+    const captions = JSON.parse(clean)
+    res.json({ captions })
+  } catch (err) {
+    console.error('Caption generation error:', err.message)
+    res.status(500).json({ error: 'Caption generation failed' })
+  }
+})
+
 app.delete('/api/admin/generated-videos/:id', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  await pool.query('DELETE FROM generated_videos WHERE id=$1', [req.params.id])
-  res.json({ success: true })
+  try {
+    const record = await pool.query('SELECT r2_url FROM generated_videos WHERE id=$1', [req.params.id])
+    const r2Url = record.rows[0]?.r2_url
+    if (r2Url && r2 && R2_BUCKET) {
+      try {
+        const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || ''
+        const key = r2Url.replace(R2_PUBLIC_URL + '/', '')
+        if (key && key !== r2Url) {
+          await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }))
+          console.log('🗑️ Deleted from R2:', key)
+        }
+      } catch (r2Err) {
+        console.error('R2 delete error:', r2Err.message)
+      }
+    }
+    await pool.query('DELETE FROM generated_videos WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete video error:', err.message)
+    res.status(500).json({ error: 'Delete failed' })
+  }
 })
 
 app.use((err, req, res, next) => {
