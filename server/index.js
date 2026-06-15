@@ -1918,10 +1918,6 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     const canvas = createCanvas(W, H)
     const ctx = canvas.getContext('2d')
 
-    // Solid navy background — explicit RGB avoids any color-space reinterpretation
-    ctx.fillStyle = '#0D1B2A'
-    ctx.fillRect(0, 0, W, H)
-
     // Top gold accent bar
     ctx.fillStyle = '#C9A84C'
     ctx.fillRect(0, 0, W, 8)
@@ -1994,6 +1990,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
         path.join(outputDir, 'frame_' + String(frameCount).padStart(5, '0') + '.png'),
         frameBuffer
       )
+      if (frameCount === 0) console.log('🎬 Frame check: transparent background, canvas elements only')
       frameCount++
     }
   }
@@ -2005,38 +2002,66 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
 async function renderVideo(framesDir, audioPath, outputPath, fps = 6) {
   if (!ffmpeg) throw new Error('FFmpeg not available')
 
-  const frameFiles = fs.readdirSync(framesDir)
-    .filter(f => f.endsWith('.png'))
-    .sort()
-  console.log('🎬 Frames to render:', frameFiles.length,
-    'first:', frameFiles[0], 'last:', frameFiles[frameFiles.length - 1])
-  if (frameFiles.length === 0) {
-    throw new Error('No frames found in ' + framesDir)
-  }
-
-  const hasAudio = !!(audioPath && fs.existsSync(audioPath))
-
   return new Promise((resolve, reject) => {
+    const frameFiles = fs.readdirSync(framesDir)
+      .filter(f => f.endsWith('.png'))
+      .sort()
+
+    console.log('🎬 Frames to render:', frameFiles.length,
+      'first:', frameFiles[0], 'last:', frameFiles[frameFiles.length - 1])
+
+    if (!frameFiles.length) {
+      reject(new Error('No frames in ' + framesDir))
+      return
+    }
+
     const globPattern = path.join(framesDir, 'frame_*.png')
+    const duration = Math.ceil(frameFiles.length / fps)
+    const hasAudio = !!(audioPath && fs.existsSync(audioPath))
+
     const cmd = ffmpeg()
+
+    // Input 0: FFmpeg-generated navy background — color always correct from FFmpeg
+    cmd.input(`color=c=0x0D1B2A:s=1080x1920:r=30:d=${duration}`)
+       .inputOption('-f lavfi')
+
+    // Input 1: Canvas frames with transparent background (RGBA PNG)
     cmd.input(globPattern)
        .inputOptions(['-pattern_type glob', '-framerate ' + fps])
+
+    // Overlay transparent canvas elements onto the FFmpeg-generated background
+    const filterGraph = '[0:v][1:v]overlay=0:0[vout]'
+
     if (hasAudio) {
       cmd.input(audioPath)
+      cmd.complexFilter(filterGraph)
+         .outputOption('-map [vout]')
+         .outputOption('-map 2:a')
+         .outputOption('-shortest')
+    } else {
+      cmd.complexFilter(filterGraph)
+         .outputOption('-map [vout]')
     }
+
     cmd.outputOptions([
-      '-vf format=yuv420p',
       '-c:v libx264',
-      '-r 30',
-      '-crf 23',
+      '-pix_fmt yuv420p',
       '-preset fast',
+      '-crf 23',
       '-movflags +faststart',
-      ...(hasAudio ? ['-c:a aac', '-shortest'] : [])
+      ...(hasAudio ? ['-c:a aac'] : [])
     ])
     cmd.output(outputPath)
-    cmd.on('start', c => console.log('🎬 FFmpeg:', c))
-    cmd.on('end', resolve)
-    cmd.on('error', reject)
+    cmd.on('start', c => console.log('🎬 FFmpeg command:', c))
+    cmd.on('end', () => {
+      console.log('🎬 Video rendered:', outputPath)
+      resolve(outputPath)
+    })
+    cmd.on('error', (err, stdout, stderr) => {
+      console.error('🎬 FFmpeg error:', err.message)
+      if (stderr) console.error('🎬 FFmpeg stderr:', stderr.slice(-1000))
+      reject(err)
+    })
     cmd.run()
   })
 }
