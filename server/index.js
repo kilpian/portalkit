@@ -73,12 +73,14 @@ if (twitterClient) {
 
 // Video generation deps — loaded via dynamic import (ESM-compatible)
 let createCanvas = null
+let FontLibrary = null
 let ffmpegPath = null
 let ffmpeg = null
 ;(async () => {
   try {
     const skia = await import('skia-canvas')
     createCanvas = (w, h) => new skia.Canvas(w, h)
+    FontLibrary = skia.FontLibrary
     console.log('🎬 skia-canvas loaded (Skia engine)')
   } catch (e) {
     console.log('🎬 skia-canvas not available:', e.message)
@@ -1896,6 +1898,29 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     return null
   }
 
+  try {
+    const fontPaths = [
+      '/usr/share/fonts/truetype/dejavu-fonts-ttf-2.37/DejaVuSans-Bold.ttf',
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+      '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+      '/run/current-system/sw/share/X11/fonts/DejaVuSans-Bold.ttf',
+    ]
+    let fontRegistered = false
+    for (const fontPath of fontPaths) {
+      if (fs.existsSync(fontPath)) {
+        FontLibrary.use('PortalKitFont', [fontPath])
+        console.log('🎬 Font registered:', fontPath)
+        fontRegistered = true
+        break
+      }
+    }
+    if (!fontRegistered) {
+      console.log('🎬 Available fonts:', JSON.stringify(FontLibrary.families).slice(0, 200))
+    }
+  } catch (err) {
+    console.log('🎬 Font registration error:', err.message)
+  }
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
   }
@@ -1923,7 +1948,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     ctx.fillRect(0, 0, W, 8)
 
     // Brand name
-    ctx.font = 'bold 36px sans-serif'
+    ctx.font = 'bold 36px PortalKitFont, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('PORTALKIT', W / 2, 120)
@@ -1933,7 +1958,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     ctx.fillRect(W / 2 - 80, 148, 160, 2)
 
     // Word-wrap main text
-    ctx.font = 'bold 68px sans-serif'
+    ctx.font = 'bold 68px PortalKitFont, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
 
@@ -1966,7 +1991,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     ctx.fillStyle = 'rgba(201,168,76,0.9)'
     ctx.fillRect(80, H - 200, W - 160, 80)
     ctx.fillStyle = '#0D1B2A'
-    ctx.font = 'bold 32px sans-serif'
+    ctx.font = 'bold 32px PortalKitFont, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('getportalkit.com', W / 2, H - 160)
