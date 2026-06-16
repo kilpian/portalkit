@@ -2059,7 +2059,7 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 30, bgVideoPa
       const filter = [
         `[0:v]scale=1280:2280:force_original_aspect_ratio=increase,crop=1080:1920,` +
           `zoompan=z='min(zoom+0.0003,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30:d=9000[bgzoom]`,
-        `[bgzoom]curves=r='0/20 128/140 255/255':g='0/10 128/128 255/245':b='0/30 128/120 255/210'[bggraded]`,
+        `[bgzoom]curves=r='0/0.08 0.5/0.55 1/1':g='0/0.04 0.5/0.5 1/0.96':b='0/0.12 0.5/0.47 1/0.82'[bggraded]`,
         `[bggraded]vignette=PI/5[bgvign]`,
         `[bgvign]colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[bgdark]`,
         `[bgdark][1:v]overlay=0:0:format=rgb[vout]`,

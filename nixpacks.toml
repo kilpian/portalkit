@@ -1,9 +1,6 @@
 [phases.setup]
 nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'python311', 'python311Packages.pip', 'cairo', 'pango', 'pkg-config']
+cmds = ['pip3 install manim --break-system-packages --quiet 2>&1 | tail -3 || echo "pip install attempted"']
 
 [phases.build]
-cmds = [
-  'fc-cache -fv',
-  'pip3 install manim --break-system-packages -q 2>&1 | grep -E "(Successfully|ERROR|error)" || true',
-  'npm install --production=false'
-]
+cmds = ['fc-cache -fv', 'npm install --production=false']
