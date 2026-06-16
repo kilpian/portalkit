@@ -2189,22 +2189,40 @@ async function getPexelsQuery(script) {
 }
 
 const PEXELS_QUERIES = [
-  'wedding photographer couple golden hour',
-  'photographer camera portrait session',
-  'wedding ceremony flowers elegant',
-  'couple sunset photography bokeh',
-  'creative photographer studio light',
-  'wedding reception dancing celebration',
-  'engagement shoot outdoor nature',
-  'professional camera photography equipment',
+  // Couple moments
+  'wedding couple golden hour portrait',
+  'bride groom outdoor ceremony',
+  'engagement shoot sunset bokeh',
+  'couple dancing wedding reception',
+  // Venue and details
+  'wedding venue elegant ballroom',
+  'wedding ceremony outdoor garden',
+  'wedding venue floral decorations',
+  'luxury wedding venue interior',
+  // Close-up details
+  'wedding rings close up macro',
+  'wedding cake elegant tiered',
+  'wedding bouquet flowers pink',
+  'wedding table centerpiece floral',
+  'wedding dress detail lace',
+  // Photographer in action
+  'wedding photographer camera couple',
+  'photographer shooting portrait outdoor',
+  'professional photographer studio light',
+  // Generic romantic
+  'romantic sunset silhouette couple',
+  'champagne glasses celebration toast',
+  'wedding day morning preparations',
+  'bridal party getting ready',
 ]
 
 async function getPexelsBackgroundVideo(query, tmpDir) {
   if (!PEXELS_API_KEY) return null
   try {
     const page = Math.floor(Math.random() * 5) + 1
+    console.log('🎬 Pexels query:', query)
     const res = await fetch(
-      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=10&page=${page}`,
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=15&page=${page}&min_duration=15`,
       { headers: { Authorization: PEXELS_API_KEY } }
     )
     if (!res.ok) { console.log('🎬 Pexels error:', res.status); return null }
@@ -2231,6 +2249,37 @@ async function getPexelsBackgroundVideo(query, tmpDir) {
     return videoPath
   } catch (err) {
     console.log('🎬 Pexels fetch error:', err.message)
+    return null
+  }
+}
+
+function getWavDurationSeconds(filePath) {
+  try {
+    // WAV header layout (all little-endian):
+    //   22–23: num channels (uint16)
+    //   24–27: sample rate (uint32)
+    //   34–35: bits per sample (uint16)
+    //   40–43: data chunk size (uint32)
+    const buffer = Buffer.alloc(44)
+    const fd = fs.openSync(filePath, 'r')
+    fs.readSync(fd, buffer, 0, 44, 0)
+    fs.closeSync(fd)
+
+    const sampleRate = buffer.readUInt32LE(24)
+    const channels = buffer.readUInt16LE(22)
+    const bitsPerSample = buffer.readUInt16LE(34)
+    const dataChunkSize = buffer.readUInt32LE(40)
+
+    if (!sampleRate || !channels || !bitsPerSample) return null
+
+    const bytesPerSample = bitsPerSample / 8
+    const totalSamples = dataChunkSize / (channels * bytesPerSample)
+    const duration = totalSamples / sampleRate
+
+    console.log(`🎬 WAV duration: ${duration.toFixed(2)}s (${sampleRate}Hz, ${channels}ch, ${bitsPerSample}bit)`)
+    return isFinite(duration) && duration > 0 ? duration : null
+  } catch (err) {
+    console.log('🎬 WAV parse error:', err.message)
     return null
   }
 }
@@ -2277,7 +2326,6 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
   const W = 1080, H = 1920
   const maxWidth = W - 120
   const lineHeight = 88
-  const ffprobePath = ffmpegPath ? ffmpegPath.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1') : 'ffprobe'
 
   for (let i = 0; i < count; i++) {
     const ttsSentence = ttsSentences[i]
@@ -2289,18 +2337,16 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
     if (tts) {
       try {
         const audioChunkPath = path.join(tmpDir, `audio_chunk_${i}.wav`)
-        const audio = await tts.generate(ttsSentence, { voice: 'af_heart', speed: 0.95 })
+        const audio = await tts.generate(ttsSentence, { voice: 'af_heart', speed: 1.1 })
         await audio.save(audioChunkPath)
         audioParts.push(audioChunkPath)
 
-        try {
-          const probe = execSync(
-            `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioChunkPath}"`,
-            { timeout: 10000 }
-          ).toString().trim()
-          const parsed = parseFloat(probe)
-          if (!isNaN(parsed) && parsed > 0) chunkDuration = parsed + 0.2
-        } catch {}
+        // Parse WAV header directly — no ffprobe needed
+        const wavDuration = getWavDurationSeconds(audioChunkPath)
+        if (wavDuration && wavDuration > 0.5) {
+          chunkDuration = wavDuration + 0.15
+          console.log(`🎬 Audio chunk duration: ${chunkDuration.toFixed(2)}s`)
+        }
       } catch (err) {
         console.log('🎬 Audio chunk error:', err.message)
       }
@@ -2444,7 +2490,8 @@ async function generateSocialVideo(script, title, postId) {
   try {
     const { displayScript, ttsScript } = await prepareVideoScript(script)
 
-    const queryIndex = (new Date().getDay() + Math.floor(Math.random() * 3)) % PEXELS_QUERIES.length
+    const seed = new Date().getDate() + Math.floor(Math.random() * 4)
+    const queryIndex = seed % PEXELS_QUERIES.length
     const pexelsBgPath = await getPexelsBackgroundVideo(PEXELS_QUERIES[queryIndex], tmpDir).catch(() => null)
     console.log('🎬 Pexels background:', pexelsBgPath ? 'ready' : 'not available')
 
@@ -7585,23 +7632,29 @@ app.get('/api/admin/generated-videos', async (req, res) => {
 app.post('/api/admin/generate-captions', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { script } = req.body
-  if (!script) return res.status(400).json({ error: 'Script required' })
+  console.log('📝 Caption generation started, script length:', script?.length || 0)
+  if (!script) {
+    console.log('📝 Caption failed: no script')
+    return res.status(400).json({ error: 'Script required' })
+  }
   if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
   try {
+    console.log('📝 Calling Claude Haiku for captions...')
     const captionRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1000,
+      max_tokens: 600,
       messages: [{
         role: 'user',
-        content: `Generate platform captions for this PortalKit video (wedding photographer client portal SaaS, $29-39/month, 14-day free trial, getportalkit.com).
+        content: `Generate platform captions for this PortalKit video. PortalKit is a client portal SaaS for wedding photographers, $29-39/month, free trial at getportalkit.com.
 
-Script: ${script}
+Script: ${script.slice(0, 400)}
 
-Return ONLY a valid JSON object, no markdown, no backticks, no explanation:
-{"instagram":"caption with 3-5 hashtags at end, conversational, max 400 chars","tiktok":"under 100 chars, casual hook, 2-3 hashtags","twitter":"under 250 chars, punchy, 1-2 hashtags","linkedin":"under 500 chars, professional, value-first, no hashtags","youtube_shorts":"under 80 chars, descriptive"}`
+Return ONLY a JSON object, no markdown, no explanation:
+{"instagram":"2-3 sentences + 3-5 hashtags, max 300 chars","tiktok":"hook + 1 sentence, max 100 chars, 2 hashtags","twitter":"punchy, max 240 chars, 1-2 hashtags","linkedin":"professional, value-first, max 400 chars, no hashtags","youtube_shorts":"descriptive, max 80 chars"}`
       }]
     })
 
+    console.log('📝 Claude response received')
     const raw = captionRes.content[0]?.text || '{}'
     const clean = raw
       .replace(/^```json\s*/i, '')
@@ -7609,18 +7662,21 @@ Return ONLY a valid JSON object, no markdown, no backticks, no explanation:
       .replace(/\s*```$/i, '')
       .trim()
 
+    console.log('📝 Raw caption response:', clean.slice(0, 100))
+
     let captions
     try {
       captions = JSON.parse(clean)
     } catch (parseErr) {
-      console.error('Caption JSON parse error:', clean.slice(0, 200))
-      return res.status(500).json({ error: 'Caption generation failed: invalid JSON', raw: clean })
+      console.error('📝 JSON parse failed:', clean.slice(0, 200))
+      return res.status(500).json({ error: 'Failed to parse captions', raw: clean.slice(0, 200) })
     }
 
-    res.json({ captions })
+    console.log('📝 Captions generated successfully')
+    return res.json({ captions })
   } catch (err) {
-    console.error('Caption generation error:', err.message)
-    res.status(500).json({ error: err.message })
+    console.error('📝 Caption generation error:', err.message)
+    return res.status(500).json({ error: err.message })
   }
 })
 

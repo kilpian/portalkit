@@ -295,9 +295,19 @@ export default function ContentEngine() {
         body: JSON.stringify({ script: video.script })
       })
       const data = await res.json()
-      setCaptions(data.captions)
-    } catch {
+      console.log('Caption response:', data)
+      if (data.captions) {
+        setCaptions(data.captions)
+        setCaptionVideoId(video.id)
+      } else {
+        console.error('No captions in response:', data)
+        showToast(data.error || 'Caption generation failed', 'error')
+        setCaptionVideoId(null)
+      }
+    } catch (err) {
+      console.error('Caption fetch error:', err)
       showToast('Caption generation failed', 'error')
+      setCaptionVideoId(null)
     } finally {
       setGeneratingCaptions(false)
     }
@@ -913,7 +923,7 @@ export default function ContentEngine() {
                               opacity: generatingCaptions && captionVideoId === v.id ? 0.6 : 1
                             }}
                           >
-                            {generatingCaptions && captionVideoId === v.id ? 'Generating...' : showCaptions ? 'Hide Captions' : 'Captions'}
+                            {generatingCaptions && captionVideoId === v.id ? 'Generating...' : showCaptions ? 'Hide Captions' : '✍️ Captions'}
                           </button>
                         </>
                       )}
