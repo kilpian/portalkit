@@ -1,5 +1,9 @@
 [phases.setup]
-nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig']
+nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'python311', 'cairo', 'pango', 'pkg-config', 'python311Packages.pip', 'python311Packages.numpy', 'python311Packages.pillow']
 
 [phases.build]
-cmds = ['fc-cache -fv', 'npm install --production=false']
+cmds = [
+  'fc-cache -fv',
+  'pip install manim --break-system-packages -q 2>&1 | tail -5',
+  'npm install --production=false'
+]

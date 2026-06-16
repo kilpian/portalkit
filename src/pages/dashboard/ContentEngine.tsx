@@ -303,11 +303,12 @@ export default function ContentEngine() {
     }
   }
 
-  const handleGenerateVideo = async () => {
+  const handleGenerateVideo = async (type: 'pexels' | 'manim' = 'pexels') => {
     if (!videoScript.trim()) return
     setVideoGenerating(true)
+    const endpoint = type === 'manim' ? '/api/admin/generate-manim-video' : '/api/admin/generate-video'
     try {
-      const res = await fetch(`${API_URL}/api/admin/generate-video`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -317,7 +318,7 @@ export default function ContentEngine() {
       })
       const data = await res.json()
       if (data.queued) {
-        showToast('Video queued! Rendering in background.')
+        showToast(`${type === 'manim' ? 'Explainer' : 'Video'} queued! Rendering in background.`)
         setVideoScript('')
         setVideoTitle('')
         setTimeout(fetchVideos, 2000)
@@ -789,20 +790,30 @@ export default function ContentEngine() {
                 boxSizing: 'border-box' as const
               }}
             />
-            <button
-              onClick={handleGenerateVideo}
-              disabled={videoGenerating || !videoScript.trim()}
-              style={{
-                marginTop: 10, background: '#1B4332',
-                color: 'white', border: 'none',
-                padding: '10px 20px', borderRadius: 8,
-                fontSize: 14, fontWeight: 600,
-                cursor: 'pointer',
-                opacity: videoGenerating ? 0.7 : 1
-              }}
-            >
-              {videoGenerating ? 'Queuing...' : '🎬 Generate Video'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => handleGenerateVideo('pexels')}
+                disabled={videoGenerating || !videoScript.trim()}
+                style={{
+                  background: '#1B4332', color: 'white', border: 'none',
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer', opacity: videoGenerating ? 0.7 : 1
+                }}
+              >
+                {videoGenerating ? 'Queuing...' : '🎬 Live Video'}
+              </button>
+              <button
+                onClick={() => handleGenerateVideo('manim')}
+                disabled={videoGenerating || !videoScript.trim()}
+                style={{
+                  background: '#7C3AED', color: 'white', border: 'none',
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer', opacity: videoGenerating ? 0.7 : 1
+                }}
+              >
+                {videoGenerating ? 'Queuing...' : '🎨 Explainer (Manim)'}
+              </button>
+            </div>
           </div>
 
           {videos.length === 0 ? (
@@ -832,6 +843,13 @@ export default function ContentEngine() {
                         textTransform: 'uppercase' as const
                       }}>
                         {v.status}
+                      </span>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                        background: v.video_type === 'manim' ? '#F5F3FF' : '#F0F9FF',
+                        color: v.video_type === 'manim' ? '#7C3AED' : '#0369A1'
+                      }}>
+                        {v.video_type === 'manim' ? '🎨 Explainer' : '🎬 Live'}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {v.title || 'Untitled video'}
