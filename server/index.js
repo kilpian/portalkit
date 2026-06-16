@@ -2168,14 +2168,20 @@ async function prepareVideoScript(rawScript) {
       .replace(/PortalKit/gi, 'Portal Kit')
       .replace(/getportalkit\.com/gi, 'get portal kit dot com')
       .replace(/portalkit\.com/gi, 'portal kit dot com')
+      .replace(/HoneyBook/g, 'Honey Book')
+      .replace(/DocuSign/g, 'Docu Sign')
+      .replace(/Pixieset/g, 'Pixie set')
+      .replace(/Calendly/g, 'Calen lee')
+      .replace(/Pic-Time/g, 'Pic Time')
+      .replace(/Dropbox/g, 'Drop box')
       .replace(/resending/gi, 're-sending')
-      .replace(/DocuSign/gi, 'Docu Sign')
-      .replace(/Pixieset/gi, 'Pixie set')
-      .replace(/HoneyBook/gi, 'Honey Book')
-      .replace(/Calendly/gi, 'Calendar Lee')
+      .replace(/\bSaaS\b/g, 'software')
+      .replace(/\bCRM\b/g, 'C R M')
+      .replace(/\$(\d+)/g, (_, n) => parseInt(n) < 100 ? `${n} dollars` : `$${n}`)
       .replace(/https?:\/\/[^\s]+/gi, url =>
         url.replace('https://', '').replace('http://', '')
           .replace(/\//g, ' slash ').replace(/\./g, ' dot '))
+      .replace(/\.com\b/g, ' dot com')
       .replace(/\s+/g, ' ').trim()
     console.log('🎬 Script rewritten for TTS')
     return script
@@ -2204,16 +2210,19 @@ async function getPexelsQuery(script) {
 async function getPexelsBackgroundVideo(query, tmpDir) {
   if (!PEXELS_API_KEY) return null
   try {
+    const page = Math.floor(Math.random() * 4) + 1
     const res = await fetch(
-      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=10`,
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=10&page=${page}`,
       { headers: { Authorization: PEXELS_API_KEY } }
     )
     if (!res.ok) { console.log('🎬 Pexels error:', res.status); return null }
     const data = await res.json()
     const videos = data.videos || []
-    if (!videos.length) { console.log('🎬 No Pexels videos for:', query); return null }
+    if (!videos.length) { console.log('🎬 No Pexels videos for:', query, 'page', page); return null }
 
-    const video = videos[0]
+    const randomIndex = Math.floor(Math.random() * Math.min(videos.length, 5))
+    const video = videos[randomIndex]
+    console.log(`🎬 Pexels: picked video ${randomIndex + 1}/${videos.length} (page ${page})`)
     const videoFile = video.video_files
       ?.filter(f => f.width <= 1080 && f.height >= 1280)
       ?.sort((a, b) => b.height - a.height)[0]
@@ -2234,6 +2243,146 @@ async function getPexelsBackgroundVideo(query, tmpDir) {
   }
 }
 
+async function generateChunkedVideo(processedScript, tmpDir, fps = 30) {
+  const sentences = processedScript
+    .replace(/\n/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .filter(s => s.trim().length > 4)
+
+  if (!sentences.length) return null
+
+  const framesDir = path.join(tmpDir, 'frames')
+  fs.mkdirSync(framesDir, { recursive: true })
+
+  // Load Kokoro TTS
+  let tts = null
+  try {
+    console.log('🎬 Loading Kokoro TTS...')
+    const { KokoroTTS } = await import('kokoro-js')
+    tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
+    console.log('🎬 Kokoro TTS ready')
+  } catch (err) {
+    console.log('🎬 Kokoro not available:', err.message)
+  }
+
+  // Register fonts
+  if (FontLibrary) {
+    try {
+      const fontPaths = [
+        '/usr/share/fonts/truetype/dejavu-fonts-ttf-2.37/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+        '/run/current-system/sw/share/X11/fonts/DejaVuSans-Bold.ttf',
+      ]
+      for (const fontPath of fontPaths) {
+        if (fs.existsSync(fontPath)) { FontLibrary.use('PortalKitFont', [fontPath]); break }
+      }
+    } catch {}
+  }
+
+  const audioParts = []
+  let frameIndex = 0
+  const W = 1080, H = 1920
+  const ffprobePath = ffmpegPath ? ffmpegPath.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1') : 'ffprobe'
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i]
+    const wordEst = sentence.split(/\s+/).length
+    let chunkDuration = Math.max(2, wordEst / 2.5)
+
+    if (tts) {
+      try {
+        const audioChunkPath = path.join(tmpDir, `audio_chunk_${i}.wav`)
+        const audio = await tts.generate(sentence, { voice: 'af_heart', speed: 0.95 })
+        await audio.save(audioChunkPath)
+        audioParts.push(audioChunkPath)
+
+        try {
+          const probe = execSync(
+            `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioChunkPath}"`,
+            { timeout: 10000 }
+          ).toString().trim()
+          const parsed = parseFloat(probe)
+          if (!isNaN(parsed) && parsed > 0) chunkDuration = parsed + 0.2
+        } catch {}
+      } catch (err) {
+        console.log('🎬 Audio chunk error:', err.message)
+      }
+    }
+
+    const frameCount = Math.ceil(chunkDuration * fps)
+
+    if (createCanvas) {
+      const canvas = createCanvas(W, H)
+      const ctx = canvas.getContext('2d')
+
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(0, 0, W, 8)
+
+      ctx.fillStyle = '#C9A84C'
+      ctx.font = 'bold 36px PortalKitFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('PORTALKIT', W / 2, 120)
+
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'
+      ctx.fillRect(W / 2 - 80, 148, 160, 2)
+
+      ctx.font = 'bold 68px PortalKitFont, sans-serif'
+      const maxWidth = W - 120
+      const lineHeight = 88
+      const words = sentence.split(' ')
+      const lines = []
+      let currentLine = ''
+      for (const word of words) {
+        const test = currentLine ? currentLine + ' ' + word : word
+        if (ctx.measureText(test).width > maxWidth && currentLine) {
+          lines.push(currentLine); currentLine = word
+        } else currentLine = test
+      }
+      if (currentLine) lines.push(currentLine)
+
+      const startY = (H - lines.length * lineHeight) / 2
+      lines.forEach((line, li) => {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'
+        ctx.fillText(line, W / 2 + 3, startY + li * lineHeight + 3)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillText(line, W / 2, startY + li * lineHeight)
+      })
+
+      ctx.fillStyle = 'rgba(201,168,76,0.9)'
+      ctx.fillRect(80, H - 200, W - 160, 80)
+      ctx.fillStyle = '#0D1B2A'
+      ctx.font = 'bold 32px PortalKitFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('getportalkit.com', W / 2, H - 160)
+
+      const progress = (i + 1) / sentences.length
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+      ctx.fillRect(40, H - 60, W - 80, 6)
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
+
+      const frameBuffer = await canvas.toBuffer('image/png')
+      for (let f = 0; f < frameCount; f++) {
+        fs.writeFileSync(
+          path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+          frameBuffer
+        )
+        frameIndex++
+      }
+    } else {
+      frameIndex += frameCount
+    }
+
+    console.log(`🎬 Sentence ${i + 1}/${sentences.length}: ${chunkDuration.toFixed(1)}s, ${frameCount} frames`)
+  }
+
+  console.log(`🎬 generateChunkedVideo: ${frameIndex} frames, ${audioParts.length} audio chunks`)
+  return { framesDir, audioParts, frameIndex }
+}
+
 async function generateSocialVideo(script, title, postId) {
   if (!ffmpeg) {
     console.log('🎬 FFmpeg not available, skipping')
@@ -2242,8 +2391,6 @@ async function generateSocialVideo(script, title, postId) {
 
   const tmpDir = path.join(os.tmpdir(), `video-${Date.now()}`)
   fs.mkdirSync(tmpDir, { recursive: true })
-  const framesDir = path.join(tmpDir, 'frames')
-  const audioPath = path.join(tmpDir, 'audio.mp3')
   const outputPath = path.join(tmpDir, 'output.mp4')
 
   let videoId
@@ -2261,16 +2408,39 @@ async function generateSocialVideo(script, title, postId) {
   try {
     const processedScript = await prepareVideoScript(script)
 
-    const audioResult = await generateVoiceAudio(processedScript, audioPath)
-
     const pexelsQuery = await getPexelsQuery(processedScript)
     const pexelsBgPath = await getPexelsBackgroundVideo(pexelsQuery, tmpDir).catch(() => null)
     console.log('🎬 Pexels background:', pexelsBgPath ? 'ready' : 'not available')
 
-    const framesResult = await generateVideoFrames(processedScript, framesDir)
-    if (!framesResult) throw new Error('Frame generation failed — skia-canvas unavailable')
+    const chunkedResult = await generateChunkedVideo(processedScript, tmpDir, 30)
+    if (!chunkedResult || !chunkedResult.frameIndex) throw new Error('Frame generation failed — skia-canvas unavailable')
 
-    await renderVideo(framesDir, audioResult || null, outputPath, 30, pexelsBgPath)
+    const { framesDir, audioParts } = chunkedResult
+
+    // Concatenate per-sentence audio into one file
+    let finalAudioPath = null
+    if (audioParts.length > 0) {
+      finalAudioPath = path.join(tmpDir, 'final_audio.wav')
+      if (audioParts.length === 1) {
+        fs.copyFileSync(audioParts[0], finalAudioPath)
+      } else {
+        const concatFile = path.join(tmpDir, 'audio_list.txt')
+        fs.writeFileSync(concatFile, audioParts.map(p => `file '${p}'`).join('\n'))
+        await new Promise((resolve, reject) => {
+          const cmd = ffmpeg()
+          cmd.input(concatFile)
+            .inputOptions(['-f concat', '-safe 0'])
+            .outputOption('-c copy')
+            .output(finalAudioPath)
+            .on('end', resolve)
+            .on('error', reject)
+            .run()
+        })
+      }
+      console.log('🎬 Audio concatenated:', finalAudioPath)
+    }
+
+    await renderVideo(framesDir, finalAudioPath, outputPath, 30, pexelsBgPath)
 
     const videoKey = `videos/${Date.now()}-${videoId}.mp4`
     if (r2 && fs.existsSync(outputPath)) {
@@ -7282,20 +7452,42 @@ app.get('/api/admin/generated-videos', async (req, res) => {
 app.post('/api/admin/generate-captions', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { script } = req.body
+  if (!script) return res.status(400).json({ error: 'Script required' })
   if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
   try {
     const captionRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
-      messages: [{ role: 'user', content: `Generate social media captions for this video about PortalKit (a client portal SaaS for wedding photographers, $29-39/month, getportalkit.com).\n\nVideo script: ${script}\n\nGenerate ONE caption for each platform. Return as JSON only:\n{\n  "instagram": "caption (max 2200 chars, 3-5 relevant hashtags at end, conversational, emoji OK)",\n  "tiktok": "caption (max 150 chars, 3 hashtags max, hook first, very casual)",\n  "twitter": "caption (max 280 chars, 1-2 hashtags, punchy, no fluff)",\n  "linkedin": "caption (max 700 chars, professional tone, no hashtags, value-first)",\n  "youtube_shorts": "caption (max 100 chars, descriptive, 2 hashtags)"\n}\n\nRules: no em dashes, use contractions, value-first, mention free trial where natural. Return ONLY the JSON.` }]
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: `Generate platform captions for this PortalKit video (wedding photographer client portal SaaS, $29-39/month, 14-day free trial, getportalkit.com).
+
+Script: ${script}
+
+Return ONLY a valid JSON object, no markdown, no backticks, no explanation:
+{"instagram":"caption with 3-5 hashtags at end, conversational, max 400 chars","tiktok":"under 100 chars, casual hook, 2-3 hashtags","twitter":"under 250 chars, punchy, 1-2 hashtags","linkedin":"under 500 chars, professional, value-first, no hashtags","youtube_shorts":"under 80 chars, descriptive"}`
+      }]
     })
-    const text = captionRes.content[0]?.text || '{}'
-    const clean = text.replace(/```json|```/g, '').trim()
-    const captions = JSON.parse(clean)
+
+    const raw = captionRes.content[0]?.text || '{}'
+    const clean = raw
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim()
+
+    let captions
+    try {
+      captions = JSON.parse(clean)
+    } catch (parseErr) {
+      console.error('Caption JSON parse error:', clean.slice(0, 200))
+      return res.status(500).json({ error: 'Caption generation failed: invalid JSON', raw: clean })
+    }
+
     res.json({ captions })
   } catch (err) {
     console.error('Caption generation error:', err.message)
-    res.status(500).json({ error: 'Caption generation failed' })
+    res.status(500).json({ error: err.message })
   }
 })
 
