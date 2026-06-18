@@ -1853,7 +1853,7 @@ async function generateVoiceAudio(text, outputPath) {
     console.log('🎬 Kokoro loading model (first run)...')
     const { KokoroTTS } = await import('kokoro-js')
     const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
-    const audio = await tts.generate(text.slice(0, 500), { voice: 'af_heart', speed: 1.0 })
+    const audio = await tts.generate(text.slice(0, 500), { voice: 'af_bella', speed: 1.18 })
     const wavPath = outputPath.replace(/\.[^.]+$/, '.wav')
     await audio.save(wavPath)
     console.log('🎬 Kokoro TTS audio generated')
@@ -2055,15 +2055,15 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 30, bgVideoPa
       cmd.input(globPattern).inputOptions(['-pattern_type glob', '-framerate ' + fps])
       if (hasAudio) cmd.input(audioPath)
 
-      // Ken Burns slow zoom + cinematic color grade + vignette + 55% dark overlay
+      // Scale+crop to exact 1080x1920, cinematic color grade + vignette + dark overlay
       const filter = [
-        `[0:v]scale=1280:2280:force_original_aspect_ratio=increase,crop=1080:1920,` +
-          `zoompan=z='min(zoom+0.0003,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30:d=9000[bgzoom]`,
-        `[bgzoom]curves=r='0/0.08 0.5/0.55 1/1':g='0/0.04 0.5/0.5 1/0.96':b='0/0.12 0.5/0.47 1/0.82'[bggraded]`,
+        `[0:v]scale=-2:1920,crop=1080:1920:(iw-1080)/2:0,setsar=1[bgscaled]`,
+        `[bgscaled]curves=r='0/0.08 0.5/0.55 1/1':g='0/0.04 0.5/0.5 1/0.96':b='0/0.12 0.5/0.47 1/0.82'[bggraded]`,
         `[bggraded]vignette=PI/5[bgvign]`,
         `[bgvign]colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[bgdark]`,
         `[bgdark][1:v]overlay=0:0:format=rgb[vout]`,
       ].join(';')
+      console.log('🎬 Output target: 1080x1920 — verify visually after render')
 
       cmd.complexFilter(filter).outputOption('-map [vout]')
       if (hasAudio) {
@@ -2337,7 +2337,7 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
     if (tts) {
       try {
         const audioChunkPath = path.join(tmpDir, `audio_chunk_${i}.wav`)
-        const audio = await tts.generate(ttsSentence, { voice: 'af_heart', speed: 1.1 })
+        const audio = await tts.generate(ttsSentence, { voice: 'af_bella', speed: 1.18 })
         await audio.save(audioChunkPath)
         audioParts.push(audioChunkPath)
 
