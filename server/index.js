@@ -105,6 +105,20 @@ const PEXELS_API_KEY = process.env.PEXELS_API_KEY
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 
+// Pre-loaded Kokoro TTS instance — initialized at startup to avoid 20-30s cold load per video
+let kokoroTTS = null
+async function initKokoro() {
+  try {
+    const { KokoroTTS } = await import('kokoro-js')
+    console.log('🎬 Pre-loading Kokoro TTS...')
+    kokoroTTS = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
+    console.log('🎬 Kokoro TTS pre-loaded and ready')
+  } catch (err) {
+    console.log('🎬 Kokoro pre-load failed:', err.message)
+    kokoroTTS = null
+  }
+}
+
 async function sendBrevoEmail({ from, to, subject, html }) {
   if (!BREVO_API_KEY) {
     console.log('Brevo not configured')
@@ -2055,15 +2069,15 @@ async function renderVideo(framesDir, audioPath, outputPath, fps = 30, bgVideoPa
       cmd.input(globPattern).inputOptions(['-pattern_type glob', '-framerate ' + fps])
       if (hasAudio) cmd.input(audioPath)
 
-      // Scale+crop to exact 1080x1920, cinematic color grade + vignette + dark overlay
+      // Scale to cover 1080x1920 (increase AR), then center-crop to exact 1080x1920
       const filter = [
-        `[0:v]scale=-2:1920,crop=1080:1920:(iw-1080)/2:0,setsar=1[bgscaled]`,
+        `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[bgscaled]`,
         `[bgscaled]curves=r='0/0.08 0.5/0.55 1/1':g='0/0.04 0.5/0.5 1/0.96':b='0/0.12 0.5/0.47 1/0.82'[bggraded]`,
         `[bggraded]vignette=PI/5[bgvign]`,
         `[bgvign]colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[bgdark]`,
         `[bgdark][1:v]overlay=0:0:format=rgb[vout]`,
       ].join(';')
-      console.log('🎬 Output target: 1080x1920 — verify visually after render')
+      console.log('🎬 Filter:', filter.slice(0, 100))
 
       cmd.complexFilter(filter).outputOption('-map [vout]')
       if (hasAudio) {
@@ -2142,7 +2156,16 @@ async function prepareVideoScript(rawScript) {
       messages: [{ role: 'user', content: `Rewrite for natural spoken audio. Short punchy sentences. Conversational. Remove hashtags, URLs, special characters. Keep key facts. Similar word count. Return ONLY the rewritten script, no explanation.\n\nScript: ${rawScript}` }]
     })
 
-    const displayScript = (rewriteRes.content[0]?.text || rawScript).trim()
+    let displayScript = (rewriteRes.content[0]?.text || rawScript).trim()
+
+    // Cap at 8 sentences to keep total render time under ~4 min on Railway
+    const scriptSentences = displayScript.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4)
+    if (scriptSentences.length > 8) {
+      const trimmed = scriptSentences.slice(0, 7)
+      trimmed.push('Try it free at getportalkit.com.')
+      displayScript = trimmed.join(' ')
+      console.log(`🎬 Script trimmed from ${scriptSentences.length} to 8 sentences`)
+    }
 
     // TTS-only phonetic substitutions — applied AFTER Claude rewrite, never shown on screen
     const ttsScript = displayScript
@@ -2295,15 +2318,19 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
   const framesDir = path.join(tmpDir, 'frames')
   fs.mkdirSync(framesDir, { recursive: true })
 
-  // Load Kokoro TTS
-  let tts = null
-  try {
-    console.log('🎬 Loading Kokoro TTS...')
-    const { KokoroTTS } = await import('kokoro-js')
-    tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
-    console.log('🎬 Kokoro TTS ready')
-  } catch (err) {
-    console.log('🎬 Kokoro not available:', err.message)
+  // Use pre-loaded Kokoro instance; fall back to on-demand load if startup pre-load failed
+  let tts = kokoroTTS
+  if (!tts) {
+    try {
+      console.log('🎬 Kokoro not pre-loaded, loading on demand...')
+      const { KokoroTTS } = await import('kokoro-js')
+      tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
+      console.log('🎬 Kokoro TTS ready (on-demand)')
+    } catch (err) {
+      console.log('🎬 Kokoro not available:', err.message)
+    }
+  } else {
+    console.log('🎬 Kokoro TTS using pre-loaded instance')
   }
 
   // Register fonts
@@ -7620,7 +7647,7 @@ app.get('/api/admin/generated-videos', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   try {
     const { rows } = await pool.query(
-      `SELECT id, post_id, title, status, r2_url, error, video_type, created_at, completed_at
+      `SELECT id, post_id, title, script, status, r2_url, error, video_type, created_at, completed_at
        FROM generated_videos ORDER BY created_at DESC LIMIT 100`
     )
     res.json(rows)
@@ -7720,6 +7747,9 @@ async function startServer() {
   await initDb()
   console.log('DB init complete, starting HTTP listener...')
 
+  // Pre-load Kokoro TTS model so video generation doesn't pay the cold-load penalty
+  initKokoro()
+
   // Start cron jobs only after tables are guaranteed to exist
   runDailyJobs()
   setInterval(runDailyJobs, 60 * 60 * 1000)
@@ -7752,7 +7782,42 @@ async function startServer() {
   })
 }
 
+const PHOTO_CITIES = [
+  'Austin', 'Nashville', 'Denver', 'Atlanta',
+  'Chicago', 'Dallas', 'Houston', 'Phoenix',
+  'San Diego', 'Portland', 'Seattle', 'Charlotte',
+  'Miami', 'Boston', 'Philadelphia', 'Las Vegas',
+  'Salt Lake City', 'New Orleans', 'San Antonio',
+]
+let cityIndex = 0
+
+async function autoFindEmails() {
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM cold_contacts WHERE sent_at IS NULL AND (unsubscribed IS NULL OR unsubscribed = false)`
+    )
+    const unseenCount = parseInt(result.rows[0].count)
+    console.log(`📧 Auto email check: ${unseenCount} unsent contacts`)
+    if (unseenCount < 50) {
+      const city = PHOTO_CITIES[cityIndex % PHOTO_CITIES.length]
+      cityIndex++
+      console.log(`📧 Auto-finding emails in ${city}...`)
+      const emails = await findPhotographerEmails(city, 'USA')
+      const r = await importFoundEmails(emails)
+      console.log(`📧 Auto email finder complete for ${city}: +${r.added} added`)
+    }
+  } catch (err) {
+    console.error('📧 Auto email finder error:', err.message)
+  }
+}
+
 startServer().catch(err => {
   console.error('Failed to start server:', err)
   process.exit(1)
 })
+
+// Run auto email finder every 6 hours; first run 5 min after startup
+setTimeout(() => {
+  autoFindEmails()
+  setInterval(autoFindEmails, 6 * 60 * 60 * 1000)
+}, 5 * 60 * 1000)

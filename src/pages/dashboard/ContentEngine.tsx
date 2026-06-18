@@ -286,6 +286,7 @@ export default function ContentEngine() {
     setCaptionVideoId(video.id)
     setCaptions(null)
     try {
+      console.log('Sending caption request, script length:', video.script?.length, 'id:', video.id)
       const res = await fetch(`${API_URL}/api/admin/generate-captions`, {
         method: 'POST',
         headers: {
