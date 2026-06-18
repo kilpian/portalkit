@@ -1341,6 +1341,7 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS video_type TEXT DEFAULT 'pexels'`).catch(() => {})
+      await pool.query(`ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS captions TEXT`).catch(() => {})
 
       console.log('✅ Database ready')
       return
@@ -1982,7 +1983,7 @@ async function generateVideoFrames(text, outputDir, durationSeconds = 30) {
     ctx.font = 'bold 36px PortalKitFont, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('PORTALKIT', W / 2, 120)
+    ctx.fillText('PORTAL KIT', W / 2, 120)
 
     // Divider
     ctx.fillStyle = 'rgba(255,255,255,0.2)'
@@ -2382,7 +2383,7 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
     const frameCount = Math.ceil(chunkDuration * fps)
 
     if (createCanvas) {
-      // Pre-compute word layout from display sentence (so positions don't shift during reveal)
+      // Render full sentence at once — no word-by-word typewriter effect
       const canvas = createCanvas(W, H)
       const ctx = canvas.getContext('2d')
       ctx.font = 'bold 68px PortalKitFont, sans-serif'
@@ -2399,87 +2400,65 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
       if (curLine.length) lineArrays.push(curLine)
 
       const startY = (H - lineArrays.length * lineHeight) / 2
-      const framesPerWord = Math.max(1, Math.floor(frameCount / allWords.length))
-      let wordsSoFar = 0
 
-      for (let li = 0; li < lineArrays.length; li++) {
-        for (let wi = 0; wi < lineArrays[li].length; wi++) {
-          wordsSoFar++
+      ctx.clearRect(0, 0, W, H)
 
-          ctx.clearRect(0, 0, W, H)
+      // Gold top bar
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(0, 0, W, 8)
 
-          // Gold top bar
-          ctx.fillStyle = '#C9A84C'
-          ctx.fillRect(0, 0, W, 8)
+      // Brand label
+      ctx.fillStyle = '#C9A84C'
+      ctx.font = 'bold 36px PortalKitFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('PORTAL KIT', W / 2, 120)
 
-          // Brand label
-          ctx.fillStyle = '#C9A84C'
-          ctx.font = 'bold 36px PortalKitFont, sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText('PORTALKIT', W / 2, 120)
+      // Divider
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'
+      ctx.fillRect(W / 2 - 80, 148, 160, 2)
 
-          // Divider
-          ctx.fillStyle = 'rgba(255,255,255,0.2)'
-          ctx.fillRect(W / 2 - 80, 148, 160, 2)
+      // Full sentence — all lines visible immediately
+      ctx.font = 'bold 68px PortalKitFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (let lineI = 0; lineI < lineArrays.length; lineI++) {
+        ctx.shadowColor = 'rgba(0,0,0,0.8)'
+        ctx.shadowBlur = 15
+        ctx.shadowOffsetX = 2
+        ctx.shadowOffsetY = 2
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillText(lineArrays[lineI].join(' '), W / 2, startY + lineI * lineHeight)
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = 0
+      }
 
-          // Main text — word-by-word reveal with drop shadow
-          ctx.font = 'bold 68px PortalKitFont, sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
+      // CTA bar
+      ctx.fillStyle = 'rgba(201,168,76,0.9)'
+      ctx.fillRect(80, H - 200, W - 160, 80)
+      ctx.fillStyle = '#0D1B2A'
+      ctx.font = 'bold 32px PortalKitFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('getportalkit.com', W / 2, H - 160)
 
-          let wIdx = 0
-          for (let lineI = 0; lineI < lineArrays.length && wIdx < wordsSoFar; lineI++) {
-            const wordsForLine = []
-            for (let wordI = 0; wordI < lineArrays[lineI].length && wIdx < wordsSoFar; wordI++, wIdx++) {
-              wordsForLine.push(lineArrays[lineI][wordI])
-            }
-            if (wordsForLine.length > 0) {
-              const lineText = wordsForLine.join(' ')
-              ctx.shadowColor = 'rgba(0,0,0,0.8)'
-              ctx.shadowBlur = 15
-              ctx.shadowOffsetX = 2
-              ctx.shadowOffsetY = 2
-              ctx.fillStyle = '#FFFFFF'
-              ctx.fillText(lineText, W / 2, startY + lineI * lineHeight)
-              ctx.shadowColor = 'transparent'
-              ctx.shadowBlur = 0
-              ctx.shadowOffsetX = 0
-              ctx.shadowOffsetY = 0
-            }
-          }
+      // Progress bar
+      const progress = (i + 1) / count
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+      ctx.fillRect(40, H - 60, W - 80, 6)
+      ctx.fillStyle = '#C9A84C'
+      ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
 
-          // CTA bar
-          ctx.fillStyle = 'rgba(201,168,76,0.9)'
-          ctx.fillRect(80, H - 200, W - 160, 80)
-          ctx.fillStyle = '#0D1B2A'
-          ctx.font = 'bold 32px PortalKitFont, sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText('getportalkit.com', W / 2, H - 160)
-
-          // Progress bar
-          const progress = (i + 1) / count
-          ctx.fillStyle = 'rgba(255,255,255,0.15)'
-          ctx.fillRect(40, H - 60, W - 80, 6)
-          ctx.fillStyle = '#C9A84C'
-          ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
-
-          // Last word of this sentence gets remaining frames to hit exact frameCount
-          const isLastWord = li === lineArrays.length - 1 && wi === lineArrays[li].length - 1
-          const framesToWrite = isLastWord
-            ? Math.max(1, frameCount - framesPerWord * (allWords.length - 1))
-            : framesPerWord
-
-          const frameBuffer = await canvas.toBuffer('image/png')
-          for (let f = 0; f < framesToWrite; f++) {
-            fs.writeFileSync(
-              path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
-              frameBuffer
-            )
-            frameIndex++
-          }
-        }
+      // Write same frame for entire chunk duration (audio drives timing)
+      const frameBuffer = await canvas.toBuffer('image/png')
+      for (let f = 0; f < frameCount; f++) {
+        fs.writeFileSync(
+          path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+          frameBuffer
+        )
+        frameIndex++
       }
     } else {
       frameIndex += frameCount
@@ -7647,7 +7626,7 @@ app.get('/api/admin/generated-videos', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   try {
     const { rows } = await pool.query(
-      `SELECT id, post_id, title, script, status, r2_url, error, video_type, created_at, completed_at
+      `SELECT id, post_id, title, script, captions, status, r2_url, error, video_type, created_at, completed_at
        FROM generated_videos ORDER BY created_at DESC LIMIT 100`
     )
     res.json(rows)
@@ -7658,12 +7637,24 @@ app.get('/api/admin/generated-videos', async (req, res) => {
 
 app.post('/api/admin/generate-captions', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  const { script } = req.body
-  console.log('📝 Caption generation started, script length:', script?.length || 0)
+  const { script, videoId } = req.body
+  console.log('📝 Caption request — videoId:', videoId, 'script length:', script?.length || 0)
   if (!script) {
     console.log('📝 Caption failed: no script')
     return res.status(400).json({ error: 'Script required' })
   }
+
+  // Return cached captions from DB if available
+  if (videoId) {
+    try {
+      const cached = await pool.query('SELECT captions FROM generated_videos WHERE id=$1', [videoId])
+      if (cached.rows[0]?.captions) {
+        console.log('📝 Returning cached captions for video', videoId)
+        return res.json({ captions: JSON.parse(cached.rows[0].captions), cached: true })
+      }
+    } catch {}
+  }
+
   if (!anthropic) return res.status(503).json({ error: 'AI not configured' })
   try {
     console.log('📝 Calling Claude Haiku for captions...')
@@ -7697,6 +7688,11 @@ Return ONLY a JSON object, no markdown, no explanation:
     } catch (parseErr) {
       console.error('📝 JSON parse failed:', clean.slice(0, 200))
       return res.status(500).json({ error: 'Failed to parse captions', raw: clean.slice(0, 200) })
+    }
+
+    // Save captions to DB so future requests use cache
+    if (videoId) {
+      pool.query('UPDATE generated_videos SET captions=$1 WHERE id=$2', [JSON.stringify(captions), videoId]).catch(() => {})
     }
 
     console.log('📝 Captions generated successfully')

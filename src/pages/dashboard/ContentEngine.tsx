@@ -40,7 +40,7 @@ export default function ContentEngine() {
   const [videoGenerating, setVideoGenerating] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [captionVideoId, setCaptionVideoId] = useState<number | null>(null)
-  const [captions, setCaptions] = useState<any>(null)
+  const [captionsCache, setCaptionsCache] = useState<Record<number, any>>({})
   const [generatingCaptions, setGeneratingCaptions] = useState(false)
 
   // Outreach state
@@ -282,9 +282,16 @@ export default function ContentEngine() {
   }
 
   const handleGenerateCaptions = async (video: any) => {
+    // Use DB-stored captions if present (no AI call needed)
+    const dbCaptions = video.captions ? (() => { try { return JSON.parse(video.captions) } catch { return null } })() : null
+    if (dbCaptions || captionsCache[video.id]) {
+      const resolved = dbCaptions || captionsCache[video.id]
+      setCaptionsCache(c => ({ ...c, [video.id]: resolved }))
+      setCaptionVideoId(video.id)
+      return
+    }
     setGeneratingCaptions(true)
     setCaptionVideoId(video.id)
-    setCaptions(null)
     try {
       console.log('Sending caption request, script length:', video.script?.length, 'id:', video.id)
       const res = await fetch(`${API_URL}/api/admin/generate-captions`, {
@@ -293,12 +300,12 @@ export default function ContentEngine() {
           'Content-Type': 'application/json',
           'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
         },
-        body: JSON.stringify({ script: video.script })
+        body: JSON.stringify({ script: video.script, videoId: video.id })
       })
       const data = await res.json()
       console.log('Caption response:', data)
       if (data.captions) {
-        setCaptions(data.captions)
+        setCaptionsCache(c => ({ ...c, [video.id]: data.captions }))
         setCaptionVideoId(video.id)
       } else {
         console.error('No captions in response:', data)
@@ -835,7 +842,8 @@ export default function ContentEngine() {
             videos.map((v: any) => {
               const isReady = v.status === 'ready' || v.status === 'done'
               const isDeleting = deleteConfirmId === v.id
-              const showCaptions = captionVideoId === v.id && captions
+              const activeCaptions = captionsCache[v.id] || null
+              const showCaptions = captionVideoId === v.id && activeCaptions
               return (
                 <div key={v.id}>
                   <div style={{
@@ -870,8 +878,8 @@ export default function ContentEngine() {
                       </span>
                     </div>
                     {v.script && (
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>
-                        {v.script.length > 200 ? v.script.slice(0, 200) + '...' : v.script}
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {v.script.length > 80 ? v.script.slice(0, 80) + '…' : v.script}
                       </p>
                     )}
                     {v.error && (
@@ -910,7 +918,7 @@ export default function ContentEngine() {
                           </a>
                           <button
                             onClick={() => {
-                              if (captionVideoId === v.id) { setCaptionVideoId(null); setCaptions(null) }
+                              if (captionVideoId === v.id) { setCaptionVideoId(null) }
                               else handleGenerateCaptions(v)
                             }}
                             disabled={generatingCaptions && captionVideoId === v.id}
@@ -969,7 +977,7 @@ export default function ContentEngine() {
                       padding: 16, marginBottom: 12
                     }}>
                       <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px', color: '#1B4332' }}>Platform Captions</h4>
-                      {Object.entries(captions).map(([platform, caption]: [string, any]) => (
+                      {Object.entries(activeCaptions).map(([platform, caption]: [string, any]) => (
                         <div key={platform} style={{ marginBottom: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const }}>{platform}</span>
