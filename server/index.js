@@ -2402,6 +2402,7 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
       const checkFrames = 10
 
       for (let f = 0; f < framesToDrawAnimated; f++) {
+        if (isExplainer && f < 3) console.log(`🎬 explainer animating frame ${f} (chunk ${i + 1}/${count})`)
         ctx.clearRect(0, 0, W, H)
 
         const entryT = isExplainer ? easeOut(Math.min(1, f / entryFrames)) : 1
@@ -2739,8 +2740,17 @@ async function captureTourScreenshots(tmpDir) {
   } catch (err) {
     throw new Error('Puppeteer not installed: ' + err.message)
   }
+  let chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH
+  if (!chromiumPath) {
+    const { execSync } = await import('child_process')
+    for (const candidate of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']) {
+      try { chromiumPath = execSync(`which ${candidate}`).toString().trim(); break } catch {}
+    }
+  }
+  console.log('📸 Chromium path:', chromiumPath || 'NOT FOUND')
   const browser = await puppeteer.launch({
-    headless: true,
+    ...(chromiumPath ? { executablePath: chromiumPath } : {}),
+    headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   })
   const screenshots = []
@@ -7754,14 +7764,22 @@ app.get('/api/admin/tool-leads', async (req, res) => {
 // GET /api/admin/customers — groups all users by lifecycle status (real data only)
 let _customersDiagnosticLogged = false
 app.get('/api/admin/customers', async (req, res) => {
+  console.log('🧾 /api/admin/customers hit', req.headers['x-admin-secret'] ? 'secret=present' : 'secret=MISSING')
   if (!checkAdminSecret(req, res)) return
   try {
     if (!_customersDiagnosticLogged) {
       _customersDiagnosticLogged = true
       const diag = await pool.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position`
+        `SELECT table_name, column_name FROM information_schema.columns WHERE table_name IN ('users','subscriptions','trials') ORDER BY table_name, ordinal_position`
       )
-      console.log('👥 users columns:', diag.rows.map(r => r.column_name).join(', '))
+      const byTable = {}
+      for (const r of diag.rows) {
+        if (!byTable[r.table_name]) byTable[r.table_name] = []
+        byTable[r.table_name].push(r.column_name)
+      }
+      for (const [t, cols] of Object.entries(byTable)) {
+        console.log(`👥 ${t} columns:`, cols.join(', '))
+      }
     }
 
     const { rows } = await pool.query(`

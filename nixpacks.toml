@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'cairo', 'pango', 'pkg-config']
+nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'cairo', 'pango', 'pkg-config', 'chromium']
 
 [phases.build]
 cmds = [
