@@ -2212,32 +2212,24 @@ async function getPexelsQuery(script) {
   }
 }
 
+// Tight wedding-only queries — every term contains "wedding" or "bride/bridesmaid/groom" to avoid drift (no more sheep)
 const PEXELS_QUERIES = [
-  // Couple moments
-  'wedding couple golden hour portrait',
-  'bride groom outdoor ceremony',
-  'engagement shoot sunset bokeh',
-  'couple dancing wedding reception',
-  // Venue and details
-  'wedding venue elegant ballroom',
-  'wedding ceremony outdoor garden',
-  'wedding venue floral decorations',
-  'luxury wedding venue interior',
-  // Close-up details
-  'wedding rings close up macro',
-  'wedding cake elegant tiered',
-  'wedding bouquet flowers pink',
-  'wedding table centerpiece floral',
-  'wedding dress detail lace',
-  // Photographer in action
-  'wedding photographer camera couple',
-  'photographer shooting portrait outdoor',
-  'professional photographer studio light',
-  // Generic romantic
-  'romantic sunset silhouette couple',
-  'champagne glasses celebration toast',
-  'wedding day morning preparations',
-  'bridal party getting ready',
+  'bride getting ready',
+  'wedding ceremony aisle',
+  'wedding rings closeup',
+  'bride groom first dance',
+  'wedding bouquet flowers',
+  'wedding reception table decor',
+  'bride walking down aisle',
+  'wedding venue outdoor elegant',
+  'wedding couple sunset',
+  'wedding dress detail',
+  'wedding guests celebration',
+  'wedding cake elegant',
+  'bridesmaids getting ready',
+  'wedding photographer shooting',
+  'wedding champagne toast',
+  'wedding first look couple',
 ]
 
 async function getPexelsBackgroundVideo(query, tmpDir) {
@@ -2263,7 +2255,7 @@ async function getPexelsBackgroundVideo(query, tmpDir) {
       || video.video_files?.[0]
     if (!videoFile?.link) return null
 
-    console.log('🎬 Downloading Pexels video:', videoFile.link)
+    console.log('🎬 Pexels query:', query, '| picked:', videoFile.link)
     const videoRes = await fetch(videoFile.link)
     if (!videoRes.ok) return null
 
@@ -2308,7 +2300,7 @@ function getWavDurationSeconds(filePath) {
   }
 }
 
-async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 30) {
+async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' }, tmpDir, fps = 30) {
   // Split TTS sentences for audio timing
   const ttsSentences = ttsScript.replace(/\n/g, ' ').split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4)
   // Split display sentences the same way for canvas text
@@ -2402,6 +2394,25 @@ async function generateChunkedVideo({ displayScript, ttsScript }, tmpDir, fps = 
       const startY = (H - lineArrays.length * lineHeight) / 2
 
       ctx.clearRect(0, 0, W, H)
+
+      // Explainer mode: paint a navy→deep-navy radial gradient + feature card backing into the canvas itself
+      if (mode === 'explainer') {
+        const grad = ctx.createLinearGradient(0, 0, 0, H)
+        grad.addColorStop(0, '#0D1B2A')
+        grad.addColorStop(0.5, '#1B2D44')
+        grad.addColorStop(1, '#0D1B2A')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, W, H)
+
+        // Gold accent ring behind the text
+        ctx.strokeStyle = 'rgba(201,168,76,0.35)'
+        ctx.lineWidth = 2
+        ctx.strokeRect(60, 220, W - 120, H - 420)
+
+        // Subtle feature card behind text (slightly lighter panel)
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'
+        ctx.fillRect(90, startY - 60, W - 180, lineArrays.length * lineHeight + 120)
+      }
 
       // Gold top bar
       ctx.fillStyle = '#C9A84C'
@@ -2501,7 +2512,7 @@ async function generateSocialVideo(script, title, postId) {
     const pexelsBgPath = await getPexelsBackgroundVideo(PEXELS_QUERIES[queryIndex], tmpDir).catch(() => null)
     console.log('🎬 Pexels background:', pexelsBgPath ? 'ready' : 'not available')
 
-    const chunkedResult = await generateChunkedVideo({ displayScript, ttsScript }, tmpDir, 30)
+    const chunkedResult = await generateChunkedVideo({ displayScript, ttsScript, mode: 'live' }, tmpDir, 30)
     if (!chunkedResult || !chunkedResult.frameIndex) throw new Error('Frame generation failed — skia-canvas unavailable')
 
     const { framesDir, audioParts } = chunkedResult
@@ -2559,6 +2570,327 @@ async function generateSocialVideo(script, title, postId) {
         `UPDATE generated_videos SET status='error', error=$1 WHERE id=$2`,
         [err.message, videoId]
       )
+    } catch {}
+    return null
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+// Animated canvas explainer — no Pexels, fully self-contained brand visuals
+async function generateExplainerVideo(script, title, postId) {
+  if (!ffmpeg) { console.log('🎨 FFmpeg not available, skipping'); return null }
+
+  const tmpDir = path.join(os.tmpdir(), `explainer-${Date.now()}`)
+  fs.mkdirSync(tmpDir, { recursive: true })
+  const outputPath = path.join(tmpDir, 'output.mp4')
+
+  let videoId
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO generated_videos (post_id, title, script, status, video_type) VALUES ($1, $2, $3, 'rendering', 'explainer') RETURNING id`,
+      [postId || null, title, script]
+    )
+    videoId = rows[0].id
+  } catch (err) {
+    console.error('🎨 DB insert error:', err.message)
+    return null
+  }
+
+  try {
+    const { displayScript, ttsScript } = await prepareVideoScript(script)
+
+    // Reuse the chunked frame generator with explainer mode → gradient bg painted into canvas
+    const chunkedResult = await generateChunkedVideo({ displayScript, ttsScript, mode: 'explainer' }, tmpDir, 30)
+    if (!chunkedResult || !chunkedResult.frameIndex) throw new Error('Frame generation failed — skia-canvas unavailable')
+
+    const { framesDir, audioParts } = chunkedResult
+
+    // Concatenate per-sentence audio into one file
+    let finalAudioPath = null
+    if (audioParts.length > 0) {
+      finalAudioPath = path.join(tmpDir, 'final_audio.wav')
+      if (audioParts.length === 1) {
+        fs.copyFileSync(audioParts[0], finalAudioPath)
+      } else {
+        const concatFile = path.join(tmpDir, 'audio_list.txt')
+        fs.writeFileSync(concatFile, audioParts.map(p => `file '${p}'`).join('\n'))
+        await new Promise((resolve, reject) => {
+          ffmpeg().input(concatFile).inputOptions(['-f concat', '-safe 0']).outputOption('-c copy').output(finalAudioPath).on('end', resolve).on('error', reject).run()
+        })
+      }
+    }
+
+    // No Pexels bg — canvas frames are full-coverage navy gradient. renderVideo's no-bg lavfi path overlays cleanly.
+    await renderVideo(framesDir, finalAudioPath, outputPath, 30, null)
+
+    const videoKey = `videos/explainer-${Date.now()}-${videoId}.mp4`
+    if (r2 && fs.existsSync(outputPath)) {
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET, Key: videoKey,
+        Body: fs.readFileSync(outputPath), ContentType: 'video/mp4'
+      }))
+    }
+    const videoUrl = process.env.R2_PUBLIC_URL ? `${process.env.R2_PUBLIC_URL}/${videoKey}` : null
+
+    await pool.query(`UPDATE generated_videos SET status='ready', r2_url=$1, completed_at=NOW() WHERE id=$2`, [videoUrl, videoId])
+    console.log(`🎨 Explainer ${videoId} ready: ${videoKey}`)
+    return { videoId, r2Url: videoUrl }
+  } catch (err) {
+    console.error('🎨 Explainer error:', err.message)
+    try {
+      await pool.query(`UPDATE generated_videos SET status='error', error=$1 WHERE id=$2`, [err.message, videoId])
+    } catch {}
+    return null
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+// Website product tour — Playwright screenshots of getportalkit.com + canvas captions + TTS narration
+const TOUR_SCREENS = [
+  { url: 'https://getportalkit.com/', caption: 'One portal link for every client.' },
+  { url: 'https://getportalkit.com/#features', caption: 'Contracts, invoices, galleries, all in one place.' },
+  { url: 'https://getportalkit.com/#how-it-works', caption: 'Set it up once. It works while you sleep.' },
+  { url: 'https://getportalkit.com/tools/shot-list', caption: 'Build shot lists your couples can edit.' },
+  { url: 'https://getportalkit.com/#pricing', caption: 'Replace six tools for thirty-nine dollars a month.' },
+]
+
+async function captureTourScreenshots(tmpDir) {
+  let chromium
+  try {
+    ({ chromium } = await import('playwright'))
+  } catch (err) {
+    throw new Error('Playwright not installed: ' + err.message)
+  }
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  })
+  const screenshots = []
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1080, height: 1920 },
+      deviceScaleFactor: 1,
+    })
+    for (let i = 0; i < TOUR_SCREENS.length; i++) {
+      const { url, caption } = TOUR_SCREENS[i]
+      const page = await context.newPage()
+      try {
+        console.log(`📸 Tour screen ${i + 1}/${TOUR_SCREENS.length}:`, url)
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 })
+        await page.waitForTimeout(500)
+        const shotPath = path.join(tmpDir, `tour_${i}.png`)
+        await page.screenshot({ path: shotPath, fullPage: false })
+        screenshots.push({ path: shotPath, caption })
+      } catch (err) {
+        console.log(`📸 Tour screen ${i} failed:`, err.message)
+      } finally {
+        await page.close()
+      }
+    }
+    await context.close()
+  } finally {
+    await browser.close()
+  }
+  return screenshots
+}
+
+async function generateTourVideo(title, postId) {
+  if (!ffmpeg) { console.log('🎥 FFmpeg not available, skipping'); return null }
+
+  const tmpDir = path.join(os.tmpdir(), `tour-${Date.now()}`)
+  fs.mkdirSync(tmpDir, { recursive: true })
+  const outputPath = path.join(tmpDir, 'output.mp4')
+
+  const tourScript = TOUR_SCREENS.map(s => s.caption).join(' ')
+
+  let videoId
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO generated_videos (post_id, title, script, status, video_type) VALUES ($1, $2, $3, 'rendering', 'tour') RETURNING id`,
+      [postId || null, title, tourScript]
+    )
+    videoId = rows[0].id
+  } catch (err) {
+    console.error('🎥 DB insert error:', err.message)
+    return null
+  }
+
+  try {
+    const screenshots = await captureTourScreenshots(tmpDir)
+    if (!screenshots.length) throw new Error('No tour screenshots captured')
+
+    // Use pre-loaded Kokoro for narration
+    let tts = kokoroTTS
+    if (!tts) {
+      try {
+        const { KokoroTTS } = await import('kokoro-js')
+        tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
+      } catch (err) { console.log('🎥 Kokoro unavailable:', err.message) }
+    }
+
+    const framesDir = path.join(tmpDir, 'frames')
+    fs.mkdirSync(framesDir, { recursive: true })
+
+    // Register font for canvas overlay
+    if (FontLibrary) {
+      try {
+        const fontPaths = [
+          '/usr/share/fonts/truetype/dejavu-fonts-ttf-2.37/DejaVuSans-Bold.ttf',
+          '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        ]
+        for (const fp of fontPaths) {
+          if (fs.existsSync(fp)) { FontLibrary.use('PortalKitFont', [fp]); break }
+        }
+      } catch {}
+    }
+
+    const audioParts = []
+    let frameIndex = 0
+    const W = 1080, H = 1920
+    const fps = 30
+    const Image = (await import('skia-canvas')).Image
+
+    for (let i = 0; i < screenshots.length; i++) {
+      const { path: shotPath, caption } = screenshots[i]
+
+      let chunkDuration = Math.max(3, caption.split(/\s+/).length / 2.5)
+      if (tts) {
+        try {
+          const audioChunkPath = path.join(tmpDir, `audio_${i}.wav`)
+          const audio = await tts.generate(caption, { voice: 'af_bella', speed: 1.18 })
+          await audio.save(audioChunkPath)
+          audioParts.push(audioChunkPath)
+          const wavDuration = getWavDurationSeconds(audioChunkPath)
+          if (wavDuration && wavDuration > 0.5) chunkDuration = wavDuration + 0.3
+        } catch (err) { console.log('🎥 Audio error:', err.message) }
+      }
+
+      const frameCount = Math.ceil(chunkDuration * fps)
+
+      if (createCanvas) {
+        const canvas = createCanvas(W, H)
+        const ctx = canvas.getContext('2d')
+
+        // Load screenshot as background, center-crop to 1080x1920
+        const img = new Image()
+        await new Promise((resolve, reject) => {
+          img.onload = resolve; img.onerror = reject
+          img.src = fs.readFileSync(shotPath)
+        })
+
+        // Draw screenshot (cover-fit)
+        const imgAR = img.width / img.height
+        const canvasAR = W / H
+        let drawW, drawH, dx, dy
+        if (imgAR > canvasAR) {
+          drawH = H; drawW = H * imgAR; dx = (W - drawW) / 2; dy = 0
+        } else {
+          drawW = W; drawH = W / imgAR; dx = 0; dy = (H - drawH) / 2
+        }
+        ctx.fillStyle = '#0D1B2A'
+        ctx.fillRect(0, 0, W, H)
+        ctx.drawImage(img, dx, dy, drawW, drawH)
+
+        // Darken overlay for readability
+        ctx.fillStyle = 'rgba(13,27,42,0.45)'
+        ctx.fillRect(0, 0, W, H)
+
+        // Gold top bar + PORTAL KIT header
+        ctx.fillStyle = '#C9A84C'
+        ctx.fillRect(0, 0, W, 8)
+        ctx.font = 'bold 36px PortalKitFont, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('PORTAL KIT', W / 2, 120)
+
+        // Caption text — word-wrap and bottom-center
+        ctx.font = 'bold 56px PortalKitFont, sans-serif'
+        const maxWidth = W - 120
+        const lineHeight = 76
+        const words = caption.split(' ')
+        const lines = []
+        let curLine = []
+        for (const word of words) {
+          const testLine = [...curLine, word].join(' ')
+          if (ctx.measureText(testLine).width > maxWidth && curLine.length > 0) {
+            lines.push([...curLine]); curLine = [word]
+          } else curLine.push(word)
+        }
+        if (curLine.length) lines.push(curLine)
+
+        const captionY = H - 400 - (lines.length - 1) * lineHeight
+        ctx.shadowColor = 'rgba(0,0,0,0.9)'
+        ctx.shadowBlur = 20
+        ctx.shadowOffsetY = 2
+        ctx.fillStyle = '#FFFFFF'
+        for (let li = 0; li < lines.length; li++) {
+          ctx.fillText(lines[li].join(' '), W / 2, captionY + li * lineHeight)
+        }
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+
+        // Footer bar
+        ctx.fillStyle = 'rgba(201,168,76,0.9)'
+        ctx.fillRect(80, H - 200, W - 160, 80)
+        ctx.fillStyle = '#0D1B2A'
+        ctx.font = 'bold 32px PortalKitFont, sans-serif'
+        ctx.fillText('getportalkit.com', W / 2, H - 160)
+
+        // Progress bar
+        const progress = (i + 1) / screenshots.length
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'
+        ctx.fillRect(40, H - 60, W - 80, 6)
+        ctx.fillStyle = '#C9A84C'
+        ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
+
+        const frameBuffer = await canvas.toBuffer('image/png')
+        for (let f = 0; f < frameCount; f++) {
+          fs.writeFileSync(
+            path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+            frameBuffer
+          )
+          frameIndex++
+        }
+      }
+
+      console.log(`🎥 Tour scene ${i + 1}/${screenshots.length}: ${chunkDuration.toFixed(1)}s`)
+    }
+
+    // Concat audio
+    let finalAudioPath = null
+    if (audioParts.length > 0) {
+      finalAudioPath = path.join(tmpDir, 'final_audio.wav')
+      if (audioParts.length === 1) {
+        fs.copyFileSync(audioParts[0], finalAudioPath)
+      } else {
+        const concatFile = path.join(tmpDir, 'audio_list.txt')
+        fs.writeFileSync(concatFile, audioParts.map(p => `file '${p}'`).join('\n'))
+        await new Promise((resolve, reject) => {
+          ffmpeg().input(concatFile).inputOptions(['-f concat', '-safe 0']).outputOption('-c copy').output(finalAudioPath).on('end', resolve).on('error', reject).run()
+        })
+      }
+    }
+
+    // Tour frames already contain the screenshot background — render with no bg input
+    await renderVideo(framesDir, finalAudioPath, outputPath, 30, null)
+
+    const videoKey = `videos/tour-${Date.now()}-${videoId}.mp4`
+    if (r2 && fs.existsSync(outputPath)) {
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET, Key: videoKey,
+        Body: fs.readFileSync(outputPath), ContentType: 'video/mp4'
+      }))
+    }
+    const videoUrl = process.env.R2_PUBLIC_URL ? `${process.env.R2_PUBLIC_URL}/${videoKey}` : null
+
+    await pool.query(`UPDATE generated_videos SET status='ready', r2_url=$1, completed_at=NOW() WHERE id=$2`, [videoUrl, videoId])
+    console.log(`🎥 Tour ${videoId} ready: ${videoKey}`)
+    return { videoId, r2Url: videoUrl }
+  } catch (err) {
+    console.error('🎥 Tour error:', err.message)
+    try {
+      await pool.query(`UPDATE generated_videos SET status='error', error=$1 WHERE id=$2`, [err.message, videoId])
     } catch {}
     return null
   } finally {
@@ -7513,48 +7845,6 @@ app.post('/api/admin/find-emails', async (req, res) => {
     .catch(err => console.error('Find emails error:', err.message))
 })
 
-async function generateManimVideo(displayScript, tmpDir) {
-  return new Promise((resolve) => {
-    try {
-      const sentences = displayScript
-        .replace(/\n/g, ' ')
-        .split(/(?<=[.!?])\s+/)
-        .filter(s => s.trim().length > 4)
-        .join('|')
-
-      const outputPath = path.join(tmpDir, 'manim_output.mp4')
-      const scriptPath = path.join(__dirname, 'manim_script.py')
-
-      if (!fs.existsSync(scriptPath)) {
-        console.log('🎨 Manim script not found at:', scriptPath)
-        return resolve(null)
-      }
-
-      const escapedSentences = sentences.replace(/"/g, '\\"')
-      const cmd = `python3 "${scriptPath}" --script "${escapedSentences}" --output "${outputPath}"`
-      console.log('🎨 Starting Manim render...')
-
-      exec(cmd, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-        if (err) {
-          console.error('🎨 Manim error:', err.message)
-          if (stderr) console.error('🎨 stderr:', stderr.slice(-500))
-          return resolve(null)
-        }
-        if (fs.existsSync(outputPath)) {
-          console.log('🎨 Manim render complete:', outputPath)
-          resolve(outputPath)
-        } else {
-          console.error('🎨 Manim output file not found')
-          resolve(null)
-        }
-      })
-    } catch (err) {
-      console.error('🎨 Manim setup error:', err.message)
-      resolve(null)
-    }
-  })
-}
-
 async function generateVideoInternal({ script, title = 'Auto video', postId = null }) {
   return generateSocialVideo(script, title, postId)
 }
@@ -7570,10 +7860,31 @@ app.post('/api/admin/generate-video', async (req, res) => {
   )
 })
 
-// POST /api/admin/generate-manim-video — removed (Manim won't install in Nix; screen capture coming)
+// POST /api/admin/generate-explainer-video — animated canvas explainer (no Pexels, gradient bg)
+app.post('/api/admin/generate-explainer-video', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  const { post_id, script, title } = req.body
+  if (!script) return res.status(400).json({ error: 'script required' })
+  res.json({ queued: true })
+  generateExplainerVideo(script, title || 'Animated Explainer', post_id || null).catch(e =>
+    console.error('🎨 Explainer error:', e.message)
+  )
+})
+
+// POST /api/admin/generate-tour-video — website screenshot tour with narration
+app.post('/api/admin/generate-tour-video', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  const { post_id, title } = req.body
+  res.json({ queued: true })
+  generateTourVideo(title || 'Product Tour', post_id || null).catch(e =>
+    console.error('🎥 Tour error:', e.message)
+  )
+})
+
+// Legacy Manim route — kept as a 410 Gone so old clients get a clear signal
 app.post('/api/admin/generate-manim-video', (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  res.status(503).json({ error: 'Screen explainer coming soon' })
+  res.status(410).json({ error: 'Manim removed. Use /api/admin/generate-explainer-video instead.' })
 })
 
 // GET /api/admin/generated-videos — list all videos

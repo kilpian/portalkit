@@ -321,10 +321,13 @@ export default function ContentEngine() {
     }
   }
 
-  const handleGenerateVideo = async (type: 'pexels' | 'manim' = 'pexels') => {
-    if (!videoScript.trim()) return
+  const handleGenerateVideo = async (type: 'pexels' | 'explainer' | 'tour' = 'pexels') => {
+    if (type !== 'tour' && !videoScript.trim()) return
     setVideoGenerating(true)
-    const endpoint = type === 'manim' ? '/api/admin/generate-manim-video' : '/api/admin/generate-video'
+    const endpoint =
+      type === 'explainer' ? '/api/admin/generate-explainer-video' :
+      type === 'tour' ? '/api/admin/generate-tour-video' :
+      '/api/admin/generate-video'
     try {
       const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -332,11 +335,16 @@ export default function ContentEngine() {
           'Content-Type': 'application/json',
           'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
         },
-        body: JSON.stringify({ script: videoScript, title: videoTitle || undefined })
+        body: JSON.stringify(
+          type === 'tour'
+            ? { title: videoTitle || undefined }
+            : { script: videoScript, title: videoTitle || undefined }
+        )
       })
       const data = await res.json()
       if (data.queued) {
-        showToast(`${type === 'manim' ? 'Explainer' : 'Video'} queued! Rendering in background.`)
+        const label = type === 'explainer' ? 'Explainer' : type === 'tour' ? 'Product tour' : 'Video'
+        showToast(`${label} queued! Rendering in background.`)
         setVideoScript('')
         setVideoTitle('')
         setTimeout(fetchVideos, 2000)
@@ -821,15 +829,27 @@ export default function ContentEngine() {
                 {videoGenerating ? 'Queuing...' : '🎬 Live Video'}
               </button>
               <button
-                disabled
-                title="Screen capture explainer coming soon"
+                onClick={() => handleGenerateVideo('explainer')}
+                disabled={videoGenerating || !videoScript.trim()}
                 style={{
-                  background: '#E5E7EB', color: '#9CA3AF', border: 'none',
+                  background: '#7C3AED', color: 'white', border: 'none',
                   padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                  cursor: 'not-allowed'
+                  cursor: 'pointer', opacity: videoGenerating ? 0.7 : 1
                 }}
               >
-                🎨 Explainer (soon)
+                {videoGenerating ? 'Queuing...' : '🎨 Explainer'}
+              </button>
+              <button
+                onClick={() => handleGenerateVideo('tour')}
+                disabled={videoGenerating}
+                title="Captures real PortalKit pages — no script needed"
+                style={{
+                  background: '#0369A1', color: 'white', border: 'none',
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer', opacity: videoGenerating ? 0.7 : 1
+                }}
+              >
+                {videoGenerating ? 'Queuing...' : '🌐 Product Tour'}
               </button>
             </div>
           </div>
@@ -865,10 +885,15 @@ export default function ContentEngine() {
                       </span>
                       <span style={{
                         fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                        background: v.video_type === 'manim' ? '#F5F3FF' : '#F0F9FF',
-                        color: v.video_type === 'manim' ? '#7C3AED' : '#0369A1'
+                        background:
+                          v.video_type === 'explainer' || v.video_type === 'manim' ? '#F5F3FF' :
+                          v.video_type === 'tour' ? '#ECFEFF' : '#F0F9FF',
+                        color:
+                          v.video_type === 'explainer' || v.video_type === 'manim' ? '#7C3AED' :
+                          v.video_type === 'tour' ? '#0E7490' : '#0369A1'
                       }}>
-                        {v.video_type === 'manim' ? '🎨 Explainer' : '🎬 Live'}
+                        {v.video_type === 'explainer' || v.video_type === 'manim' ? '🎨 Explainer' :
+                         v.video_type === 'tour' ? '🌐 Tour' : '🎬 Live'}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {v.title || 'Untitled video'}

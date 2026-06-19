@@ -1,6 +1,9 @@
 [phases.setup]
-nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'python311', 'python311Packages.pip', 'cairo', 'pango', 'pkg-config']
-cmds = ['pip3 install manim --break-system-packages --quiet 2>&1 | tail -3 || echo "pip install attempted"']
+nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'cairo', 'pango', 'pkg-config']
 
 [phases.build]
-cmds = ['fc-cache -fv', 'npm install --production=false']
+cmds = [
+  'fc-cache -fv',
+  'npm install --production=false',
+  'npx playwright install chromium 2>&1 | tail -5 || echo "playwright install attempted"',
+]
