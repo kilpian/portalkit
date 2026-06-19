@@ -821,15 +821,15 @@ export default function ContentEngine() {
                 {videoGenerating ? 'Queuing...' : '🎬 Live Video'}
               </button>
               <button
-                onClick={() => handleGenerateVideo('manim')}
-                disabled={videoGenerating || !videoScript.trim()}
+                disabled
+                title="Screen capture explainer coming soon"
                 style={{
-                  background: '#7C3AED', color: 'white', border: 'none',
+                  background: '#E5E7EB', color: '#9CA3AF', border: 'none',
                   padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                  cursor: 'pointer', opacity: videoGenerating ? 0.7 : 1
+                  cursor: 'not-allowed'
                 }}
               >
-                {videoGenerating ? 'Queuing...' : '🎨 Explainer (Manim)'}
+                🎨 Explainer (soon)
               </button>
             </div>
           </div>

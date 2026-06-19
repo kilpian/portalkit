@@ -7555,70 +7555,25 @@ async function generateManimVideo(displayScript, tmpDir) {
   })
 }
 
+async function generateVideoInternal({ script, title = 'Auto video', postId = null }) {
+  return generateSocialVideo(script, title, postId)
+}
+
 // POST /api/admin/generate-video — queue a video for a specific post
 app.post('/api/admin/generate-video', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
   const { post_id, script, title } = req.body
   if (!script) return res.status(400).json({ error: 'script required' })
   res.json({ queued: true })
-  generateSocialVideo(script, title || 'Admin video', post_id || null).catch(e =>
+  generateVideoInternal({ script, title: title || 'Admin video', postId: post_id || null }).catch(e =>
     console.error('🎬 Admin video error:', e.message)
   )
 })
 
-// POST /api/admin/generate-manim-video — render animated explainer via Manim
-app.post('/api/admin/generate-manim-video', async (req, res) => {
+// POST /api/admin/generate-manim-video — removed (Manim won't install in Nix; screen capture coming)
+app.post('/api/admin/generate-manim-video', (req, res) => {
   if (!checkAdminSecret(req, res)) return
-  const { post_id, script } = req.body
-  if (!script) return res.status(400).json({ error: 'script required' })
-
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO generated_videos (post_id, title, script, status, video_type) VALUES ($1, $2, $3, 'rendering', 'manim') RETURNING id`,
-      [post_id || null, 'Manim Explainer', script]
-    )
-    const videoId = rows[0].id
-    res.json({ queued: true, id: videoId })
-
-    // Render async — don't await
-    ;(async () => {
-      const tmpDir = path.join(os.tmpdir(), `manim-${Date.now()}`)
-      fs.mkdirSync(tmpDir, { recursive: true })
-      try {
-        const { displayScript } = await prepareVideoScript(script)
-        const manimPath = await generateManimVideo(displayScript, tmpDir)
-
-        if (!manimPath) {
-          await pool.query(`UPDATE generated_videos SET status='error', error='Manim render failed' WHERE id=$1`, [videoId])
-          return
-        }
-
-        const videoKey = `videos/manim-${Date.now()}-${videoId}.mp4`
-        if (r2 && R2_BUCKET) {
-          await r2.send(new PutObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: videoKey,
-            Body: fs.readFileSync(manimPath),
-            ContentType: 'video/mp4'
-          }))
-        }
-        const videoUrl = process.env.R2_PUBLIC_URL ? `${process.env.R2_PUBLIC_URL}/${videoKey}` : null
-        await pool.query(
-          `UPDATE generated_videos SET status='ready', r2_url=$1, completed_at=NOW() WHERE id=$2`,
-          [videoUrl, videoId]
-        )
-        console.log('🎨 Manim video ready:', videoUrl)
-      } catch (err) {
-        console.error('🎨 Manim async error:', err.message)
-        await pool.query(`UPDATE generated_videos SET status='error', error=$1 WHERE id=$2`, [err.message, videoId]).catch(() => {})
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true })
-      }
-    })()
-  } catch (err) {
-    console.error('Manim endpoint error:', err.message)
-    res.status(500).json({ error: err.message })
-  }
+  res.status(503).json({ error: 'Screen explainer coming soon' })
 })
 
 // GET /api/admin/generated-videos — list all videos
@@ -7790,7 +7745,7 @@ let cityIndex = 0
 async function autoFindEmails() {
   try {
     const result = await pool.query(
-      `SELECT COUNT(*) FROM cold_contacts WHERE sent_at IS NULL AND (unsubscribed IS NULL OR unsubscribed = false)`
+      `SELECT COUNT(*) FROM cold_contacts WHERE sent_at IS NULL`
     )
     const unseenCount = parseInt(result.rows[0].count)
     console.log(`📧 Auto email check: ${unseenCount} unsent contacts`)
@@ -7817,3 +7772,54 @@ setTimeout(() => {
   autoFindEmails()
   setInterval(autoFindEmails, 6 * 60 * 60 * 1000)
 }, 5 * 60 * 1000)
+
+const DAILY_ANGLES = [
+  'Wedding photographers are losing 30 hours a month to admin.',
+  'Stop sending contracts from your personal email.',
+  'Your clients deserve a better experience than a Google Drive link.',
+  'One portal link. No more chasing couples across 5 platforms.',
+  'HoneyBook doubled their prices. There is a better option.',
+  'What if your clients could approve their timeline without one email?',
+  'Stop resending the same file three times per wedding.',
+  'Your client portal should work while you sleep.',
+]
+
+async function autoDailyVideo() {
+  try {
+    console.log('🎬 Auto daily video generation starting...')
+    if (!anthropic) { console.log('🎬 Anthropic not configured, skipping'); return }
+
+    const topic = DAILY_ANGLES[new Date().getDay() % DAILY_ANGLES.length]
+    const scriptRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      messages: [{
+        role: 'user',
+        content: `Write an 8-sentence TikTok/Reels script for wedding photographers about: "${topic}". Start with a hook. Be direct, specific, no fluff. End with: Try it free at getportalkit.com. Return only the script sentences separated by newlines. No intro, no labels.`
+      }]
+    })
+
+    const script = scriptRes.content[0]?.text?.trim()
+    if (!script) { console.log('🎬 Auto video: empty script returned'); return }
+    console.log('🎬 Auto video script:', script.slice(0, 60))
+
+    await generateVideoInternal({ script, title: `Daily — ${topic.slice(0, 40)}` })
+    console.log('🎬 Auto daily video queued')
+  } catch (err) {
+    console.error('🎬 Auto video error:', err.message)
+  }
+}
+
+function scheduleDailyVideo() {
+  const now = new Date()
+  const next = new Date()
+  next.setUTCHours(14, 0, 0, 0) // 9 AM EST = 14:00 UTC
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 1)
+  const msUntil = next - now
+  console.log(`🎬 Daily video scheduler: next run in ${Math.round(msUntil / 60000)} minutes`)
+  setTimeout(() => {
+    autoDailyVideo()
+    setInterval(autoDailyVideo, 24 * 60 * 60 * 1000)
+  }, msUntil)
+}
+scheduleDailyVideo()
