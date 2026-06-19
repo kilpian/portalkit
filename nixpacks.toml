@@ -5,5 +5,4 @@ nixPkgs = ['nodejs_24', 'dejavu_fonts', 'fontconfig', 'cairo', 'pango', 'pkg-con
 cmds = [
   'fc-cache -fv',
   'npm install --production=false',
-  'npx playwright install chromium 2>&1 | tail -5 || echo "playwright install attempted"',
 ]

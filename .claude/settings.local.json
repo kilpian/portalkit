@@ -43,7 +43,8 @@
       "Bash(mkdir -p /mnt/user-data/outputs)",
       "Read(//mnt/user-data/**)",
       "Bash(python3 *)",
-      "Bash(awk *)"
+      "Bash(awk *)",
+      "Bash(git rm *)"
     ]
   }
 }

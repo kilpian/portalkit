@@ -27,6 +27,7 @@ import PaymentLinks from './pages/dashboard/PaymentLinks'
 import Proposals from './pages/dashboard/Proposals'
 import Gallery from './pages/dashboard/Gallery'
 import ContentEngine from './pages/dashboard/ContentEngine'
+import Customers from './pages/dashboard/Customers'
 import InquiryPage from './pages/InquiryPage'
 import PaymentLinkPage from './pages/PaymentLinkPage'
 import ProposalPage from './pages/ProposalPage'
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="setup" element={<Setup />} />
             <Route path="content" element={<ContentEngine />} />
+            <Route path="customers" element={<Customers />} />
           </Route>
 
           {/* Fallback */}

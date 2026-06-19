@@ -2392,84 +2392,160 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
       if (curLine.length) lineArrays.push(curLine)
 
       const startY = (H - lineArrays.length * lineHeight) / 2
+      const easeOut = (t) => 1 - Math.pow(1 - t, 3)
 
-      ctx.clearRect(0, 0, W, H)
+      // Explainer mode draws one animated frame per output frame; Live mode draws once and replicates.
+      const isExplainer = mode === 'explainer'
+      const framesToDrawAnimated = isExplainer ? frameCount : 1
+      const entryFrames = Math.min(12, Math.max(4, Math.floor(frameCount * 0.35)))
+      const checkStart = entryFrames
+      const checkFrames = 10
 
-      // Explainer mode: paint a navy→deep-navy radial gradient + feature card backing into the canvas itself
-      if (mode === 'explainer') {
-        const grad = ctx.createLinearGradient(0, 0, 0, H)
-        grad.addColorStop(0, '#0D1B2A')
-        grad.addColorStop(0.5, '#1B2D44')
-        grad.addColorStop(1, '#0D1B2A')
-        ctx.fillStyle = grad
-        ctx.fillRect(0, 0, W, H)
+      for (let f = 0; f < framesToDrawAnimated; f++) {
+        ctx.clearRect(0, 0, W, H)
 
-        // Gold accent ring behind the text
-        ctx.strokeStyle = 'rgba(201,168,76,0.35)'
-        ctx.lineWidth = 2
-        ctx.strokeRect(60, 220, W - 120, H - 420)
+        const entryT = isExplainer ? easeOut(Math.min(1, f / entryFrames)) : 1
+        const cardOffsetY = (1 - entryT) * 60
+        const cardOpacity = entryT
+        const textScale = 0.9 + 0.1 * entryT
+        const checkT = isExplainer ? Math.max(0, Math.min(1, (f - checkStart) / checkFrames)) : 0
 
-        // Subtle feature card behind text (slightly lighter panel)
-        ctx.fillStyle = 'rgba(255,255,255,0.04)'
-        ctx.fillRect(90, startY - 60, W - 180, lineArrays.length * lineHeight + 120)
+        // Explainer background: navy gradient + accent ring + animated feature card
+        if (isExplainer) {
+          const grad = ctx.createLinearGradient(0, 0, 0, H)
+          grad.addColorStop(0, '#0D1B2A')
+          grad.addColorStop(0.5, '#1B2D44')
+          grad.addColorStop(1, '#0D1B2A')
+          ctx.fillStyle = grad
+          ctx.fillRect(0, 0, W, H)
+
+          ctx.strokeStyle = 'rgba(201,168,76,0.35)'
+          ctx.lineWidth = 2
+          ctx.strokeRect(60, 220, W - 120, H - 420)
+
+          // Animated feature card — slides up + fades in
+          ctx.globalAlpha = cardOpacity
+          const cardY = startY - 60 + cardOffsetY
+          const cardH = lineArrays.length * lineHeight + 120
+          ctx.fillStyle = 'rgba(255,255,255,0.06)'
+          ctx.fillRect(90, cardY, W - 180, cardH)
+          ctx.strokeStyle = 'rgba(201,168,76,0.55)'
+          ctx.lineWidth = 2
+          ctx.strokeRect(90, cardY, W - 180, cardH)
+          ctx.globalAlpha = 1
+        }
+
+        // Gold top bar
+        ctx.fillStyle = '#C9A84C'
+        ctx.fillRect(0, 0, W, 8)
+
+        // Brand label
+        ctx.fillStyle = '#C9A84C'
+        ctx.font = 'bold 36px PortalKitFont, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('PORTAL KIT', W / 2, 120)
+
+        // Divider
+        ctx.fillStyle = 'rgba(255,255,255,0.2)'
+        ctx.fillRect(W / 2 - 80, 148, 160, 2)
+
+        // Headline (animated scale + fade in explainer mode)
+        ctx.save()
+        if (isExplainer) {
+          ctx.globalAlpha = cardOpacity
+          const cy = startY + (lineArrays.length * lineHeight) / 2 - lineHeight / 2
+          ctx.translate(W / 2, cy)
+          ctx.scale(textScale, textScale)
+          ctx.translate(-W / 2, -cy)
+        }
+        ctx.font = 'bold 68px PortalKitFont, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        for (let lineI = 0; lineI < lineArrays.length; lineI++) {
+          ctx.shadowColor = 'rgba(0,0,0,0.8)'
+          ctx.shadowBlur = 15
+          ctx.shadowOffsetX = 2
+          ctx.shadowOffsetY = 2
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillText(lineArrays[lineI].join(' '), W / 2, startY + lineI * lineHeight)
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+          ctx.shadowOffsetX = 0
+          ctx.shadowOffsetY = 0
+        }
+        ctx.restore()
+
+        // Explainer-only: animated checkmark drawn below the headline
+        if (isExplainer && checkT > 0) {
+          const checkCY = startY + lineArrays.length * lineHeight + 60
+          const checkCX = W / 2
+          const r = 40
+          ctx.lineWidth = 6
+          ctx.strokeStyle = '#C9A84C'
+          ctx.beginPath()
+          ctx.arc(checkCX, checkCY, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * checkT)
+          ctx.stroke()
+          if (checkT > 0.4) {
+            const tickT = (checkT - 0.4) / 0.6
+            const p1 = { x: checkCX - 18, y: checkCY + 2 }
+            const p2 = { x: checkCX - 4, y: checkCY + 16 }
+            const p3 = { x: checkCX + 20, y: checkCY - 12 }
+            ctx.strokeStyle = '#C9A84C'
+            ctx.lineWidth = 6
+            ctx.lineCap = 'round'
+            ctx.beginPath()
+            ctx.moveTo(p1.x, p1.y)
+            if (tickT <= 0.5) {
+              const t = tickT / 0.5
+              ctx.lineTo(p1.x + (p2.x - p1.x) * t, p1.y + (p2.y - p1.y) * t)
+            } else {
+              ctx.lineTo(p2.x, p2.y)
+              const t = (tickT - 0.5) / 0.5
+              ctx.lineTo(p2.x + (p3.x - p2.x) * t, p2.y + (p3.y - p2.y) * t)
+            }
+            ctx.stroke()
+            ctx.lineCap = 'butt'
+          }
+        }
+
+        // CTA bar
+        ctx.fillStyle = 'rgba(201,168,76,0.9)'
+        ctx.fillRect(80, H - 200, W - 160, 80)
+        ctx.fillStyle = '#0D1B2A'
+        ctx.font = 'bold 32px PortalKitFont, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('getportalkit.com', W / 2, H - 160)
+
+        // Progress bar — fills smoothly across all chunks
+        const fracWithinChunk = framesToDrawAnimated > 1 ? (f + 1) / framesToDrawAnimated : 1
+        const progress = (i + fracWithinChunk) / count
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'
+        ctx.fillRect(40, H - 60, W - 80, 6)
+        ctx.fillStyle = '#C9A84C'
+        ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
+
+        if (isExplainer) {
+          const frameBuffer = await canvas.toBuffer('image/png')
+          fs.writeFileSync(
+            path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+            frameBuffer
+          )
+          frameIndex++
+        }
       }
 
-      // Gold top bar
-      ctx.fillStyle = '#C9A84C'
-      ctx.fillRect(0, 0, W, 8)
-
-      // Brand label
-      ctx.fillStyle = '#C9A84C'
-      ctx.font = 'bold 36px PortalKitFont, sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('PORTAL KIT', W / 2, 120)
-
-      // Divider
-      ctx.fillStyle = 'rgba(255,255,255,0.2)'
-      ctx.fillRect(W / 2 - 80, 148, 160, 2)
-
-      // Full sentence — all lines visible immediately
-      ctx.font = 'bold 68px PortalKitFont, sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      for (let lineI = 0; lineI < lineArrays.length; lineI++) {
-        ctx.shadowColor = 'rgba(0,0,0,0.8)'
-        ctx.shadowBlur = 15
-        ctx.shadowOffsetX = 2
-        ctx.shadowOffsetY = 2
-        ctx.fillStyle = '#FFFFFF'
-        ctx.fillText(lineArrays[lineI].join(' '), W / 2, startY + lineI * lineHeight)
-        ctx.shadowColor = 'transparent'
-        ctx.shadowBlur = 0
-        ctx.shadowOffsetX = 0
-        ctx.shadowOffsetY = 0
-      }
-
-      // CTA bar
-      ctx.fillStyle = 'rgba(201,168,76,0.9)'
-      ctx.fillRect(80, H - 200, W - 160, 80)
-      ctx.fillStyle = '#0D1B2A'
-      ctx.font = 'bold 32px PortalKitFont, sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('getportalkit.com', W / 2, H - 160)
-
-      // Progress bar
-      const progress = (i + 1) / count
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'
-      ctx.fillRect(40, H - 60, W - 80, 6)
-      ctx.fillStyle = '#C9A84C'
-      ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
-
-      // Write same frame for entire chunk duration (audio drives timing)
-      const frameBuffer = await canvas.toBuffer('image/png')
-      for (let f = 0; f < frameCount; f++) {
-        fs.writeFileSync(
-          path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
-          frameBuffer
-        )
-        frameIndex++
+      if (!isExplainer) {
+        // Live mode: one rendered frame replicated for the chunk duration
+        const frameBuffer = await canvas.toBuffer('image/png')
+        for (let f = 0; f < frameCount; f++) {
+          fs.writeFileSync(
+            path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+            frameBuffer
+          )
+          frameIndex++
+        }
       }
     } else {
       frameIndex += frameCount
@@ -2657,40 +2733,38 @@ const TOUR_SCREENS = [
 ]
 
 async function captureTourScreenshots(tmpDir) {
-  let chromium
+  let puppeteer
   try {
-    ({ chromium } = await import('playwright'))
+    puppeteer = (await import('puppeteer')).default
   } catch (err) {
-    throw new Error('Playwright not installed: ' + err.message)
+    throw new Error('Puppeteer not installed: ' + err.message)
   }
-  const browser = await chromium.launch({
+  const browser = await puppeteer.launch({
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   })
   const screenshots = []
   try {
-    const context = await browser.newContext({
-      viewport: { width: 1080, height: 1920 },
-      deviceScaleFactor: 1,
-    })
     for (let i = 0; i < TOUR_SCREENS.length; i++) {
       const { url, caption } = TOUR_SCREENS[i]
-      const page = await context.newPage()
+      const page = await browser.newPage()
       try {
+        await page.setViewport({ width: 1080, height: 1920, deviceScaleFactor: 1 })
         console.log(`📸 Tour screen ${i + 1}/${TOUR_SCREENS.length}:`, url)
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 })
-        await page.waitForTimeout(500)
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
+        await new Promise(r => setTimeout(r, 600))
         const shotPath = path.join(tmpDir, `tour_${i}.png`)
         await page.screenshot({ path: shotPath, fullPage: false })
         screenshots.push({ path: shotPath, caption })
       } catch (err) {
         console.log(`📸 Tour screen ${i} failed:`, err.message)
       } finally {
-        await page.close()
+        await page.close().catch(() => {})
       }
     }
-    await context.close()
   } finally {
-    await browser.close()
+    // Always close browser to free memory immediately (avoid SIGTERM)
+    await browser.close().catch(() => {})
   }
   return screenshots
 }
@@ -7675,6 +7749,73 @@ app.get('/api/admin/tool-leads', async (req, res) => {
     const result = await pool.query('SELECT * FROM tool_leads ORDER BY created_at DESC LIMIT 100')
     res.json(result.rows)
   } catch { res.json([]) }
+})
+
+// GET /api/admin/customers — groups all users by lifecycle status (real data only)
+let _customersDiagnosticLogged = false
+app.get('/api/admin/customers', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    if (!_customersDiagnosticLogged) {
+      _customersDiagnosticLogged = true
+      const diag = await pool.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position`
+      )
+      console.log('👥 users columns:', diag.rows.map(r => r.column_name).join(', '))
+    }
+
+    const { rows } = await pool.query(`
+      SELECT id, email, full_name, business_name, plan, billing_cycle,
+             trial_ends_at, stripe_customer_id, stripe_subscription_id,
+             grace_period_ends_at, onboarding_completed, created_at
+      FROM users
+      ORDER BY created_at DESC
+    `)
+
+    const now = new Date()
+    const buckets = { trialing: [], active: [], churned: [], trial_expired: [] }
+
+    for (const u of rows) {
+      const trialEnd = u.trial_ends_at ? new Date(u.trial_ends_at) : null
+      const plan = (u.plan || '').toLowerCase()
+
+      let bucket
+      if (plan === 'active') bucket = 'active'
+      else if (plan === 'trial' && trialEnd && trialEnd > now) bucket = 'trialing'
+      else if (plan === 'grace' || plan === 'canceled' || plan === 'cancelled' || plan === 'past_due') bucket = 'churned'
+      else if (plan === 'expired' || (plan === 'trial' && trialEnd && trialEnd <= now)) bucket = 'trial_expired'
+      else if (u.stripe_subscription_id) bucket = 'churned'
+      else bucket = 'trial_expired'
+
+      buckets[bucket].push({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name,
+        business_name: u.business_name,
+        plan: u.plan,
+        billing_cycle: u.billing_cycle,
+        trial_ends_at: u.trial_ends_at,
+        stripe_customer_id: u.stripe_customer_id,
+        stripe_subscription_id: u.stripe_subscription_id,
+        onboarding_completed: u.onboarding_completed,
+        created_at: u.created_at,
+        grace_period_ends_at: u.grace_period_ends_at,
+      })
+    }
+
+    res.json({
+      counts: {
+        trialing: buckets.trialing.length,
+        active: buckets.active.length,
+        churned: buckets.churned.length,
+        trial_expired: buckets.trial_expired.length,
+      },
+      ...buckets,
+    })
+  } catch (err) {
+    console.error('Admin customers error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // ── ADMIN: COLD OUTREACH ──────────────────────────────────────
