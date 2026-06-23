@@ -615,7 +615,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter)
 
 // ── IP BAN MIDDLEWARE ──────────────────────────────────────────
-const loginFailures = new Map() // ip → [timestamps]
+const failedLogins = new Map() // ip → [timestamps]
 const FAIL_WINDOW_MS = 15 * 60 * 1000
 const FAIL_LIMIT = 10
 const AUTO_BAN_HOURS = 24
@@ -627,9 +627,9 @@ function getClientIp(req) {
 
 async function recordLoginFailure(ip) {
   const now = Date.now()
-  const timestamps = (loginFailures.get(ip) || []).filter(t => now - t < FAIL_WINDOW_MS)
+  const timestamps = (failedLogins.get(ip) || []).filter(t => now - t < FAIL_WINDOW_MS)
   timestamps.push(now)
-  loginFailures.set(ip, timestamps)
+  failedLogins.set(ip, timestamps)
 
   if (timestamps.length >= FAIL_LIMIT) {
     try {
@@ -640,7 +640,7 @@ async function recordLoginFailure(ip) {
          ON CONFLICT (ip) DO UPDATE SET is_active=true, banned_at=NOW(), expires_at=$3, reason=$2`,
         [ip, `Auto-banned: ${timestamps.length} failed auth attempts in 15 min`, expiresAt]
       )
-      loginFailures.delete(ip)
+      failedLogins.delete(ip)
       console.log(`🚫 Auto-banned IP ${ip} for ${AUTO_BAN_HOURS}h after ${timestamps.length} failed attempts`)
     } catch (err) {
       console.error('Auto-ban insert error:', err.message)
@@ -650,6 +650,7 @@ async function recordLoginFailure(ip) {
 
 app.use(async (req, res, next) => {
   const ip = getClientIp(req)
+  req.clientIp = ip
   try {
     const { rows } = await pool.query(
       `SELECT 1 FROM ip_bans WHERE ip=$1 AND is_active=true AND (expires_at IS NULL OR expires_at > NOW())`,
@@ -1406,6 +1407,18 @@ async function initDb() {
         );
         CREATE INDEX IF NOT EXISTS idx_ip_bans_ip ON ip_bans(ip);
         CREATE INDEX IF NOT EXISTS idx_ip_bans_active ON ip_bans(is_active);
+      `).catch(() => {})
+
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false`).catch(() => {})
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT`).catch(() => {})
+
+      // Permanent admin account — never charged, never downgraded
+      await pool.query(`
+        UPDATE users SET
+          is_admin = TRUE,
+          subscription_status = 'active',
+          plan = 'pro'
+        WHERE email = 'derauzoma@gmail.com'
       `).catch(() => {})
 
       console.log('✅ Database ready')
@@ -3986,7 +3999,16 @@ app.delete('/api/users/me', requireAuth, async (req, res) => {
 // ── AUTH ──────────────────────────────────────────────────────
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
-  res.json(req.user)
+  const user = req.user
+  if (user.email === 'derauzoma@gmail.com') {
+    return res.json({
+      ...user,
+      plan: 'pro',
+      subscription_status: 'active',
+      is_admin: true,
+    })
+  }
+  res.json(user)
 })
 
 // Track referral code after signup (called by frontend once with ref from localStorage)
