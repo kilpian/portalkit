@@ -614,6 +614,57 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter)
 
+// ── IP BAN MIDDLEWARE ──────────────────────────────────────────
+const loginFailures = new Map() // ip → [timestamps]
+const FAIL_WINDOW_MS = 15 * 60 * 1000
+const FAIL_LIMIT = 10
+const AUTO_BAN_HOURS = 24
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  return (forwarded ? forwarded.split(',')[0].trim() : null) || req.socket?.remoteAddress || 'unknown'
+}
+
+async function recordLoginFailure(ip) {
+  const now = Date.now()
+  const timestamps = (loginFailures.get(ip) || []).filter(t => now - t < FAIL_WINDOW_MS)
+  timestamps.push(now)
+  loginFailures.set(ip, timestamps)
+
+  if (timestamps.length >= FAIL_LIMIT) {
+    try {
+      const expiresAt = new Date(now + AUTO_BAN_HOURS * 60 * 60 * 1000)
+      await pool.query(
+        `INSERT INTO ip_bans (ip, reason, banned_by, expires_at, is_active)
+         VALUES ($1, $2, 'system', $3, true)
+         ON CONFLICT (ip) DO UPDATE SET is_active=true, banned_at=NOW(), expires_at=$3, reason=$2`,
+        [ip, `Auto-banned: ${timestamps.length} failed auth attempts in 15 min`, expiresAt]
+      )
+      loginFailures.delete(ip)
+      console.log(`🚫 Auto-banned IP ${ip} for ${AUTO_BAN_HOURS}h after ${timestamps.length} failed attempts`)
+    } catch (err) {
+      console.error('Auto-ban insert error:', err.message)
+    }
+  }
+}
+
+app.use(async (req, res, next) => {
+  const ip = getClientIp(req)
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM ip_bans WHERE ip=$1 AND is_active=true AND (expires_at IS NULL OR expires_at > NOW())`,
+      [ip]
+    )
+    if (rows.length > 0) {
+      console.log(`🚫 Blocked request from banned IP: ${ip} ${req.method} ${req.path}`)
+      return res.status(403).json({ error: 'Access denied.', code: 'IP_BANNED' })
+    }
+  } catch {
+    // DB error → allow through rather than block legitimate traffic
+  }
+  next()
+})
+
 const aiLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
@@ -1342,6 +1393,20 @@ async function initDb() {
 
       await pool.query(`ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS video_type TEXT DEFAULT 'pexels'`).catch(() => {})
       await pool.query(`ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS captions TEXT`).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ip_bans (
+          id SERIAL PRIMARY KEY,
+          ip TEXT NOT NULL UNIQUE,
+          reason TEXT,
+          banned_by TEXT DEFAULT 'system',
+          banned_at TIMESTAMPTZ DEFAULT NOW(),
+          expires_at TIMESTAMPTZ,
+          is_active BOOLEAN DEFAULT true
+        );
+        CREATE INDEX IF NOT EXISTS idx_ip_bans_ip ON ip_bans(ip);
+        CREATE INDEX IF NOT EXISTS idx_ip_bans_active ON ip_bans(is_active);
+      `).catch(() => {})
 
       console.log('✅ Database ready')
       return
@@ -3697,9 +3762,13 @@ async function runDailyJobs() {
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization
+  const ip = getClientIp(req)
   try {
     const token = authHeader?.replace('Bearer ', '')
-    if (!token) return res.status(401).json({ error: 'Unauthorized' })
+    if (!token) {
+      await recordLoginFailure(ip)
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
 
     const payload = await verifyToken(token, {
       secretKey: process.env.CLERK_SECRET_KEY,
@@ -3826,6 +3895,7 @@ async function requireAuth(req, res, next) {
     next()
   } catch (err) {
     console.error('❌ Auth error:', err.message)
+    await recordLoginFailure(ip)
     res.status(401).json({ error: 'Unauthorized' })
   }
 }
@@ -8151,6 +8221,43 @@ app.delete('/api/admin/generated-videos/:id', async (req, res) => {
     console.error('Delete video error:', err.message)
     res.status(500).json({ error: 'Delete failed' })
   }
+})
+
+// ── ADMIN: IP BANS ─────────────────────────────────────────────
+
+app.get('/api/admin/ip-bans', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const { rows } = await pool.query('SELECT * FROM ip_bans ORDER BY banned_at DESC')
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/admin/ip-bans', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const { ip, reason, expires_at } = req.body
+    if (!ip) return res.status(400).json({ error: 'ip is required' })
+    const { rows } = await pool.query(
+      `INSERT INTO ip_bans (ip, reason, banned_by, expires_at, is_active)
+       VALUES ($1, $2, 'admin', $3, true)
+       ON CONFLICT (ip) DO UPDATE SET is_active=true, banned_at=NOW(), reason=$2, expires_at=$3, banned_by='admin'
+       RETURNING *`,
+      [ip, reason || 'Manual ban', expires_at || null]
+    )
+    console.log(`🚫 Admin banned IP: ${ip}`)
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/admin/ip-bans/:ip', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  try {
+    const ip = decodeURIComponent(req.params.ip)
+    await pool.query('UPDATE ip_bans SET is_active=false WHERE ip=$1', [ip])
+    console.log(`✅ Admin unbanned IP: ${ip}`)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 app.use((err, req, res, next) => {
