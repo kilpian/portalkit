@@ -1946,7 +1946,7 @@ async function generateVoiceAudio(text, outputPath) {
     console.log('🎬 Kokoro loading model (first run)...')
     const { KokoroTTS } = await import('kokoro-js')
     const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', { dtype: 'q8' })
-    const audio = await tts.generate(text.slice(0, 500), { voice: 'af_bella', speed: 1.18 })
+    const audio = await tts.generate(text.slice(0, 500), { voice: 'af_bella', speed: 1.35 })
     const wavPath = outputPath.replace(/\.[^.]+$/, '.wav')
     await audio.save(wavPath)
     console.log('🎬 Kokoro TTS audio generated')
@@ -2378,6 +2378,78 @@ function getWavDurationSeconds(filePath) {
   }
 }
 
+const EXPLAINER_FEATURE_CARDS = [
+  { name: 'Contracts & Signatures', benefit: 'Send, sign, and store — no DocuSign needed.', iconType: 'contract' },
+  { name: 'Shot List Builder',       benefit: 'Your couple edits it. You arrive prepared.',  iconType: 'checklist' },
+  { name: 'Day-of Timeline',         benefit: 'Everyone is on the same page, all day.',       iconType: 'calendar' },
+  { name: 'Gallery Delivery',        benefit: 'One beautiful link. No Dropbox. No confusion.', iconType: 'gallery' },
+  { name: 'All in one link',         benefit: 'One portal. Zero chasing.',                   iconType: 'link' },
+]
+
+function drawFeatureIcon(ctx, iconType, cx, cy, size) {
+  ctx.save()
+  ctx.strokeStyle = '#C9A84C'
+  ctx.lineWidth = size * 0.08
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  const s = size * 0.38
+
+  if (iconType === 'contract') {
+    // Document with lines
+    ctx.strokeRect(cx - s * 0.7, cy - s, s * 1.4, s * 2)
+    for (let ln = 0; ln < 3; ln++) {
+      ctx.beginPath()
+      ctx.moveTo(cx - s * 0.45, cy - s * 0.4 + ln * s * 0.45)
+      ctx.lineTo(cx + s * 0.45, cy - s * 0.4 + ln * s * 0.45)
+      ctx.stroke()
+    }
+  } else if (iconType === 'checklist') {
+    // Bullet list with checks
+    for (let ln = 0; ln < 3; ln++) {
+      const y = cy - s * 0.6 + ln * s * 0.6
+      ctx.strokeRect(cx - s * 0.65, y - s * 0.18, s * 0.36, s * 0.36)
+      ctx.beginPath()
+      ctx.moveTo(cx - s * 0.2, y)
+      ctx.lineTo(cx + s * 0.55, y)
+      ctx.stroke()
+    }
+  } else if (iconType === 'calendar') {
+    // Calendar grid
+    ctx.strokeRect(cx - s * 0.8, cy - s * 0.7, s * 1.6, s * 1.5)
+    ctx.beginPath()
+    ctx.moveTo(cx - s * 0.8, cy - s * 0.25)
+    ctx.lineTo(cx + s * 0.8, cy - s * 0.25)
+    ctx.stroke()
+    for (let col = 1; col < 3; col++) {
+      ctx.beginPath()
+      ctx.moveTo(cx - s * 0.8 + col * s * 0.53, cy - s * 0.25)
+      ctx.lineTo(cx - s * 0.8 + col * s * 0.53, cy + s * 0.8)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.moveTo(cx - s * 0.8, cy + s * 0.27)
+    ctx.lineTo(cx + s * 0.8, cy + s * 0.27)
+    ctx.stroke()
+  } else if (iconType === 'gallery') {
+    // 2×2 image grid
+    const gp = s * 0.08
+    const gw = s * 0.65
+    ctx.strokeRect(cx - gw - gp, cy - gw - gp, gw, gw)
+    ctx.strokeRect(cx + gp,      cy - gw - gp, gw, gw)
+    ctx.strokeRect(cx - gw - gp, cy + gp,      gw, gw)
+    ctx.strokeRect(cx + gp,      cy + gp,      gw, gw)
+  } else if (iconType === 'link') {
+    // Chain link — two oval rings
+    ctx.beginPath()
+    ctx.ellipse(cx - s * 0.38, cy, s * 0.2, s * 0.55, -Math.PI / 5, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(cx + s * 0.38, cy, s * 0.2, s * 0.55, Math.PI / 5, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
 async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' }, tmpDir, fps = 30) {
   // Split TTS sentences for audio timing
   const ttsSentences = ttsScript.replace(/\n/g, ' ').split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4)
@@ -2435,7 +2507,9 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
     if (tts) {
       try {
         const audioChunkPath = path.join(tmpDir, `audio_chunk_${i}.wav`)
-        const audio = await tts.generate(ttsSentence, { voice: 'af_bella', speed: 1.18 })
+        const ttsSpeed = 1.35
+        console.log('🎤 TTS speed:', ttsSpeed)
+        const audio = await tts.generate(ttsSentence, { voice: 'af_bella', speed: ttsSpeed })
         await audio.save(audioChunkPath)
         audioParts.push(audioChunkPath)
 
@@ -2474,70 +2548,159 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
 
       // Explainer mode draws one animated frame per output frame; Live mode draws once and replicates.
       const isExplainer = mode === 'explainer'
-      const framesToDrawAnimated = isExplainer ? frameCount : 1
-      const entryFrames = Math.min(12, Math.max(4, Math.floor(frameCount * 0.35)))
-      const checkStart = entryFrames
-      const checkFrames = 10
 
-      for (let f = 0; f < framesToDrawAnimated; f++) {
-        if (isExplainer && f < 3) console.log(`🎬 explainer animating frame ${f} (chunk ${i + 1}/${count})`)
-        ctx.clearRect(0, 0, W, H)
+      if (isExplainer) {
+        // ── Explainer mode: feature showcase card per sentence ──
+        const card = EXPLAINER_FEATURE_CARDS[i % EXPLAINER_FEATURE_CARDS.length]
+        const entryFrames = Math.min(18, Math.max(6, Math.floor(frameCount * 0.4)))
+        const checkStart = entryFrames
+        const checkFrames = 12
+        // Card geometry: tall card in center of screen, slides in from bottom
+        const CARD_W = W - 120
+        const CARD_H = 620
+        const CARD_X = 60
+        const CARD_Y_FINAL = (H - CARD_H) / 2 + 40
+        const CARD_SLIDE_DIST = 180
 
-        const entryT = isExplainer ? easeOut(Math.min(1, f / entryFrames)) : 1
-        const cardOffsetY = (1 - entryT) * 60
-        const cardOpacity = entryT
-        const textScale = 0.9 + 0.1 * entryT
-        const checkT = isExplainer ? Math.max(0, Math.min(1, (f - checkStart) / checkFrames)) : 0
+        for (let f = 0; f < frameCount; f++) {
+          if (f < 3) console.log(`🎬 explainer frame ${f} (card ${i + 1}/${count}: ${card.name})`)
+          ctx.clearRect(0, 0, W, H)
 
-        // Explainer background: navy gradient + accent ring + animated feature card
-        if (isExplainer) {
+          const entryT = easeOut(Math.min(1, f / entryFrames))
+          const checkT = Math.max(0, Math.min(1, (f - checkStart) / checkFrames))
+          const cardY = CARD_Y_FINAL + CARD_SLIDE_DIST * (1 - entryT)
+
+          // Gradient background
           const grad = ctx.createLinearGradient(0, 0, 0, H)
-          grad.addColorStop(0, '#0D1B2A')
-          grad.addColorStop(0.5, '#1B2D44')
-          grad.addColorStop(1, '#0D1B2A')
+          grad.addColorStop(0, '#060E19')
+          grad.addColorStop(0.5, '#0D1B2A')
+          grad.addColorStop(1, '#060E19')
           ctx.fillStyle = grad
           ctx.fillRect(0, 0, W, H)
 
-          ctx.strokeStyle = 'rgba(201,168,76,0.35)'
-          ctx.lineWidth = 2
-          ctx.strokeRect(60, 220, W - 120, H - 420)
+          // Gold top bar
+          ctx.fillStyle = '#C9A84C'
+          ctx.fillRect(0, 0, W, 8)
 
-          // Animated feature card — slides up + fades in
-          ctx.globalAlpha = cardOpacity
-          const cardY = startY - 60 + cardOffsetY
-          const cardH = lineArrays.length * lineHeight + 120
-          ctx.fillStyle = 'rgba(255,255,255,0.06)'
-          ctx.fillRect(90, cardY, W - 180, cardH)
-          ctx.strokeStyle = 'rgba(201,168,76,0.55)'
-          ctx.lineWidth = 2
-          ctx.strokeRect(90, cardY, W - 180, cardH)
+          // Brand label
+          ctx.fillStyle = '#C9A84C'
+          ctx.font = 'bold 36px PortalKitFont, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText('PORTAL KIT', W / 2, 120)
+          ctx.fillStyle = 'rgba(255,255,255,0.2)'
+          ctx.fillRect(W / 2 - 80, 148, 160, 2)
+
+          // Feature card (navy fill, gold border, slides up)
+          ctx.globalAlpha = entryT
+          ctx.fillStyle = '#0A1628'
+          ctx.fillRect(CARD_X, cardY, CARD_W, CARD_H)
+          ctx.strokeStyle = '#C9A84C'
+          ctx.lineWidth = 2.5
+          ctx.strokeRect(CARD_X, cardY, CARD_W, CARD_H)
+
+          // Icon (centered top of card)
+          drawFeatureIcon(ctx, card.iconType, W / 2, cardY + 130, 100)
+
+          // Feature name (bold gold)
+          ctx.fillStyle = '#C9A84C'
+          ctx.font = 'bold 52px PortalKitFont, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(card.name, W / 2, cardY + 270)
+
+          // Divider inside card
+          ctx.fillStyle = 'rgba(201,168,76,0.3)'
+          ctx.fillRect(CARD_X + 60, cardY + 310, CARD_W - 120, 2)
+
+          // Benefit text — display sentence (word-wrapped, smaller)
+          ctx.fillStyle = '#E8E0D0'
+          ctx.font = '40px PortalKitFont, sans-serif'
+          const benefitWords = displaySentence.split(' ')
+          const bLines = []
+          let bLine = []
+          for (const w of benefitWords) {
+            const test = [...bLine, w].join(' ')
+            if (ctx.measureText(test).width > CARD_W - 100 && bLine.length) { bLines.push([...bLine]); bLine = [w] }
+            else bLine.push(w)
+          }
+          if (bLine.length) bLines.push(bLine)
+          const benefitStartY = cardY + 360
+          for (let bl = 0; bl < Math.min(bLines.length, 3); bl++) {
+            ctx.fillText(bLines[bl].join(' '), W / 2, benefitStartY + bl * 55)
+          }
+
+          // Checkmark inside card (top-right corner, animated after slide-in)
+          if (checkT > 0) {
+            const ckX = CARD_X + CARD_W - 58
+            const ckY = cardY + 52
+            const cr = 26
+            ctx.lineWidth = 5
+            ctx.strokeStyle = '#C9A84C'
+            ctx.beginPath()
+            ctx.arc(ckX, ckY, cr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * checkT)
+            ctx.stroke()
+            if (checkT > 0.45) {
+              const tt = (checkT - 0.45) / 0.55
+              const p1 = { x: ckX - 11, y: ckY + 1 }
+              const p2 = { x: ckX - 2,  y: ckY + 10 }
+              const p3 = { x: ckX + 13, y: ckY - 8 }
+              ctx.lineCap = 'round'
+              ctx.beginPath()
+              ctx.moveTo(p1.x, p1.y)
+              if (tt <= 0.5) { ctx.lineTo(p1.x + (p2.x - p1.x) * (tt / 0.5), p1.y + (p2.y - p1.y) * (tt / 0.5)) }
+              else { ctx.lineTo(p2.x, p2.y); const t2 = (tt - 0.5) / 0.5; ctx.lineTo(p2.x + (p3.x - p2.x) * t2, p2.y + (p3.y - p2.y) * t2) }
+              ctx.stroke()
+              ctx.lineCap = 'butt'
+            }
+          }
+
           ctx.globalAlpha = 1
+
+          // CTA bar
+          ctx.fillStyle = 'rgba(201,168,76,0.9)'
+          ctx.fillRect(80, H - 200, W - 160, 80)
+          ctx.fillStyle = '#0D1B2A'
+          ctx.font = 'bold 32px PortalKitFont, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText('getportalkit.com', W / 2, H - 160)
+
+          // Progress dots instead of bar
+          const dotR = 10
+          const dotSpacing = 32
+          const totalDots = count
+          const dotsStartX = W / 2 - ((totalDots - 1) * dotSpacing) / 2
+          for (let d = 0; d < totalDots; d++) {
+            ctx.beginPath()
+            ctx.arc(dotsStartX + d * dotSpacing, H - 55, dotR, 0, Math.PI * 2)
+            ctx.fillStyle = d <= i ? '#C9A84C' : 'rgba(255,255,255,0.2)'
+            ctx.fill()
+          }
+
+          const frameBuffer = await canvas.toBuffer('image/png')
+          fs.writeFileSync(
+            path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
+            frameBuffer
+          )
+          frameIndex++
         }
 
-        // Gold top bar
+      } else {
+        // ── Live mode: draw once, replicate frames ──
+        ctx.clearRect(0, 0, W, H)
+
+        // Gold top bar + brand
         ctx.fillStyle = '#C9A84C'
         ctx.fillRect(0, 0, W, 8)
-
-        // Brand label
         ctx.fillStyle = '#C9A84C'
         ctx.font = 'bold 36px PortalKitFont, sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText('PORTAL KIT', W / 2, 120)
-
-        // Divider
         ctx.fillStyle = 'rgba(255,255,255,0.2)'
         ctx.fillRect(W / 2 - 80, 148, 160, 2)
 
-        // Headline (animated scale + fade in explainer mode)
-        ctx.save()
-        if (isExplainer) {
-          ctx.globalAlpha = cardOpacity
-          const cy = startY + (lineArrays.length * lineHeight) / 2 - lineHeight / 2
-          ctx.translate(W / 2, cy)
-          ctx.scale(textScale, textScale)
-          ctx.translate(-W / 2, -cy)
-        }
         ctx.font = 'bold 68px PortalKitFont, sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
@@ -2553,40 +2716,6 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
           ctx.shadowOffsetX = 0
           ctx.shadowOffsetY = 0
         }
-        ctx.restore()
-
-        // Explainer-only: animated checkmark drawn below the headline
-        if (isExplainer && checkT > 0) {
-          const checkCY = startY + lineArrays.length * lineHeight + 60
-          const checkCX = W / 2
-          const r = 40
-          ctx.lineWidth = 6
-          ctx.strokeStyle = '#C9A84C'
-          ctx.beginPath()
-          ctx.arc(checkCX, checkCY, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * checkT)
-          ctx.stroke()
-          if (checkT > 0.4) {
-            const tickT = (checkT - 0.4) / 0.6
-            const p1 = { x: checkCX - 18, y: checkCY + 2 }
-            const p2 = { x: checkCX - 4, y: checkCY + 16 }
-            const p3 = { x: checkCX + 20, y: checkCY - 12 }
-            ctx.strokeStyle = '#C9A84C'
-            ctx.lineWidth = 6
-            ctx.lineCap = 'round'
-            ctx.beginPath()
-            ctx.moveTo(p1.x, p1.y)
-            if (tickT <= 0.5) {
-              const t = tickT / 0.5
-              ctx.lineTo(p1.x + (p2.x - p1.x) * t, p1.y + (p2.y - p1.y) * t)
-            } else {
-              ctx.lineTo(p2.x, p2.y)
-              const t = (tickT - 0.5) / 0.5
-              ctx.lineTo(p2.x + (p3.x - p2.x) * t, p2.y + (p3.y - p2.y) * t)
-            }
-            ctx.stroke()
-            ctx.lineCap = 'butt'
-          }
-        }
 
         // CTA bar
         ctx.fillStyle = 'rgba(201,168,76,0.9)'
@@ -2597,26 +2726,13 @@ async function generateChunkedVideo({ displayScript, ttsScript, mode = 'live' },
         ctx.textBaseline = 'middle'
         ctx.fillText('getportalkit.com', W / 2, H - 160)
 
-        // Progress bar — fills smoothly across all chunks
-        const fracWithinChunk = framesToDrawAnimated > 1 ? (f + 1) / framesToDrawAnimated : 1
-        const progress = (i + fracWithinChunk) / count
+        // Progress bar
+        const progress = (i + 1) / count
         ctx.fillStyle = 'rgba(255,255,255,0.15)'
         ctx.fillRect(40, H - 60, W - 80, 6)
         ctx.fillStyle = '#C9A84C'
         ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
 
-        if (isExplainer) {
-          const frameBuffer = await canvas.toBuffer('image/png')
-          fs.writeFileSync(
-            path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
-            frameBuffer
-          )
-          frameIndex++
-        }
-      }
-
-      if (!isExplainer) {
-        // Live mode: one rendered frame replicated for the chunk duration
         const frameBuffer = await canvas.toBuffer('image/png')
         for (let f = 0; f < frameCount; f++) {
           fs.writeFileSync(
@@ -2804,11 +2920,11 @@ async function generateExplainerVideo(script, title, postId) {
 
 // Website product tour — Playwright screenshots of getportalkit.com + canvas captions + TTS narration
 const TOUR_SCREENS = [
-  { url: 'https://getportalkit.com/', caption: 'One portal link for every client.' },
-  { url: 'https://getportalkit.com/#features', caption: 'Contracts, invoices, galleries, all in one place.' },
-  { url: 'https://getportalkit.com/#how-it-works', caption: 'Set it up once. It works while you sleep.' },
-  { url: 'https://getportalkit.com/tools/shot-list', caption: 'Build shot lists your couples can edit.' },
-  { url: 'https://getportalkit.com/#pricing', caption: 'Replace six tools for thirty-nine dollars a month.' },
+  { url: 'https://getportalkit.com/', caption: 'One portal link for every client.', fx: 0.5, fy: 0.33 },
+  { url: 'https://getportalkit.com/#features', caption: 'Contracts, invoices, galleries, all in one place.', fx: 0.5, fy: 0.25 },
+  { url: 'https://getportalkit.com/#how-it-works', caption: 'Set it up once. It works while you sleep.', fx: 0.5, fy: 0.5 },
+  { url: 'https://getportalkit.com/tools/shot-list', caption: 'Build shot lists your couples can edit.', fx: 0.5, fy: 0.5 },
+  { url: 'https://getportalkit.com/#pricing', caption: 'Replace six tools for twenty-nine dollars a month.', fx: 0.5, fy: 0.5 },
 ]
 
 async function captureTourScreenshots(tmpDir) {
@@ -2920,7 +3036,7 @@ async function generateTourVideo(title, postId) {
       if (tts) {
         try {
           const audioChunkPath = path.join(tmpDir, `audio_${i}.wav`)
-          const audio = await tts.generate(caption, { voice: 'af_bella', speed: 1.18 })
+          const audio = await tts.generate(caption, { voice: 'af_bella', speed: 1.35 })
           await audio.save(audioChunkPath)
           audioParts.push(audioChunkPath)
           const wavDuration = getWavDurationSeconds(audioChunkPath)
@@ -2950,64 +3066,84 @@ async function generateTourVideo(title, postId) {
         } else {
           drawW = W; drawH = W / imgAR; dx = 0; dy = (H - drawH) / 2
         }
-        ctx.fillStyle = '#0D1B2A'
-        ctx.fillRect(0, 0, W, H)
-        ctx.drawImage(img, dx, dy, drawW, drawH)
-
-        // Darken overlay for readability
-        ctx.fillStyle = 'rgba(13,27,42,0.45)'
-        ctx.fillRect(0, 0, W, H)
-
-        // Gold top bar + PORTAL KIT header
-        ctx.fillStyle = '#C9A84C'
-        ctx.fillRect(0, 0, W, 8)
-        ctx.font = 'bold 36px PortalKitFont, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('PORTAL KIT', W / 2, 120)
-
-        // Caption text — word-wrap and bottom-center
-        ctx.font = 'bold 56px PortalKitFont, sans-serif'
-        const maxWidth = W - 120
-        const lineHeight = 76
-        const words = caption.split(' ')
-        const lines = []
-        let curLine = []
-        for (const word of words) {
-          const testLine = [...curLine, word].join(' ')
-          if (ctx.measureText(testLine).width > maxWidth && curLine.length > 0) {
-            lines.push([...curLine]); curLine = [word]
-          } else curLine.push(word)
+        // Prepare caption lines once (reused per frame)
+        const tourCtxTemp = canvas.getContext('2d')
+        tourCtxTemp.font = 'bold 56px PortalKitFont, sans-serif'
+        const tourMaxW = W - 120
+        const tourLineH = 76
+        const tourWords = caption.split(' ')
+        const tourLines = []
+        let tourCurLine = []
+        for (const word of tourWords) {
+          const test = [...tourCurLine, word].join(' ')
+          if (tourCtxTemp.measureText(test).width > tourMaxW && tourCurLine.length > 0) {
+            tourLines.push([...tourCurLine]); tourCurLine = [word]
+          } else tourCurLine.push(word)
         }
-        if (curLine.length) lines.push(curLine)
+        if (tourCurLine.length) tourLines.push(tourCurLine)
+        const captionY = H - 400 - (tourLines.length - 1) * tourLineH
 
-        const captionY = H - 400 - (lines.length - 1) * lineHeight
-        ctx.shadowColor = 'rgba(0,0,0,0.9)'
-        ctx.shadowBlur = 20
-        ctx.shadowOffsetY = 2
-        ctx.fillStyle = '#FFFFFF'
-        for (let li = 0; li < lines.length; li++) {
-          ctx.fillText(lines[li].join(' '), W / 2, captionY + li * lineHeight)
-        }
-        ctx.shadowColor = 'transparent'
-        ctx.shadowBlur = 0
+        // Focal point for zoom (from TOUR_SCREENS entry)
+        const tourScreen = TOUR_SCREENS[i] || { fx: 0.5, fy: 0.5 }
+        const focusX = tourScreen.fx * W
+        const focusY = tourScreen.fy * H
+        const fadeInFrames = Math.min(15, Math.floor(frameCount * 0.15))
 
-        // Footer bar
-        ctx.fillStyle = 'rgba(201,168,76,0.9)'
-        ctx.fillRect(80, H - 200, W - 160, 80)
-        ctx.fillStyle = '#0D1B2A'
-        ctx.font = 'bold 32px PortalKitFont, sans-serif'
-        ctx.fillText('getportalkit.com', W / 2, H - 160)
-
-        // Progress bar
-        const progress = (i + 1) / screenshots.length
-        ctx.fillStyle = 'rgba(255,255,255,0.15)'
-        ctx.fillRect(40, H - 60, W - 80, 6)
-        ctx.fillStyle = '#C9A84C'
-        ctx.fillRect(40, H - 60, (W - 80) * progress, 6)
-
-        const frameBuffer = await canvas.toBuffer('image/png')
         for (let f = 0; f < frameCount; f++) {
+          const ctx2 = canvas.getContext('2d')
+          ctx2.clearRect(0, 0, W, H)
+          ctx2.fillStyle = '#0D1B2A'
+          ctx2.fillRect(0, 0, W, H)
+
+          // Progressive zoom after fade-in
+          const zoomT = f <= fadeInFrames ? 0 : (f - fadeInFrames) / Math.max(1, frameCount - fadeInFrames)
+          const zoom = 1.0 + zoomT * 0.4
+          const zDx = focusX - (focusX - dx) * zoom
+          const zDy = focusY - (focusY - dy) * zoom
+          ctx2.drawImage(img, zDx, zDy, drawW * zoom, drawH * zoom)
+
+          // Darken overlay
+          ctx2.fillStyle = 'rgba(13,27,42,0.45)'
+          ctx2.fillRect(0, 0, W, H)
+
+          // Gold top bar + header
+          ctx2.fillStyle = '#C9A84C'
+          ctx2.fillRect(0, 0, W, 8)
+          ctx2.font = 'bold 36px PortalKitFont, sans-serif'
+          ctx2.textAlign = 'center'
+          ctx2.textBaseline = 'middle'
+          ctx2.fillStyle = '#C9A84C'
+          ctx2.fillText('PORTAL KIT', W / 2, 120)
+
+          // Caption
+          ctx2.font = 'bold 56px PortalKitFont, sans-serif'
+          ctx2.shadowColor = 'rgba(0,0,0,0.9)'
+          ctx2.shadowBlur = 20
+          ctx2.shadowOffsetY = 2
+          ctx2.fillStyle = '#FFFFFF'
+          for (let li = 0; li < tourLines.length; li++) {
+            ctx2.fillText(tourLines[li].join(' '), W / 2, captionY + li * tourLineH)
+          }
+          ctx2.shadowColor = 'transparent'
+          ctx2.shadowBlur = 0
+
+          // Footer bar
+          ctx2.fillStyle = 'rgba(201,168,76,0.9)'
+          ctx2.fillRect(80, H - 200, W - 160, 80)
+          ctx2.fillStyle = '#0D1B2A'
+          ctx2.font = 'bold 32px PortalKitFont, sans-serif'
+          ctx2.textAlign = 'center'
+          ctx2.textBaseline = 'middle'
+          ctx2.fillText('getportalkit.com', W / 2, H - 160)
+
+          // Progress bar
+          const tourProgress = (i + (f + 1) / frameCount) / screenshots.length
+          ctx2.fillStyle = 'rgba(255,255,255,0.15)'
+          ctx2.fillRect(40, H - 60, W - 80, 6)
+          ctx2.fillStyle = '#C9A84C'
+          ctx2.fillRect(40, H - 60, (W - 80) * tourProgress, 6)
+
+          const frameBuffer = await canvas.toBuffer('image/png')
           fs.writeFileSync(
             path.join(framesDir, 'frame_' + String(frameIndex).padStart(6, '0') + '.png'),
             frameBuffer
@@ -8372,37 +8508,89 @@ setTimeout(() => {
   setInterval(autoFindEmails, 6 * 60 * 60 * 1000)
 }, 5 * 60 * 1000)
 
-const DAILY_ANGLES = [
-  'Wedding photographers are losing 30 hours a month to admin.',
-  'Stop sending contracts from your personal email.',
-  'Your clients deserve a better experience than a Google Drive link.',
-  'One portal link. No more chasing couples across 5 platforms.',
-  'HoneyBook doubled their prices. There is a better option.',
-  'What if your clients could approve their timeline without one email?',
-  'Stop resending the same file three times per wedding.',
-  'Your client portal should work while you sleep.',
+const SCRIPT_ANGLES = [
+  {
+    type: 'pov',
+    instruction: 'POV/problem angle: Start with "You" or a situation. State a specific pain the photographer is living right now in present tense. Make it visceral and immediate.',
+  },
+  {
+    type: 'listicle',
+    instruction: 'Listicle angle: Open with "3 tools wedding photographers are overpaying for" or a similar bold list hook. Name PortalKit as the all-in-one alternative.',
+  },
+  {
+    type: 'before_after',
+    instruction: 'Before/after angle: Vividly describe the chaos of managing clients without PortalKit (scattered emails, manual contracts, Dropbox chaos). Then describe the calm after — one link, everything handled.',
+  },
+  {
+    type: 'hot_take',
+    instruction: 'Hot take angle: Open with a bold, controversial statement about the wedding photography industry that will make a photographer stop scrolling. Then connect it to how PortalKit solves the root cause.',
+  },
 ]
+
+let _trendingAnglesCache = { data: null, fetchedAt: 0 }
+const TRENDING_TTL_MS = 24 * 60 * 60 * 1000
+
+async function getTrendingAngles() {
+  const now = Date.now()
+  if (_trendingAnglesCache.data && (now - _trendingAnglesCache.fetchedAt) < TRENDING_TTL_MS) {
+    return _trendingAnglesCache.data
+  }
+  if (!anthropic) return null
+  try {
+    const res = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{
+        role: 'user',
+        content: 'Search for the top performing Instagram Reels and TikTok video formats for wedding photographers in the last 30 days. What hooks, formats, and topics are going viral? Give me 3 specific content angles I can adapt for a wedding photography software tool.',
+      }]
+    })
+    const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+    if (text) {
+      _trendingAnglesCache = { data: text, fetchedAt: now }
+      console.log('📈 Trending angles refreshed')
+      return text
+    }
+  } catch (err) {
+    console.log('📈 Trending angles fetch failed:', err.message)
+  }
+  return null
+}
 
 async function autoDailyVideo() {
   try {
     console.log('🎬 Auto daily video generation starting...')
     if (!anthropic) { console.log('🎬 Anthropic not configured, skipping'); return }
 
-    const topic = DAILY_ANGLES[new Date().getDay() % DAILY_ANGLES.length]
+    const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000))
+    const angle = SCRIPT_ANGLES[dayIndex % SCRIPT_ANGLES.length]
+    console.log('🎬 Script angle:', angle.type)
+
+    const trendingAngles = await getTrendingAngles()
+    const trendingContext = trendingAngles
+      ? `\n\nHere is what is currently going viral for wedding photographers: ${trendingAngles}. Use this to inform the hook and format of the script.`
+      : ''
+
     const scriptRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
+      system: `You are writing a 30-second video script for PortalKit, a client portal for wedding photographers. Structure every script in exactly 3 parts:
+PART 1 - HOOK (1 sentence): State the photographer's pain in plain present tense. Start with 'You' or a situation. Do NOT start with 'I used to' or first-person founder story.
+PART 2 - SOLUTION (2-3 sentences): Explain what PortalKit does that fixes it. Be specific. Name actual features. Make the listener feel the relief.
+PART 3 - CTA (1 sentence): 'Try it free at getportalkit.com'
+Never mention the founder. Never say what you 'used to do'. The viewer is a wedding photographer. Speak directly to them.`,
       messages: [{
         role: 'user',
-        content: `Write an 8-sentence TikTok/Reels script for wedding photographers about: "${topic}". Start with a hook. Be direct, specific, no fluff. End with: Try it free at getportalkit.com. Return only the script sentences separated by newlines. No intro, no labels.`
+        content: `Write a 30-second video script using the ${angle.type} angle. ${angle.instruction}${trendingContext}\n\nReturn only the script sentences separated by newlines. No labels, no intro, no explanation.`
       }]
     })
 
     const script = scriptRes.content[0]?.text?.trim()
     if (!script) { console.log('🎬 Auto video: empty script returned'); return }
-    console.log('🎬 Auto video script:', script.slice(0, 60))
+    console.log('🎬 Auto video script:', script.slice(0, 80))
 
-    await generateVideoInternal({ script, title: `Daily — ${topic.slice(0, 40)}` })
+    await generateVideoInternal({ script, title: `Daily — ${angle.type} — ${new Date().toISOString().slice(0, 10)}` })
     console.log('🎬 Auto daily video queued')
   } catch (err) {
     console.error('🎬 Auto video error:', err.message)
