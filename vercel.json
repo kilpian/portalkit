@@ -16,6 +16,7 @@
     {"source": "/terms", "destination": "/terms.html"},
     {"source": "/thank-you", "destination": "/thank-you.html"},
     {"source": "/accessibility", "destination": "/accessibility.html"},
+    {"source": "/faq", "destination": "/faq.html"},
     {"source": "/signin", "destination": "/app.html"},
     {"source": "/signin/sso-callback", "destination": "/app.html"},
     {"source": "/signin/factor-one", "destination": "/app.html"},

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>document.documentElement.className = 'js';</script>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ — PortalKit | Client Portal for Wedding Photographers</title>
+  <meta name="description" content="Answers to common questions about PortalKit — the client portal for wedding photographers. Contracts, invoices, galleries, and more in one link.">
+  <link rel="canonical" href="https://getportalkit.com/faq">
+  <meta name="theme-color" content="#FAFAF8">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type":"Question","name":"Do my clients need to create an account?","acceptedAnswer":{"@type":"Answer","text":"No. Clients access their portal via a private link — no signup, no password, no friction. They bookmark the link and come back anytime."}},
+      {"@type":"Question","name":"Does this replace DocuSign, Calendly, and Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Yes. Contracts with e-signatures replace DocuSign. The booking page with your availability replaces Calendly. File delivery inside each portal replaces Dropbox. Most photographers cancel all three within their first month on PortalKit."}},
+      {"@type":"Question","name":"Can I deliver photos and videos to clients through PortalKit?","acceptedAnswer":{"@type":"Answer","text":"Yes — PortalKit includes a full gallery delivery system. Upload photos and videos, optionally set a password, and send your client a delivery notification with one click. Clients can view, favorite, and download everything from their private portal. No Pixieset or Pic-Time subscription needed."}},
+      {"@type":"Question","name":"How is this different from HoneyBook or Dubsado?","acceptedAnswer":{"@type":"Answer","text":"PortalKit is built specifically for wedding photographers — not generic freelancers. That means shot list builders, day-of timelines with client approval, vendor contact sheets, and a client portal link that requires no account. One flat price, no per-seat fees, no feature tiers."}},
+      {"@type":"Question","name":"Can I use my own branding?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add your logo, brand colors, and custom domain so the portal feels like yours."}},
+      {"@type":"Question","name":"How does payment collection work?","acceptedAnswer":{"@type":"Answer","text":"We use Stripe under the hood. You connect your Stripe account and get paid directly — PortalKit never touches your money."}},
+      {"@type":"Question","name":"Is there a limit on how many clients I can have?","acceptedAnswer":{"@type":"Answer","text":"No limits. Unlimited clients — 1 client or 100, same price: from $29/mo (annual) or $39/mo (monthly)."}},
+      {"@type":"Question","name":"What happens after my free trial?","acceptedAnswer":{"@type":"Answer","text":"If your trial ends without an active subscription, your account is paused. Your data is never deleted — just resubscribe to pick up right where you left off."}}
+    ]
+  }
+  </script>
+
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#FAFAF8; --bg-2:#F2EFE9; --ink:#1A1A1A; --ink-soft:#6B6B6B;
+      --gold:#C8A455; --gold-hover:#B8923F; --line:#E8E4DE; --card:#FFFFFF;
+      --card-shadow:0 1px 3px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.04);
+      --fd:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+      --fb:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+      --pad:24px; --maxw:760px;
+    }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { font-family: var(--fb); background: var(--bg); color: var(--ink); line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+    a { text-decoration: none; color: inherit; }
+    :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--pad); }
+
+    .nav { position: sticky; top: 0; z-index: 100; height: 56px; display: flex; align-items: center; background: rgba(250,250,248,.95); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    @media (min-width: 768px) { .nav { height: 64px; } }
+    .nav__inner { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 var(--pad); display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--fd); font-weight: 600; font-size: 19px; letter-spacing: -.02em; color: var(--ink); }
+    .brand__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--fb); font-weight: 700; font-size: 14px; height: 42px; padding: 0 18px; border-radius: 100px; background: var(--gold); color: #1A1A1A; transition: background .2s, color .2s, transform .2s; }
+    .btn:hover { background: var(--gold-hover); color: #fff; transform: translateY(-1px); }
+
+    .head { padding: 64px 0 8px; text-align: center; }
+    @media (min-width: 768px) { .head { padding: 96px 0 16px; } }
+    .eyebrow { font-family: var(--fb); font-weight: 500; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+    .head h1 { font-family: var(--fd); font-weight: 700; font-size: 34px; line-height: 1.12; letter-spacing: -.02em; margin-top: 14px; }
+    @media (min-width: 768px) { .head h1 { font-size: 52px; } }
+    .head p { margin: 16px auto 0; font-size: 16px; color: var(--ink-soft); max-width: 460px; }
+    @media (min-width: 768px) { .head p { font-size: 18px; } }
+
+    .faqs { padding: 40px 0 64px; display: flex; flex-direction: column; gap: 12px; }
+    @media (min-width: 768px) { .faqs { padding: 48px 0 96px; } }
+    .faq { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--card-shadow); overflow: hidden; }
+    .faq__q { width: 100%; text-align: left; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; font-family: var(--fd); font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: -.01em; min-height: 44px; }
+    @media (min-width: 768px) { .faq__q { font-size: 18px; padding: 24px; } }
+    .faq__plus { flex-shrink: 0; width: 20px; height: 20px; color: var(--gold-hover); transition: transform .3s ease; }
+    .faq.open .faq__plus { transform: rotate(45deg); }
+    .faq__a { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+    .faq.open .faq__a { max-height: 400px; }
+    .faq__a p { padding: 0 20px 22px; font-size: 15px; color: var(--ink-soft); line-height: 1.65; }
+    @media (min-width: 768px) { .faq__a p { padding: 0 24px 26px; font-size: 16px; } }
+
+    .cta { text-align: center; padding: 0 0 80px; }
+    .cta a { font-size: 15px; }
+
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .faq__plus, .faq__a { transition: none; } }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav__inner">
+    <a href="/" class="brand"><span class="brand__dot"></span>PortalKit</a>
+    <a href="/signup" class="btn">Start free trial</a>
+  </div>
+</nav>
+
+<header class="head wrap">
+  <span class="eyebrow">Questions</span>
+  <h1>Frequently asked</h1>
+  <p>Everything you might want to know before you start your first portal.</p>
+</header>
+
+<main class="faqs wrap">
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">Do my clients need to create an account?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>No. Clients access their portal via a private link — no signup, no password, no friction. They bookmark the link and come back anytime.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">Does this replace DocuSign, Calendly, and Dropbox?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>Yes. Contracts with e-signatures replace DocuSign. The booking page with your availability replaces Calendly. File delivery inside each portal replaces Dropbox. Most photographers cancel all three within their first month on PortalKit.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">Can I deliver photos and videos through PortalKit?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>Yes — PortalKit includes a full gallery delivery system. Upload photos and videos, optionally set a password, and send your client a delivery notification with one click. Clients can view, favorite, and download everything from their private portal. No Pixieset or Pic-Time subscription needed.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">How is this different from HoneyBook or Dubsado?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>PortalKit is built specifically for wedding photographers — not generic freelancers. That means shot list builders, day-of timelines with client approval, vendor contact sheets, and a client portal link that requires no account. One flat price, no per-seat fees, no feature tiers.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">Can I use my own branding?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>Yes. Add your logo, brand colors, and custom domain so the portal feels like yours.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">How does payment collection work?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>We use Stripe under the hood. You connect your Stripe account and get paid directly — PortalKit never touches your money.</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">Is there a limit on how many clients I can have?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>No limits. Unlimited clients — 1 client or 100, same price: from $29/mo (annual) or $39/mo (monthly).</p></div>
+  </div>
+  <div class="faq">
+    <button class="faq__q" aria-expanded="false">What happens after my free trial?
+      <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="faq__a"><p>If your trial ends without an active subscription, your account is paused. Your data is never deleted — just resubscribe to pick up right where you left off.</p></div>
+  </div>
+</main>
+
+<div class="cta wrap">
+  <a href="/signup" class="btn">Start your 14-day free trial</a>
+</div>
+
+<script>
+  document.querySelectorAll('.faq__q').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var item = btn.closest('.faq');
+      var open = item.classList.contains('open');
+      document.querySelectorAll('.faq.open').forEach(function (i) { i.classList.remove('open'); i.querySelector('.faq__q').setAttribute('aria-expanded', 'false'); });
+      if (!open) { item.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+    });
+  });
+</script>
+
+</body>
+</html>
