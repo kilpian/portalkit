@@ -118,28 +118,20 @@
     }
 
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-    body {
-      font-family: var(--fb);
-      background: var(--cream);
-      color: var(--ink);
-      line-height: 1.6;
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-    }
+    body { font-family: var(--fb); background: var(--cream); color: var(--ink); line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
     img { max-width: 100%; display: block; }
     a { text-decoration: none; color: inherit; }
     ul { list-style: none; }
     ::selection { background: rgba(200,169,110,0.28); }
     :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
 
-    .skip { position: absolute; left: -9999px; top: 0; z-index: 2000; background: var(--green); color: var(--cream); padding: 12px 18px; border-radius: 8px; }
+    .skip { position: absolute; left: -9999px; top: 0; z-index: 3000; background: var(--green); color: var(--cream); padding: 12px 18px; border-radius: 8px; }
     .skip:focus { left: 16px; top: 16px; }
 
-    .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .wrap { width: 100%; max-width: 1140px; margin: 0 auto; padding: 0 20px; }
 
-    /* ── Shared type helpers ─────────────────────── */
     .eyebrow { font-family: var(--fb); font-weight: 500; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); display: inline-block; }
+    .sec-title { font-family: var(--fd); font-weight: 700; letter-spacing: -0.02em; line-height: 1.12; }
 
     /* ── Buttons ─────────────────────────────────── */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--fd); font-weight: 600; font-size: 15px; cursor: pointer; border: 1px solid transparent; transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; white-space: nowrap; }
@@ -147,38 +139,53 @@
     .btn-gold:hover { background: var(--gold-hover); color: var(--cream); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(200,169,110,0.30); }
     .btn-outline { background: transparent; color: var(--green); border-color: rgba(27,67,50,0.4); height: 50px; padding: 0 28px; border-radius: 8px; }
     .btn-outline:hover { background: var(--green); color: var(--cream); border-color: var(--green); }
+    .btn-outline-light { background: transparent; color: var(--cream); border-color: rgba(253,250,245,0.35); height: 50px; padding: 0 28px; border-radius: 8px; }
+    .btn-outline-light:hover { background: rgba(253,250,245,0.1); border-color: var(--cream); }
     .btn-full { width: 100%; }
-    .btn-pill { height: 36px; padding: 0 18px; border-radius: 100px; font-size: 14px; background: var(--gold); color: var(--green); }
+    .btn-pill { height: 40px; padding: 0 18px; border-radius: 100px; font-size: 14px; background: var(--gold); color: var(--green); }
     .btn-pill:hover { background: var(--gold-hover); color: var(--cream); transform: translateY(-1px); }
 
-    /* ── Reveal-on-scroll ────────────────────────── */
-    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease-out, transform 0.5s ease-out; transition-delay: calc(var(--delay, 0) * 0.09s); }
+    /* ── Reveal on scroll ────────────────────────── */
+    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease-out, transform 0.5s ease-out; transition-delay: calc(var(--delay, 0) * 0.08s); }
     .reveal.visible { opacity: 1; transform: none; }
-    .d1 { --delay: 1; } .d2 { --delay: 2; } .d3 { --delay: 3; } .d4 { --delay: 4; } .d5 { --delay: 5; }
+    .d1 { --delay: 1; } .d2 { --delay: 2; } .d3 { --delay: 3; } .d4 { --delay: 4; }
 
     /* ── Nav ─────────────────────────────────────── */
     .nav { position: fixed; inset: 0 0 auto 0; z-index: 1000; height: 60px; display: flex; align-items: center; background: transparent; transition: background 0.3s ease, backdrop-filter 0.3s ease, box-shadow 0.3s ease; }
     .nav.scrolled { background: rgba(13,43,30,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 1px 0 rgba(253,250,245,0.06); }
-    .nav__inner { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; }
+    .nav__inner { width: 100%; max-width: 1140px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--fd); font-weight: 600; font-size: 19px; color: var(--cream); letter-spacing: -0.01em; }
     .brand__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); display: inline-block; }
-    .nav__actions { display: flex; align-items: center; gap: 18px; }
-    .nav__signin { display: none; font-size: 14px; color: rgba(253,250,245,0.65); transition: color 0.2s; }
+    .nav__links { display: none; align-items: center; gap: 26px; }
+    .nav__link { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.8); transition: color 0.2s; }
+    .nav__link:hover { color: var(--cream); }
+    .nav__actions { display: none; align-items: center; gap: 16px; }
+    .nav__signin { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.65); transition: color 0.2s; }
     .nav__signin:hover { color: var(--cream); }
+    .nav__burger { display: inline-flex; flex-direction: column; justify-content: center; gap: 5px; width: 44px; height: 44px; align-items: center; background: none; border: none; cursor: pointer; }
+    .nav__burger span { display: block; width: 22px; height: 2px; background: var(--cream); border-radius: 2px; transition: transform 0.25s ease, opacity 0.25s ease; }
+    .nav__burger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav__burger.open span:nth-child(2) { opacity: 0; }
+    .nav__burger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .mobilemenu { position: fixed; inset: 60px 0 auto 0; z-index: 999; background: rgba(13,43,30,0.99); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid rgba(253,250,245,0.08); padding: 12px 20px 24px; transform: translateY(-120%); transition: transform 0.3s ease; }
+    .mobilemenu.open { transform: translateY(0); }
+    .mobilemenu a { display: block; font-family: var(--fd); font-weight: 500; font-size: 16px; color: var(--cream); padding: 14px 0; border-bottom: 1px solid rgba(253,250,245,0.08); min-height: 44px; }
+    .mobilemenu__cta { margin-top: 18px; }
+    .mobilemenu__cta .btn-gold { width: 100%; }
 
     /* ── Hero ────────────────────────────────────── */
-    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 40px; background: linear-gradient(to bottom, rgba(13,43,30,0.72) 0%, rgba(13,43,30,0.55) 50%, rgba(13,43,30,0.82) 100%), var(--hero-img) center / cover no-repeat; }
-    .hero__inner { position: relative; z-index: 1; max-width: 680px; padding: 0 24px; display: flex; flex-direction: column; align-items: center; }
+    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background: linear-gradient(160deg, rgba(13,43,30,0.80) 0%, rgba(27,67,50,0.60) 40%, rgba(13,43,30,0.85) 100%), var(--hero-img) 50% 30% / cover no-repeat scroll; }
+    .hero__inner { position: relative; z-index: 1; max-width: 680px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
     .hero__badge { border: 1px solid rgba(200,169,110,0.5); background: rgba(200,169,110,0.1); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 12px; letter-spacing: 0.08em; color: var(--gold); }
-    .hero__title { font-family: var(--fd); font-weight: 700; font-size: 44px; line-height: 1.06; letter-spacing: -0.03em; color: var(--cream); margin-top: 24px; }
+    .hero__title { font-family: var(--fd); font-weight: 700; font-size: 38px; line-height: 1.08; letter-spacing: -0.03em; color: var(--cream); margin-top: 22px; }
     .hero__title em { font-style: normal; color: var(--gold); display: block; }
-    .hero__sub { font-family: var(--fb); font-size: 15px; line-height: 1.65; color: rgba(253,250,245,0.72); max-width: 480px; margin-top: 22px; }
-    .hero__cta { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-top: 34px; width: 100%; max-width: 340px; }
+    .hero__sub { font-family: var(--fb); font-size: 15px; line-height: 1.65; color: rgba(253,250,245,0.72); max-width: 480px; margin-top: 20px; }
+    .hero__cta { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin-top: 32px; width: 100%; max-width: 340px; }
     .hero__cta .btn-gold { width: 100%; }
     .hero__secondary { display: inline-flex; align-items: center; justify-content: center; height: 44px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.65); transition: color 0.2s; }
     .hero__secondary:hover { color: var(--cream); text-decoration: underline; }
     .hero__trust { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.4); margin-top: 14px; }
-    .hero__scroll { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); color: rgba(253,250,245,0.3); z-index: 1; transition: opacity 0.4s ease; }
+    .hero__scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: rgba(253,250,245,0.3); z-index: 1; transition: opacity 0.4s ease; }
     .hero__scroll.hidden { opacity: 0; pointer-events: none; }
     .hero__scroll svg { width: 26px; height: 26px; animation: chevBounce 2s ease-in-out infinite; }
 
@@ -188,15 +195,25 @@
     .hr1 { animation-delay: 0.10s; } .hr2 { animation-delay: 0.25s; } .hr3 { animation-delay: 0.40s; } .hr4 { animation-delay: 0.55s; } .hr5 { animation-delay: 0.65s; }
 
     /* ── Proof bar ───────────────────────────────── */
-    .proofbar { background: var(--green-dark); padding: 18px 24px; text-align: center; }
-    .proofbar p { font-family: var(--fb); font-size: 15px; font-weight: 500; color: rgba(253,250,245,0.7); max-width: 720px; margin: 0 auto; line-height: 1.5; }
+    .proofbar { background: var(--green-dark); padding: 32px 0; text-align: center; }
+    .proofbar__lead { font-family: var(--fb); font-size: 15px; font-weight: 500; color: rgba(253,250,245,0.7); max-width: 720px; margin: 0 auto; line-height: 1.5; }
+    .proofbar__stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 0; margin-top: 22px; }
+    .pstat { flex: 1 1 45%; max-width: 260px; padding: 8px 16px; }
+    .pstat__num { font-family: var(--fd); font-weight: 700; font-size: 26px; color: var(--gold); line-height: 1; }
+    .pstat__label { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.6); margin-top: 6px; }
 
     /* ── Section base ────────────────────────────── */
     .sec { padding: 64px 0; }
-    .sec-title { font-family: var(--fd); font-weight: 700; letter-spacing: -0.02em; line-height: 1.12; }
+    .sec--cream { background: var(--cream); }
+    .sec--cream2 { background: var(--cream-2); }
+    .sec--green { background: var(--green); }
+    .sec--dark { background: var(--green-dark); }
+    .sec-head { text-align: center; max-width: 680px; margin: 0 auto; }
+    .sec-head--left { text-align: left; margin: 0; }
+    .sec-sub { font-family: var(--fb); font-size: 16px; color: var(--ink-soft); margin-top: 14px; line-height: 1.6; }
+    .sec--green .sec-sub, .sec--dark .sec-sub { color: rgba(253,250,245,0.65); }
 
     /* ── Problem ─────────────────────────────────── */
-    .problem { background: var(--cream); }
     .problem__inner { max-width: 760px; margin: 0 auto; }
     .problem__h { font-size: 28px; color: var(--ink); margin-top: 16px; }
     .pains { margin-top: 40px; display: flex; flex-direction: column; gap: 24px; }
@@ -208,7 +225,6 @@
     .problem__turn { font-family: var(--fd); font-weight: 700; font-size: 32px; color: var(--green); }
 
     /* ── Solution ────────────────────────────────── */
-    .solution { background: var(--green); }
     .solution__inner { max-width: 640px; margin: 0 auto; }
     .solution__h { font-size: 28px; color: var(--cream); margin-top: 16px; }
     .steps { margin-top: 48px; }
@@ -220,10 +236,17 @@
     .step__t { font-family: var(--fd); font-weight: 600; font-size: 19px; color: var(--cream); margin-top: 10px; }
     .step__d { font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.62); line-height: 1.6; margin-top: 4px; }
 
+    /* ── Features ────────────────────────────────── */
+    .features__h { font-size: 28px; color: var(--ink); }
+    .fgrid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .fcard { position: relative; background: #FFFFFF; border: 1px solid rgba(27,67,50,0.08); border-left: 3px solid transparent; border-radius: 12px; padding: 24px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-left-color 0.2s ease; }
+    .fcard:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(27,67,50,0.1); border-left-color: var(--green); }
+    .fcard__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+    .fcard__icon svg { width: 22px; height: 22px; }
+    .fcard__name { font-family: var(--fd); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 8px; }
+    .fcard__desc { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+
     /* ── Testimonials ────────────────────────────── */
-    .testi { background: var(--cream-2); padding: 80px 0; }
-    .testi__head { text-align: center; max-width: 620px; margin: 0 auto; }
-    .testi__h { font-size: 26px; color: var(--ink); margin-top: 14px; }
     .testi__grid { max-width: 1000px; margin: 44px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
     .tcard { background: #FFFFFF; border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.06); overflow: hidden; }
     .tcard--bordered { border: 1.5px solid var(--green); }
@@ -234,47 +257,84 @@
     .tcard__quote { font-family: var(--fb); font-size: 15px; color: var(--ink); line-height: 1.6; margin-top: 12px; }
     .tcard__author { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 14px; }
 
-    /* ── Pricing ─────────────────────────────────── */
-    .pricing { background: var(--cream); }
-    .pricing__head { text-align: center; }
-    .pricing__h { font-size: 28px; color: var(--ink); margin-top: 14px; }
-    .toggle { display: inline-flex; margin: 28px auto 0; padding: 4px; background: var(--cream-2); border: 1px solid var(--border); border-radius: 100px; gap: 4px; }
-    .toggle__btn { height: 38px; padding: 0 18px; border: none; background: transparent; border-radius: 100px; font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--ink-soft); cursor: pointer; transition: color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-    .toggle__btn.active { background: #FFFFFF; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .toggle__save { font-family: var(--fb); font-size: 11px; font-weight: 700; color: var(--green); background: rgba(200,169,110,0.25); padding: 2px 7px; border-radius: 100px; }
+    /* ── Free tools ──────────────────────────────── */
+    .tools__grid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .toolcard { display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid rgba(27,67,50,0.08); border-left: 3px solid transparent; border-radius: 12px; padding: 24px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-left-color 0.2s ease; }
+    .toolcard:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(27,67,50,0.1); border-left-color: var(--green); }
+    .toolcard__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+    .toolcard__icon svg { width: 22px; height: 22px; }
+    .toolcard__name { font-family: var(--fd); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 8px; }
+    .toolcard__desc { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+    .toolcard__link { font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--gold); margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+    .toolcard__link:hover { color: var(--gold-hover); }
+
+    /* ── Comparison ──────────────────────────────── */
+    .compare__scroll { margin-top: 44px; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(27,67,50,0.06); }
+    table.cmp { width: 100%; border-collapse: collapse; min-width: 560px; }
+    table.cmp th, table.cmp td { padding: 16px 20px; text-align: left; font-family: var(--fb); font-size: 15px; border-bottom: 1px solid var(--border); }
+    table.cmp thead th { font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+    table.cmp tbody tr:last-child td { border-bottom: none; }
+    table.cmp td strong { font-weight: 700; color: var(--ink); }
+    .cmp__cost { color: var(--ink-soft); }
+    .cmp__pk { text-align: center; background: rgba(200,169,110,0.1); font-weight: 700; color: var(--green); }
+    .cmp__pk--head { color: var(--green); }
+    .cmp__total td { font-weight: 800; color: var(--ink); background: var(--cream-2); }
+
+    /* ── Pricing (dark) ──────────────────────────── */
+    .pricing__h { font-size: 28px; color: var(--cream); margin-top: 14px; }
+    .toggle { display: inline-flex; margin: 28px auto 0; padding: 4px; background: rgba(255,255,255,0.08); border: 1px solid rgba(253,250,245,0.14); border-radius: 100px; gap: 4px; }
+    .toggle__btn { height: 38px; padding: 0 18px; border: none; background: transparent; border-radius: 100px; font-family: var(--fb); font-weight: 600; font-size: 14px; color: rgba(253,250,245,0.7); cursor: pointer; transition: color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .toggle__btn.active { background: rgba(255,255,255,0.14); color: var(--cream); }
+    .toggle__save { font-family: var(--fb); font-size: 11px; font-weight: 700; color: var(--green); background: var(--gold); padding: 2px 7px; border-radius: 100px; }
     .plans { max-width: 720px; margin: 36px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
-    .plan { background: #FFFFFF; border-radius: 16px; padding: 28px; border: 1px solid rgba(27,67,50,0.15); }
-    .plan--featured { border: 2px solid var(--green); }
-    .plan__tag { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cream); background: var(--green); padding: 4px 12px; border-radius: 100px; margin-bottom: 16px; }
-    .plan__name { font-family: var(--fd); font-weight: 600; font-size: 15px; color: var(--ink-soft); }
+    .plan { background: rgba(255,255,255,0.06); border-radius: 16px; padding: 28px; border: 1px solid rgba(253,250,245,0.12); }
+    .plan--featured { background: rgba(255,255,255,0.12); border: 2px solid var(--gold); }
+    .plan__tag { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); background: var(--gold); padding: 4px 12px; border-radius: 100px; margin-bottom: 16px; }
+    .plan__name { font-family: var(--fd); font-weight: 600; font-size: 15px; color: rgba(253,250,245,0.7); }
     .plan__price { display: flex; align-items: baseline; gap: 4px; margin-top: 6px; }
-    .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 52px; line-height: 1; color: var(--green); letter-spacing: -0.03em; }
-    .plan--month .plan__amt { color: var(--ink); }
-    .plan__per { font-family: var(--fb); font-size: 18px; color: var(--ink-soft); }
-    .plan__bill { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 8px; }
+    .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 52px; line-height: 1; color: var(--cream); letter-spacing: -0.03em; }
+    .plan__per { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.7); }
+    .plan__bill { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.6); margin-top: 8px; }
     .plan__list { margin: 22px 0 24px; display: flex; flex-direction: column; gap: 12px; }
-    .plan__li { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 15px; color: var(--ink); }
-    .plan__li svg { flex-shrink: 0; width: 18px; height: 18px; color: var(--green); margin-top: 2px; }
-    .pricing__reassure { text-align: center; font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 20px; }
+    .plan__li { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.9); }
+    .plan__li svg { flex-shrink: 0; width: 18px; height: 18px; color: var(--gold); margin-top: 2px; }
+    .pricing__reassure { text-align: center; font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.6); margin-top: 22px; }
     .plan[hidden] { display: none; }
 
+    /* ── FAQ ─────────────────────────────────────── */
+    .faqs { max-width: 760px; margin: 44px auto 0; display: flex; flex-direction: column; gap: 12px; }
+    .faq { background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .faq__q { width: 100%; text-align: left; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; font-family: var(--fd); font-weight: 600; font-size: 16px; color: var(--ink); min-height: 44px; }
+    .faq__plus { flex-shrink: 0; width: 20px; height: 20px; color: var(--green); transition: transform 0.3s ease; }
+    .faq.open .faq__plus { transform: rotate(45deg); }
+    .faq__a { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+    .faq.open .faq__a { max-height: 420px; }
+    .faq__a p { padding: 0 20px 22px; font-family: var(--fb); font-size: 15px; color: var(--ink-soft); line-height: 1.65; }
+    .faq__more { text-align: center; margin-top: 28px; }
+    .faq__more a { font-family: var(--fb); font-weight: 600; font-size: 15px; color: var(--green); }
+    .faq__more a:hover { color: var(--gold-hover); }
+
     /* ── Final CTA ───────────────────────────────── */
-    .finale { background: var(--green); text-align: center; }
+    .finale { text-align: center; }
     .finale__h { font-family: var(--fd); font-weight: 700; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; color: var(--cream); max-width: 620px; margin: 0 auto; }
     .finale__sub { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.65); margin-top: 16px; }
     .finale__btn { margin-top: 36px; }
     .finale__note { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.4); margin-top: 16px; }
 
     /* ── Footer ──────────────────────────────────── */
-    .footer { background: var(--green-dark); padding: 40px 0; color: rgba(253,250,245,0.55); }
-    .footer__row1 { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
-    .footer__links { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
-    .footer__links a { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.55); transition: color 0.2s; }
+    .footer { background: var(--green-dark); padding: 56px 0 32px; color: rgba(253,250,245,0.55); }
+    .footer__top { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .footer__brandcol { grid-column: 1 / -1; }
+    .footer__tag { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.55); line-height: 1.6; max-width: 300px; margin-top: 12px; }
+    .footer__ctitle { font-family: var(--fd); font-weight: 700; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cream); margin-bottom: 14px; }
+    .footer__links { display: flex; flex-direction: column; gap: 11px; }
+    .footer__links a { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.55); transition: color 0.2s; }
     .footer__links a:hover { color: var(--cream); }
-    .footer__row2 { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 28px; padding-top: 24px; border-top: 1px solid rgba(253,250,245,0.08); text-align: center; }
+    .footer__bottom { margin-top: 44px; padding-top: 24px; border-top: 1px solid rgba(253,250,245,0.1); display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; }
     .footer__copy { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.45); }
-    .footer__social { color: var(--gold); display: inline-flex; }
-    .footer__social:hover { color: var(--gold-hover); }
+    .footer__social { display: flex; gap: 16px; }
+    .footer__social a { color: var(--gold); transition: color 0.2s; }
+    .footer__social a:hover { color: var(--gold-hover); }
 
     /* ── Sticky mobile CTA ───────────────────────── */
     #stickyCTA { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 990; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: rgba(13,43,30,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-top: 1px solid rgba(253,250,245,0.1); }
@@ -283,36 +343,52 @@
 
     /* ── Exit-intent popup ───────────────────────── */
     #exitPopup { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); background: #FFFFFF; border-radius: 16px; box-shadow: 0 16px 48px rgba(13,43,30,0.22); padding: 26px; z-index: 9999; border: 1px solid var(--border); }
-    #exitPopup .exit__close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink-soft); line-height: 1; width: 32px; height: 32px; }
+    #exitPopup.open { display: block; }
+    #exitPopup .exit__close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink-soft); line-height: 1; width: 44px; height: 44px; }
     #exitPopup h3 { font-family: var(--fd); font-weight: 700; font-size: 18px; color: var(--green); line-height: 1.3; margin: 8px 0; }
     #exitPopup .exit__sub { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); margin-bottom: 16px; line-height: 1.55; }
     #exitForm { display: flex; gap: 8px; flex-wrap: wrap; }
+    #exitForm.hidden { display: none; }
     #exitEmail { flex: 1; min-width: 180px; height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--fb); font-size: 15px; outline: none; background: var(--cream); }
     #exitEmail:focus { border-color: var(--gold); }
     #exitForm .btn-gold { height: 44px; padding: 0 20px; }
     #exitSuccess { display: none; font-family: var(--fb); font-size: 14px; font-weight: 600; color: var(--green); margin-top: 10px; }
+    #exitSuccess.show { display: block; }
+
+    /* ── Tablet ──────────────────────────────────── */
+    @media (min-width: 640px) {
+      .fgrid { grid-template-columns: repeat(2, 1fr); }
+      .tools__grid { grid-template-columns: repeat(2, 1fr); }
+      .footer__top { grid-template-columns: 2fr 1fr 1fr 1fr; }
+      .footer__brandcol { grid-column: auto; }
+    }
 
     /* ── Desktop ─────────────────────────────────── */
     @media (min-width: 768px) {
+      .wrap { padding: 0 24px; }
       .nav { height: 64px; }
-      .nav__signin { display: inline-flex; }
+      .nav__inner { padding: 0 24px; }
+      .nav__links { display: flex; }
+      .nav__actions { display: flex; }
+      .nav__burger { display: none; }
+      .mobilemenu { display: none; }
       .sec { padding: 96px 0; }
-      .testi { padding: 80px 0; }
       .hero__title { font-size: 68px; line-height: 1.06; }
       .hero__sub { font-size: 17px; }
       .hero__cta { flex-direction: row; justify-content: center; max-width: none; width: auto; }
       .hero__cta .btn-gold { width: auto; }
+      .pstat__num { font-size: 30px; }
       .problem__h { font-size: 40px; }
-      .problem__turn { font-size: 32px; }
       .solution__h { font-size: 40px; }
-      .testi__h { font-size: 36px; }
+      .features__h { font-size: 40px; }
+      .fgrid { grid-template-columns: repeat(4, 1fr); }
       .testi__grid { grid-template-columns: repeat(3, 1fr); }
+      .tools__grid { grid-template-columns: repeat(4, 1fr); }
       .pricing__h { font-size: 40px; }
       .plans { grid-template-columns: repeat(2, 1fr); }
       .plan[hidden] { display: block; }
       .finale__h { font-size: 48px; }
-      .footer__row1 { flex-direction: row; justify-content: space-between; text-align: left; }
-      .footer__row2 { flex-direction: row; justify-content: space-between; text-align: left; }
+      .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; }
     }
 
     @media (min-width: 480px) {
@@ -331,18 +407,38 @@
 </head>
 <body>
 
-<a href="#problem" class="skip">Skip to content</a>
+<a href="#main-content" class="skip">Skip to content</a>
 
 <!-- ── Nav ─────────────────────────────────────────── -->
 <nav class="nav" id="nav">
   <div class="nav__inner">
     <a href="/" class="brand" aria-label="PortalKit home"><span class="brand__dot"></span>PortalKit</a>
+    <div class="nav__links">
+      <a href="#features" class="nav__link">Features</a>
+      <a href="#how-it-works" class="nav__link">How It Works</a>
+      <a href="#pricing" class="nav__link">Pricing</a>
+      <a href="#faq" class="nav__link">FAQ</a>
+      <a href="/blog" class="nav__link">Blog</a>
+    </div>
     <div class="nav__actions">
       <a href="/signin" class="nav__signin">Sign in</a>
-      <a href="/signup" class="btn btn-pill">Start free trial</a>
+      <a href="/signup" class="btn btn-pill">Start 14-Day Free Trial</a>
     </div>
+    <button class="nav__burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="mobilemenu">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </nav>
+
+<div class="mobilemenu" id="mobilemenu">
+  <a href="#features">Features</a>
+  <a href="#how-it-works">How It Works</a>
+  <a href="#pricing">Pricing</a>
+  <a href="#faq">FAQ</a>
+  <a href="/blog">Blog</a>
+  <a href="/signin">Sign in</a>
+  <div class="mobilemenu__cta"><a href="/signup" class="btn btn-gold">Start 14-Day Free Trial</a></div>
+</div>
 
 <!-- ── Hero ────────────────────────────────────────── -->
 <header class="hero">
@@ -361,182 +457,441 @@
   </div>
 </header>
 
-<!-- ── Proof bar ───────────────────────────────────── -->
-<section class="proofbar">
-  <p>Join 200+ wedding photographers who replaced DocuSign, Dropbox, and Pixieset with one link.</p>
-</section>
+<main id="main-content">
 
-<!-- ── Problem ─────────────────────────────────────── -->
-<section class="sec problem" id="problem">
-  <div class="wrap problem__inner">
-    <span class="eyebrow reveal">After every booking</span>
-    <h2 class="sec-title problem__h reveal d1">You're doing this after every booking.</h2>
-    <div class="pains">
-      <div class="pain reveal">
-        <span class="pain__t">Send the contract on DocuSign.</span>
-        <span class="pain__s">Then wait for them to find it, open it, and sign it.</span>
-      </div>
-      <div class="pain reveal d1">
-        <span class="pain__t">Chase the invoice.</span>
-        <span class="pain__s">Then wait, follow up, wait again.</span>
-      </div>
-      <div class="pain reveal d2">
-        <span class="pain__t">Deliver the gallery on Dropbox.</span>
-        <span class="pain__s">Then hope the link doesn't expire before they download.</span>
+  <!-- ── Proof bar ─────────────────────────────────── -->
+  <section class="proofbar">
+    <div class="wrap">
+      <p class="proofbar__lead">Join 200+ wedding photographers who replaced DocuSign, Dropbox, and Pixieset with one link.</p>
+      <div class="proofbar__stats">
+        <div class="pstat"><div class="pstat__num">$87/mo</div><div class="pstat__label">saved on tools</div></div>
+        <div class="pstat"><div class="pstat__num">6 apps</div><div class="pstat__label">replaced</div></div>
+        <div class="pstat"><div class="pstat__num">5 min</div><div class="pstat__label">onboarding</div></div>
+        <div class="pstat"><div class="pstat__num">1 link</div><div class="pstat__label">for everything</div></div>
       </div>
     </div>
-    <p class="problem__cost reveal">That's three tools, three logins, three monthly bills. For every single client.</p>
-    <hr class="problem__rule reveal">
-    <p class="sec-title problem__turn reveal">There's a better way.</p>
-  </div>
-</section>
+  </section>
 
-<!-- ── Solution ────────────────────────────────────── -->
-<section class="sec solution" id="how-it-works">
-  <div class="wrap solution__inner">
-    <span class="eyebrow reveal">How it works</span>
-    <h2 class="sec-title solution__h reveal d1">One link. Your client has everything.</h2>
-    <div class="steps">
-      <div class="step reveal">
-        <div class="step__num">1</div>
-        <div class="step__t">You book the client</div>
-        <div class="step__d">Create their portal in seconds. Send one link.</div>
-      </div>
-      <div class="step reveal d1">
-        <div class="step__num">2</div>
-        <div class="step__t">They sign the contract</div>
-        <div class="step__d">E-signature inside the portal. You get notified instantly.</div>
-      </div>
-      <div class="step reveal d2">
-        <div class="step__num">3</div>
-        <div class="step__t">They pay the invoice</div>
-        <div class="step__d">Stripe payment inside the portal. Goes direct to you.</div>
-      </div>
-      <div class="step reveal d3">
-        <div class="step__num">4</div>
-        <div class="step__t">They get their gallery</div>
-        <div class="step__d">Photos and videos inside the portal, forever.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── Testimonials ────────────────────────────────── -->
-<section class="testi">
-  <div class="wrap">
-    <div class="testi__head">
-      <span class="eyebrow reveal">What photographers say</span>
-      <h2 class="sec-title testi__h reveal d1">Real studios. Real results.</h2>
-    </div>
-    <div class="testi__grid">
-      <figure class="tcard reveal">
-        <img class="tcard__img" src="https://images.pexels.com/photos/26654423/pexels-photo-26654423.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Wedding photographer capturing a couple in a forest">
-        <div class="tcard__body">
-          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-          <blockquote class="tcard__quote">"I used to spend 45 minutes onboarding every new client. Now I send one link."</blockquote>
-          <figcaption class="tcard__author">Sarah M. · Nashville, TN</figcaption>
+  <!-- ── Problem ───────────────────────────────────── -->
+  <section class="sec sec--cream" id="problem">
+    <div class="wrap problem__inner">
+      <span class="eyebrow reveal">After every booking</span>
+      <h2 class="sec-title problem__h reveal d1">You're doing this after every booking.</h2>
+      <div class="pains">
+        <div class="pain reveal">
+          <span class="pain__t">Send the contract on DocuSign.</span>
+          <span class="pain__s">Then wait for them to find it, open it, and sign it.</span>
         </div>
-      </figure>
-
-      <figure class="tcard tcard--bordered reveal d1">
-        <div class="tcard__body">
-          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-          <blockquote class="tcard__quote">"Switched from HoneyBook the same week. Got back $52 a month immediately."</blockquote>
-          <figcaption class="tcard__author">Marcus T. · Austin, TX</figcaption>
+        <div class="pain reveal d1">
+          <span class="pain__t">Chase the invoice.</span>
+          <span class="pain__s">Then wait, follow up, wait again.</span>
         </div>
-      </figure>
-
-      <figure class="tcard reveal d2">
-        <img class="tcard__img" src="https://images.pexels.com/photos/30930989/pexels-photo-30930989.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Winter wedding couple embracing outdoors">
-        <div class="tcard__body">
-          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-          <blockquote class="tcard__quote">"My Google review count doubled in 2 months from the automated review requests."</blockquote>
-          <figcaption class="tcard__author">Jennifer K. · Chicago, IL</figcaption>
+        <div class="pain reveal d2">
+          <span class="pain__t">Deliver the gallery on Dropbox.</span>
+          <span class="pain__s">Then hope the link doesn't expire before they download.</span>
         </div>
-      </figure>
+      </div>
+      <p class="problem__cost reveal">That's three tools, three logins, three monthly bills. For every single client.</p>
+      <hr class="problem__rule reveal">
+      <p class="sec-title problem__turn reveal">There's a better way.</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ── Pricing ─────────────────────────────────────── -->
-<section class="sec pricing" id="pricing">
-  <div class="wrap">
-    <div class="pricing__head">
-      <span class="eyebrow reveal">Pricing</span>
-      <h2 class="sec-title pricing__h reveal d1">Simple pricing. No surprises.</h2>
-      <div class="toggle reveal d1" role="tablist" aria-label="Choose billing period">
-        <button class="toggle__btn active" id="tgAnnual" role="tab" aria-selected="true">Annual <span class="toggle__save">Save $120</span></button>
-        <button class="toggle__btn" id="tgMonthly" role="tab" aria-selected="false">Monthly</button>
+  <!-- ── Solution / How it works ───────────────────── -->
+  <section class="sec sec--green" id="how-it-works">
+    <div class="wrap solution__inner">
+      <span class="eyebrow reveal">How it works</span>
+      <h2 class="sec-title solution__h reveal d1">One link. Your client has everything.</h2>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step__num">1</div>
+          <div class="step__t">You book the client</div>
+          <div class="step__d">Create their portal in seconds. Send one link.</div>
+        </div>
+        <div class="step reveal d1">
+          <div class="step__num">2</div>
+          <div class="step__t">They sign the contract</div>
+          <div class="step__d">E-signature inside the portal. You get notified instantly.</div>
+        </div>
+        <div class="step reveal d2">
+          <div class="step__num">3</div>
+          <div class="step__t">They pay the invoice</div>
+          <div class="step__d">Stripe payment inside the portal. Goes direct to you.</div>
+        </div>
+        <div class="step reveal d3">
+          <div class="step__num">4</div>
+          <div class="step__t">They get their gallery</div>
+          <div class="step__d">Photos and videos inside the portal, forever.</div>
+        </div>
       </div>
     </div>
+  </section>
 
-    <div class="plans">
-      <div class="plan plan--featured reveal" id="planAnnual">
-        <span class="plan__tag">Best value</span>
-        <div class="plan__name">Annual</div>
-        <div class="plan__price"><span class="plan__amt">$29</span><span class="plan__per">/mo</span></div>
-        <p class="plan__bill">$348 billed annually</p>
-        <div class="plan__list">
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
-        </div>
-        <a href="/signup" class="btn btn-gold btn-full">Start 14-day free trial</a>
+  <!-- ── Features ──────────────────────────────────── -->
+  <section class="sec sec--cream2" id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">Everything included</span>
+        <h2 class="sec-title features__h reveal d1">Everything a wedding photographer needs. In one place.</h2>
+        <p class="sec-sub reveal d2">14 tools. One subscription. One link per client.</p>
       </div>
-
-      <div class="plan plan--month reveal d1" id="planMonthly" hidden>
-        <div class="plan__name">Monthly</div>
-        <div class="plan__price"><span class="plan__amt">$39</span><span class="plan__per">/mo</span></div>
-        <p class="plan__bill">Billed monthly, no commitment</p>
-        <div class="plan__list">
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-          <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
+      <div class="fgrid">
+        <div class="fcard reveal">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
+          <div class="fcard__name">Dashboard</div>
+          <p class="fcard__desc">See every active client, upcoming wedding, and pending task at a glance. Your entire business in one view.</p>
         </div>
-        <a href="/signup" class="btn btn-outline btn-full">Start 14-day free trial</a>
+        <div class="fcard reveal d1">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg></div>
+          <div class="fcard__name">Clients</div>
+          <p class="fcard__desc">A dedicated profile for every couple — contact info, wedding details, notes, and their full portal history.</p>
+        </div>
+        <div class="fcard reveal d2">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3a8.38 8.38 0 0 1 8.5 8.5z"/></svg></div>
+          <div class="fcard__name">Messages</div>
+          <p class="fcard__desc">Threaded client messaging built into the portal. No more lost emails or scattered text chains.</p>
+        </div>
+        <div class="fcard reveal d3">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg></div>
+          <div class="fcard__name">Gallery Delivery</div>
+          <p class="fcard__desc">Upload photos and videos directly to the client portal. Password-protect, set download limits, deliver in one click. Replaces Pixieset and Pic-Time.</p>
+        </div>
+        <div class="fcard reveal">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg></div>
+          <div class="fcard__name">Pipeline</div>
+          <p class="fcard__desc">Track every inquiry from first contact to booked. Kanban-style board so nothing falls through the cracks.</p>
+        </div>
+        <div class="fcard reveal d1">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/><path d="M8 14l2.5 2.5L16 12"/></svg></div>
+          <div class="fcard__name">Booking</div>
+          <p class="fcard__desc">A public booking page with your availability and session types. Clients self-book, you get notified. Replaces Calendly.</p>
+        </div>
+        <div class="fcard reveal d2">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3.5V6h6V3.5"/><path d="M9 11h6M9 15h4"/></svg></div>
+          <div class="fcard__name">Lead Form</div>
+          <p class="fcard__desc">An embeddable lead capture form for your website. Inquiries go straight into your pipeline automatically.</p>
+        </div>
+        <div class="fcard reveal d3">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M12 11v10"/></svg></div>
+          <div class="fcard__name">Proposals</div>
+          <p class="fcard__desc">Send Silver, Gold, Platinum package proposals with custom pricing. Clients pick a package and pay a deposit in one click.</p>
+        </div>
+        <div class="fcard reveal">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6H8z"/><path d="M14 3v6h6"/><path d="M8 16l2 2 4-4"/></svg></div>
+          <div class="fcard__name">Contracts</div>
+          <p class="fcard__desc">Legally binding e-signature contracts. Send, sign, and store — all inside the client portal. Replaces DocuSign.</p>
+        </div>
+        <div class="fcard reveal d1">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg></div>
+          <div class="fcard__name">Invoices</div>
+          <p class="fcard__desc">Create and send professional invoices. Clients pay via Stripe card or bank transfer. Replaces QuickBooks for photographers.</p>
+        </div>
+        <div class="fcard reveal d2">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5"/></svg></div>
+          <div class="fcard__name">Payment Links</div>
+          <p class="fcard__desc">Reusable tip links, travel fee links, and add-on payment links. Send a link and get paid in seconds.</p>
+        </div>
+        <div class="fcard reveal d3">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M8 12l1.5 1.5L12 11M8 17l1.5 1.5L12 16"/><path d="M15 12h2M15 17h2"/></svg></div>
+          <div class="fcard__name">Questionnaires</div>
+          <p class="fcard__desc">Custom wedding questionnaires that save your clients' answers to their portal. Never chase missing details before the wedding again.</p>
+        </div>
+        <div class="fcard reveal">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="fcard__name">Files</div>
+          <p class="fcard__desc">Share contracts, shot lists, vendor contacts, and any document securely. Clients download from their portal — no WeTransfer links that expire.</p>
+        </div>
+        <div class="fcard reveal d1">
+          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg></div>
+          <div class="fcard__name">Workflows</div>
+          <p class="fcard__desc">Automated sequences that fire welcome emails, contract reminders, balance due notices, and review requests. Set it once, runs forever.</p>
+        </div>
       </div>
     </div>
+  </section>
 
-    <p class="pricing__reassure reveal">Cancel anytime. Your data is always yours.</p>
-  </div>
-</section>
+  <!-- ── Testimonials ──────────────────────────────── -->
+  <section class="sec sec--cream">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">What photographers say</span>
+        <h2 class="sec-title features__h reveal d1">Real studios. Real results.</h2>
+      </div>
+      <div class="testi__grid">
+        <figure class="tcard reveal">
+          <img class="tcard__img" src="https://images.pexels.com/photos/26654423/pexels-photo-26654423.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Wedding photographer capturing a couple in a forest">
+          <div class="tcard__body">
+            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+            <blockquote class="tcard__quote">"I used to spend 45 minutes onboarding every new client. Now I send one link and everything — contract, invoice, questionnaire, gallery — lives in one place. It changed how my studio runs."</blockquote>
+            <figcaption class="tcard__author">Sarah M. · Nashville, TN</figcaption>
+          </div>
+        </figure>
 
-<!-- ── Final CTA ───────────────────────────────────── -->
-<section class="sec finale">
-  <div class="wrap">
-    <h2 class="finale__h reveal">Your next client deserves better.</h2>
-    <p class="finale__sub reveal d1">Set up your first portal in 10 minutes.</p>
-    <div class="finale__btn reveal d2"><a href="/signup" class="btn btn-gold">Start free — no card required</a></div>
-    <p class="finale__note reveal d3">14-day free trial · $0 today · Cancel anytime</p>
-  </div>
-</section>
+        <figure class="tcard tcard--bordered reveal d1">
+          <div class="tcard__body">
+            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+            <blockquote class="tcard__quote">"Switched from HoneyBook the same week I found PortalKit. Got back $52 a month immediately, and my clients think I run a much bigger studio. The portal just looks more professional than anything I was using before."</blockquote>
+            <figcaption class="tcard__author">Marcus T. · Austin, TX</figcaption>
+          </div>
+        </figure>
+
+        <figure class="tcard reveal d2">
+          <img class="tcard__img" src="https://images.pexels.com/photos/30930989/pexels-photo-30930989.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Winter wedding couple embracing outdoors">
+          <div class="tcard__body">
+            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+            <blockquote class="tcard__quote">"My Google review count doubled in 2 months from the automated review requests alone. The gallery delivery, timeline approval, and vendor sheets are the details no other tool bothered to build for wedding photographers."</blockquote>
+            <figcaption class="tcard__author">Jennifer K. · Chicago, IL</figcaption>
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Free tools ────────────────────────────────── -->
+  <section class="sec sec--cream2" id="free-tools">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">Free tools</span>
+        <h2 class="sec-title features__h reveal d1">Free tools for wedding photographers.</h2>
+        <p class="sec-sub reveal d2">No account needed. Use them now.</p>
+      </div>
+      <div class="tools__grid">
+        <div class="toolcard reveal">
+          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+          <div class="toolcard__name">Shot List Generator</div>
+          <p class="toolcard__desc">Build a complete wedding day shot list in minutes. Covers getting ready, ceremony, family formals, and reception.</p>
+          <a href="/tools/shot-list" class="toolcard__link">Use free →</a>
+        </div>
+        <div class="toolcard reveal d1">
+          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <div class="toolcard__name">Wedding Day Timeline Generator</div>
+          <p class="toolcard__desc">Create a realistic hour-by-hour wedding day timeline. Share it with the couple and their vendors instantly.</p>
+          <a href="/tools/timeline" class="toolcard__link">Use free →</a>
+        </div>
+        <div class="toolcard reveal d2">
+          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l1.5 1.5L13 11"/><path d="M16 12h1"/></svg></div>
+          <div class="toolcard__name">Client Questionnaire Builder</div>
+          <p class="toolcard__desc">Generate a wedding questionnaire that captures every detail you need. Send it to couples before the big day.</p>
+          <a href="/tools/questionnaire" class="toolcard__link">Use free →</a>
+        </div>
+        <div class="toolcard reveal d3">
+          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg></div>
+          <div class="toolcard__name">Pricing Guide Generator</div>
+          <p class="toolcard__desc">Create a polished pricing guide for your packages. Present your rates with confidence and win more bookings.</p>
+          <a href="/tools/pricing-guide" class="toolcard__link">Use free →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Comparison ────────────────────────────────── -->
+  <section class="sec sec--cream" id="compare">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">What you're replacing</span>
+        <h2 class="sec-title features__h reveal d1">Six tools. One bill. One link.</h2>
+        <p class="sec-sub reveal d2">Most photographers pay $87/mo for tools that don't talk to each other. PortalKit replaces all of them for $29/mo.</p>
+      </div>
+      <div class="compare__scroll reveal">
+        <table class="cmp">
+          <thead>
+            <tr>
+              <th scope="col">Tool you're paying for</th>
+              <th scope="col">What it does</th>
+              <th scope="col">Typical cost</th>
+              <th scope="col" class="cmp__pk cmp__pk--head">PortalKit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>DocuSign</strong></td><td>Contracts &amp; e-signatures</td><td class="cmp__cost">$15/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr><td><strong>QuickBooks</strong></td><td>Invoices &amp; payments</td><td class="cmp__cost">$17/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr><td><strong>Dropbox</strong></td><td>File storage &amp; delivery</td><td class="cmp__cost">$10/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr><td><strong>Pixieset</strong></td><td>Gallery delivery</td><td class="cmp__cost">$20/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr><td><strong>Calendly</strong></td><td>Booking &amp; scheduling</td><td class="cmp__cost">$12/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr><td><strong>HoneyBook</strong></td><td>CRM &amp; proposals</td><td class="cmp__cost">$13/mo</td><td class="cmp__pk">Included</td></tr>
+            <tr class="cmp__total"><td>Total</td><td></td><td>$87/mo</td><td class="cmp__pk">$29/mo</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pricing (dark) ────────────────────────────── -->
+  <section class="sec sec--green" id="pricing">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">Pricing</span>
+        <h2 class="sec-title pricing__h reveal d1">Simple pricing. No surprises.</h2>
+        <div class="toggle reveal d1" role="tablist" aria-label="Choose billing period">
+          <button class="toggle__btn active" id="tgAnnual" role="tab" aria-selected="true">Annual <span class="toggle__save">Save $120</span></button>
+          <button class="toggle__btn" id="tgMonthly" role="tab" aria-selected="false">Monthly</button>
+        </div>
+      </div>
+
+      <div class="plans">
+        <div class="plan plan--featured reveal" id="planAnnual">
+          <span class="plan__tag">Best value</span>
+          <div class="plan__name">Annual</div>
+          <div class="plan__price"><span class="plan__amt">$29</span><span class="plan__per">/mo</span></div>
+          <p class="plan__bill">$348 billed annually</p>
+          <div class="plan__list">
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
+          </div>
+          <a href="/signup" class="btn btn-gold btn-full">Start 14-day free trial</a>
+        </div>
+
+        <div class="plan reveal d1" id="planMonthly" hidden>
+          <div class="plan__name">Monthly</div>
+          <div class="plan__price"><span class="plan__amt">$39</span><span class="plan__per">/mo</span></div>
+          <p class="plan__bill">Billed monthly, no commitment</p>
+          <div class="plan__list">
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
+            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
+          </div>
+          <a href="/signup" class="btn btn-outline-light btn-full">Start 14-day free trial</a>
+        </div>
+      </div>
+
+      <p class="pricing__reassure reveal">Cancel anytime. Your data is always yours.</p>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────── -->
+  <section class="sec sec--cream" id="faq">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow reveal">Questions</span>
+        <h2 class="sec-title features__h reveal d1">Frequently asked questions</h2>
+      </div>
+      <div class="faqs">
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">Do my clients need to create an account?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>No. Clients access their portal via a private link — no signup, no password, no friction. They bookmark the link and come back anytime.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">Does this replace DocuSign, Calendly, and Dropbox?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>Yes. Contracts with e-signatures replace DocuSign. The booking page with your availability replaces Calendly. File delivery inside each portal replaces Dropbox. Most photographers cancel all three within their first month on PortalKit.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">Can I deliver photos and videos through PortalKit?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>Yes — PortalKit includes a full gallery delivery system. Upload photos and videos, optionally set a password, and send your client a delivery notification with one click. Clients can view, favorite, and download everything from their private portal. No Pixieset or Pic-Time subscription needed.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">How is this different from HoneyBook or Dubsado?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>PortalKit is built specifically for wedding photographers — not generic freelancers. That means shot list builders, day-of timelines with client approval, vendor contact sheets, and a client portal link that requires no account. One flat price, no per-seat fees, no feature tiers.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">Can I use my own branding?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>Yes. Add your logo, brand colors, and custom domain so the portal feels like yours.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">How does payment collection work?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>We use Stripe under the hood. You connect your Stripe account and get paid directly — PortalKit never touches your money.</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">Is there a limit on how many clients I can have?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>No limits. Unlimited clients — 1 client or 100, same price: from $29/mo (annual) or $39/mo (monthly).</p></div>
+        </div>
+        <div class="faq reveal">
+          <button class="faq__q" aria-expanded="false">What happens after my free trial?
+            <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="faq__a"><p>If your trial ends without an active subscription, your account is paused. Your data is never deleted — just resubscribe to pick up right where you left off.</p></div>
+        </div>
+      </div>
+      <p class="faq__more reveal"><a href="/faq">Read the full FAQ →</a></p>
+    </div>
+  </section>
+
+  <!-- ── Final CTA ─────────────────────────────────── -->
+  <section class="sec sec--dark finale">
+    <div class="wrap">
+      <h2 class="finale__h reveal">Your next client deserves better.</h2>
+      <p class="finale__sub reveal d1">Set up your first portal in 10 minutes.</p>
+      <div class="finale__btn reveal d2"><a href="/signup" class="btn btn-gold">Start free — no card required</a></div>
+      <p class="finale__note reveal d3">14-day free trial · $0 today · Cancel anytime</p>
+    </div>
+  </section>
+
+</main>
 
 <!-- ── Footer ──────────────────────────────────────── -->
 <footer class="footer">
   <div class="wrap">
-    <div class="footer__row1">
-      <a href="/" class="brand"><span class="brand__dot"></span>PortalKit</a>
-      <nav class="footer__links">
-        <a href="#how-it-works">Features</a>
-        <a href="#pricing">Pricing</a>
-        <a href="/faq">FAQ</a>
-        <a href="/blog">Blog</a>
-        <a href="/signin">Sign in</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Terms</a>
-      </nav>
+    <div class="footer__top">
+      <div class="footer__brandcol">
+        <a href="/" class="brand"><span class="brand__dot"></span>PortalKit</a>
+        <p class="footer__tag">The client portal built for wedding photographers. One link. Everything in it.</p>
+      </div>
+      <div>
+        <div class="footer__ctitle">Product</div>
+        <ul class="footer__links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="/tools/shot-list">Shot List Generator</a></li>
+          <li><a href="/tools/timeline">Timeline Generator</a></li>
+          <li><a href="/blog">Blog</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer__ctitle">Resources</div>
+        <ul class="footer__links">
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/blog/wedding-shot-list-guide">Shot List Guide</a></li>
+          <li><a href="/blog/wedding-photography-client-management">Client Management</a></li>
+          <li><a href="/blog/wedding-photographer-tools">Tools Comparison</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer__ctitle">Legal</div>
+        <ul class="footer__links">
+          <li><a href="/privacy">Privacy Policy</a></li>
+          <li><a href="/terms">Terms of Service</a></li>
+          <li><a href="/accessibility">Accessibility</a></li>
+          <li><a href="/signin">Sign in</a></li>
+        </ul>
+      </div>
     </div>
-    <div class="footer__row2">
-      <span class="footer__copy">© 2026 PortalKit. Built for wedding photographers.</span>
-      <a href="https://instagram.com/getportalkit" target="_blank" rel="noopener" class="footer__social" aria-label="Instagram">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" stroke="none"/></svg>
-      </a>
+    <div class="footer__bottom">
+      <span class="footer__copy">© 2026 PortalKit. Built for wedding photographers, with love.</span>
+      <div class="footer__social">
+        <a href="https://instagram.com/getportalkit" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="https://twitter.com/getportalkit" target="_blank" rel="noopener" aria-label="Twitter / X">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="https://facebook.com/getportalkit" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        </a>
+        <a href="https://tiktok.com/@getportalkit" target="_blank" rel="noopener" aria-label="TikTok">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.96a8.19 8.19 0 004.78 1.52V7.04a4.85 4.85 0 01-1.01-.35z"/></svg>
+        </a>
+      </div>
     </div>
   </div>
 </footer>
@@ -561,7 +916,7 @@
 </div>
 
 <script>
-  // Sticky nav: transparent -> green past 80px
+  // Sticky nav + hero chevron
   var nav = document.getElementById('nav');
   var heroScroll = document.getElementById('heroScroll');
   function onScroll() {
@@ -571,6 +926,24 @@
   }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
+
+  // Mobile hamburger menu
+  var burger = document.getElementById('burger');
+  var mobilemenu = document.getElementById('mobilemenu');
+  burger.addEventListener('click', function () {
+    var open = mobilemenu.classList.toggle('open');
+    burger.classList.toggle('open', open);
+    burger.setAttribute('aria-expanded', open);
+    burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  });
+  mobilemenu.querySelectorAll('a').forEach(function (link) {
+    link.addEventListener('click', function () {
+      mobilemenu.classList.remove('open');
+      burger.classList.remove('open');
+      burger.setAttribute('aria-expanded', 'false');
+      burger.setAttribute('aria-label', 'Open menu');
+    });
+  });
 
   // Reveal on scroll (once)
   var reveals = document.querySelectorAll('.reveal');
@@ -584,6 +957,19 @@
   } else {
     reveals.forEach(function (el) { el.classList.add('visible'); });
   }
+
+  // FAQ accordion
+  document.querySelectorAll('.faq__q').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var item = btn.closest('.faq');
+      var open = item.classList.contains('open');
+      document.querySelectorAll('.faq.open').forEach(function (i) {
+        i.classList.remove('open');
+        i.querySelector('.faq__q').setAttribute('aria-expanded', 'false');
+      });
+      if (!open) { item.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+    });
+  });
 
   // Pricing toggle
   var tgA = document.getElementById('tgAnnual');
@@ -634,11 +1020,11 @@
       if (e.clientY < 20 && !shown) {
         shown = true;
         sessionStorage.setItem('pk_exit_shown', '1');
-        document.getElementById('exitPopup').style.display = 'block';
+        document.getElementById('exitPopup').classList.add('open');
       }
     });
   })();
-  function dismissExitPopup() { document.getElementById('exitPopup').style.display = 'none'; }
+  function dismissExitPopup() { document.getElementById('exitPopup').classList.remove('open'); }
   function submitExitEmail(e) {
     e.preventDefault();
     var email = document.getElementById('exitEmail').value;
@@ -647,8 +1033,8 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email, tool: 'shot-list-template', source: 'exit-intent' })
     }).catch(function () {});
-    document.getElementById('exitForm').style.display = 'none';
-    document.getElementById('exitSuccess').style.display = 'block';
+    document.getElementById('exitForm').classList.add('hidden');
+    document.getElementById('exitSuccess').classList.add('show');
     setTimeout(dismissExitPopup, 2500);
   }
 </script>
