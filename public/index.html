@@ -238,33 +238,63 @@
     .step__t { font-family: var(--fd); font-weight: 600; font-size: 19px; color: var(--cream); margin-top: 10px; }
     .step__d { font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.62); line-height: 1.6; margin-top: 4px; }
 
-    /* ── Features (bento) ────────────────────────── */
-    .bento { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
-    .bento-tile { position: relative; overflow: hidden; background: #FFFFFF; border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: box-shadow 0.25s ease; }
-    .bento-tile::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 50%), rgba(200,169,110,0.08), transparent 60%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; z-index: 0; }
-    .bento-tile:hover { box-shadow: 0 0 0 2px rgba(200,169,110,0.3); }
-    .bento-tile:hover::before { opacity: 1; }
-    .bento-tile > * { position: relative; z-index: 1; }
-    .bento__accent { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gold); border-radius: 16px 16px 0 0; z-index: 2; }
-    .bento__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-    .bento__icon svg { width: 22px; height: 22px; }
-    .bento__h { font-family: var(--fd); font-weight: 700; font-size: 20px; color: var(--ink); letter-spacing: -0.01em; }
-    .bento--gallery .bento__h { font-size: 24px; }
-    .bento__body { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin-top: 10px; }
-    .bento__pill { display: inline-flex; align-items: center; margin-top: 16px; padding: 4px 12px; border: 1px solid var(--gold-border); border-radius: 100px; font-family: var(--fb); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--gold); }
-    .bento--gallery .bento__body { max-width: 620px; }
-    .bento--social { background: var(--green); border-color: transparent; }
-    .bento--social .bento__h { color: var(--gold); }
-    .bento--social .bento__body { color: rgba(253,250,245,0.75); }
-    .bento__split { display: grid; grid-template-columns: 1fr; gap: 24px; }
-    .bento__col-t { font-family: var(--fd); font-weight: 700; font-size: 18px; color: var(--ink); margin-top: 6px; }
-    .bento--everything { background: var(--cream-2); }
-    .bento__link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--gold); min-height: 44px; }
-    .bento__link:hover { color: #b8923f; }
-    .bento__live { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-family: var(--fb); font-size: 12px; font-weight: 600; color: var(--green-mid); }
-    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-mid); position: relative; }
-    .pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--green-mid); animation: pulse 1.8s ease-out infinite; }
-    @keyframes pulse { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(3.4); opacity: 0; } }
+    /* ── Features (tab switcher) ─────────────────── */
+    .feat-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 40px; }
+    .feat-tab { height: 42px; padding: 0 20px; border-radius: 100px; border: 1px solid rgba(27,67,50,0.15); background: transparent; color: var(--ink-soft); font-family: var(--fb); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+    .feat-tab:hover { border-color: var(--green); color: var(--green); }
+    .feat-tab.active { background: var(--green); color: var(--cream); border-color: var(--green); box-shadow: 0 4px 12px rgba(27,67,50,0.25); }
+
+    .feat-panel { margin-top: 40px; display: none; grid-template-columns: 1fr; gap: 40px; align-items: center; }
+    #panel-0 { display: grid; }
+    .feat-panel__replace { display: inline-flex; padding: 4px 14px; border: 1px solid var(--gold-border); border-radius: 100px; font-family: var(--fb); font-size: 11px; font-weight: 600; color: var(--gold); margin-bottom: 16px; }
+    .feat-panel__h { font-family: var(--fd); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; color: var(--ink); line-height: 1.2; }
+    .feat-panel__desc { font-family: var(--fb); font-size: 16px; color: var(--ink-soft); line-height: 1.65; margin-top: 14px; }
+    .feat-panel__bullets { margin-top: 22px; display: flex; flex-direction: column; gap: 12px; }
+    .feat-panel__bullet { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 15px; color: var(--ink); line-height: 1.4; }
+    .feat-panel__bullet svg { flex-shrink: 0; width: 18px; height: 18px; color: var(--green); margin-top: 2px; }
+    .feat-panel__cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 24px; font-family: var(--fb); font-weight: 600; font-size: 15px; color: var(--gold); min-height: 44px; transition: color 0.2s, gap 0.2s; }
+    .feat-panel__cta:hover { color: var(--gold-hover); gap: 10px; }
+
+    .feat-visual { background: var(--cream-2); border: 1px solid var(--border); border-radius: 16px; padding: 28px; min-height: 220px; display: flex; flex-direction: column; justify-content: center; }
+
+    .feat-confirm-card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 2px 12px rgba(27,67,50,0.08); }
+    .feat-badge-green { display: inline-flex; align-items: center; gap: 6px; font-family: var(--fb); font-size: 11px; font-weight: 700; color: #1B7A4A; background: rgba(27,122,74,0.1); border-radius: 100px; padding: 4px 10px; margin-bottom: 10px; }
+    .feat-confirm-name { font-family: var(--fd); font-weight: 600; font-size: 15px; color: var(--ink); }
+    .feat-confirm-meta { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+    .feat-confirm-pkg { font-family: var(--fb); font-size: 14px; color: var(--ink); margin-top: 8px; }
+    .feat-deposit-pill { display: inline-flex; margin-top: 10px; font-family: var(--fb); font-size: 11px; font-weight: 700; color: #1B7A4A; background: rgba(27,122,74,0.1); border-radius: 100px; padding: 4px 10px; }
+
+    .feat-mini-grid { display: flex; gap: 12px; }
+    .feat-mini-card { flex: 1; background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); }
+    .feat-mini-card svg { color: var(--green); }
+    .feat-mini-label { font-family: var(--fb); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-top: 6px; margin-bottom: 4px; }
+    .feat-mini-val { font-family: var(--fb); font-size: 13px; font-weight: 700; color: #1B7A4A; }
+    .feat-mini-sub { font-family: var(--fb); font-size: 10px; color: var(--ink-soft); margin-top: 2px; }
+    .feat-mini-receipt { text-align: center; font-family: var(--fb); font-size: 12px; color: var(--ink-soft); margin-top: 14px; }
+
+    .feat-photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+    .feat-photo-cell { border-radius: 6px; height: 52px; }
+    .feat-photo-cell--a { background: rgba(27,67,50,0.15); }
+    .feat-photo-cell--b { background: rgba(200,169,110,0.12); }
+    .feat-photo-cell--fav { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 16px; }
+    .feat-photo-caption { text-align: center; font-family: var(--fb); font-size: 12px; color: var(--ink-soft); }
+
+    .feat-workflow { display: flex; flex-direction: column; position: relative; }
+    .feat-workflow::before { content: ''; position: absolute; left: 4.5px; top: 16px; bottom: 16px; width: 1px; background: var(--border); }
+    .feat-wf-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-family: var(--fb); font-size: 13px; color: var(--ink-soft); position: relative; }
+    .feat-wf-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; position: relative; z-index: 1; }
+    .feat-wf-dot--green { background: var(--green); }
+    .feat-wf-dot--gold { background: var(--gold); }
+    .feat-wf-label { font-weight: 700; color: var(--ink); }
+
+    .feat-social-row { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-family: var(--fb); font-size: 13px; color: var(--ink); }
+    .feat-social-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .feat-social-dot--ig { background: radial-gradient(circle at 30% 110%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
+    .feat-social-dot--tiktok { background: #FE2C55; }
+    .feat-social-dot--pin { background: #E60023; }
+    .feat-social-clicks { margin-left: auto; font-size: 11px; font-weight: 700; color: #1B7A4A; }
+    .feat-social-summary { margin-top: 12px; font-family: var(--fb); font-size: 13px; font-weight: 700; color: #1B7A4A; }
+    @media (min-width: 768px) { .feat-panel { grid-template-columns: 1fr 1fr; gap: 48px; } }
 
     /* ── Testimonials ────────────────────────────── */
     .testi__grid { max-width: 1000px; margin: 44px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
@@ -396,8 +426,6 @@
       .tools__grid { grid-template-columns: repeat(2, 1fr); }
       .footer__top { grid-template-columns: 2fr 1fr 1fr 1fr; }
       .footer__brandcol { grid-column: auto; }
-      .bento__split { grid-template-columns: 1fr 1px 1fr; column-gap: 28px; }
-      .bento__divider { background: var(--border); }
     }
 
     /* ── Desktop ─────────────────────────────────── */
@@ -418,13 +446,6 @@
       .problem__h { font-size: 40px; }
       .solution__h { font-size: 40px; }
       .features__h { font-size: 40px; }
-      .bento { grid-template-columns: repeat(6, 1fr); }
-      .bento--gallery { grid-column: span 4; }
-      .bento--booking { grid-column: span 2; }
-      .bento--social { grid-column: span 2; }
-      .bento--contracts { grid-column: span 4; }
-      .bento--automation { grid-column: span 3; }
-      .bento--everything { grid-column: span 3; }
       .testi__grid { grid-template-columns: repeat(3, 1fr); }
       .tools__grid { grid-template-columns: repeat(4, 1fr); }
       .pricing__grid { grid-template-columns: 3fr 2fr; gap: 48px; }
@@ -446,7 +467,6 @@
       .hr { opacity: 1; animation: none; }
       .hero__scroll { animation: none; }
       .hero__scroll svg { animation: none; }
-      .pulse-dot::after { animation: none; }
       .hero { transition: none; }
     }
   </style>
@@ -574,7 +594,7 @@
     </div>
   </section>
 
-  <!-- ── Features (bento) ──────────────────────────── -->
+  <!-- ── Features (tab switcher) ───────────────────── -->
   <section class="sec sec--cream2" id="features">
     <div class="wrap">
       <div class="sec-head">
@@ -583,60 +603,142 @@
         <p class="sec-sub reveal d2">Every feature your clients experience. None they have to create an account for.</p>
       </div>
 
-      <div class="bento">
-        <!-- Large 1: Gallery Delivery -->
-        <div class="bento-tile bento--gallery reveal">
-          <span class="bento__accent"></span>
-          <h3 class="bento__h">Deliver galleries clients actually love</h3>
-          <p class="bento__body">Upload photos and videos. Set a password. Your client clicks one link in their portal, browses, favorites, and downloads. No Pixieset, no Dropbox, no expired links. Works on their phone at the wedding.</p>
-          <span class="bento__pill">Replaces Pixieset · Dropbox · WeTransfer</span>
-        </div>
+      <div class="feat-tabs" role="tablist" aria-label="Feature categories">
+        <button class="feat-tab" role="tab" id="tab-0" aria-selected="true" aria-controls="panel-0">Get Booked</button>
+        <button class="feat-tab" role="tab" id="tab-1" aria-selected="false" aria-controls="panel-1">Get Paid</button>
+        <button class="feat-tab" role="tab" id="tab-2" aria-selected="false" aria-controls="panel-2">Deliver Work</button>
+        <button class="feat-tab" role="tab" id="tab-3" aria-selected="false" aria-controls="panel-3">Run on Autopilot</button>
+        <button class="feat-tab" role="tab" id="tab-4" aria-selected="false" aria-controls="panel-4">Grow Your Studio</button>
+      </div>
 
-        <!-- Small 1: Booking -->
-        <div class="bento-tile bento--booking reveal d1">
-          <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/><path d="M8 14l2.5 2.5L16 12"/></svg></div>
-          <h3 class="bento__h">Book clients on autopilot</h3>
-          <p class="bento__body">Public booking page. Clients pick a date, pick a package, pay a deposit. You wake up booked.</p>
-          <span class="bento__pill">Replaces Calendly</span>
+      <!-- Panel 1: Get Booked -->
+      <div class="feat-panel" role="tabpanel" id="panel-0" aria-labelledby="tab-0">
+        <div class="feat-panel__text">
+          <span class="feat-panel__replace">Replaces Calendly</span>
+          <h3 class="feat-panel__h">Your booking page works while you sleep.</h3>
+          <p class="feat-panel__desc">A public booking page with your packages and availability. Couples find you on Instagram, click the link in your bio, pick a package, and pay a deposit. You get a notification. That's the whole process.</p>
+          <div class="feat-panel__bullets">
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Public booking page with your packages</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Couple pays deposit to confirm the date</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Lead form embeds on your own website</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Pipeline tracks every inquiry automatically</div>
+          </div>
+          <a href="/signup" class="feat-panel__cta">Start using this free →</a>
         </div>
-
-        <!-- Small 2: Social FOMO (dark) -->
-        <div class="bento-tile bento--social reveal">
-          <h3 class="bento__h">Your booking page drives traffic.</h3>
-          <p class="bento__body">Wedding photographers are using their PortalKit booking link in Instagram bio, TikTok, Pinterest, and their Google Business profile. When couples DM you, you send the link. They book themselves.</p>
-        </div>
-
-        <!-- Large 2: Contracts + Invoices -->
-        <div class="bento-tile bento--contracts reveal d1">
-          <div class="bento__split">
-            <div>
-              <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6H8z"/><path d="M14 3v6h6"/><path d="M8 16l2 2 4-4"/></svg></div>
-              <div class="bento__col-t">Contracts</div>
-              <p class="bento__body">E-signature, legally binding, stored in their portal. Send in 30 seconds.</p>
-              <span class="bento__pill">Replaces DocuSign</span>
-            </div>
-            <div class="bento__divider"></div>
-            <div>
-              <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg></div>
-              <div class="bento__col-t">Invoices</div>
-              <p class="bento__body">Stripe payments direct to your account. Deposit, balance, tips, travel fees. All in one place.</p>
-              <span class="bento__pill">Replaces QuickBooks</span>
-            </div>
+        <div class="feat-visual">
+          <div class="feat-confirm-card">
+            <span class="feat-badge-green">✓ Booking confirmed</span>
+            <div class="feat-confirm-name">Sarah &amp; James Johnson</div>
+            <div class="feat-confirm-meta">September 14 · Napa Valley</div>
+            <div class="feat-confirm-pkg">Gold Package · $3,200</div>
+            <span class="feat-deposit-pill">Deposit paid: $800</span>
           </div>
         </div>
+      </div>
 
-        <!-- Medium 1: Automation -->
-        <div class="bento-tile bento--automation reveal">
-          <h3 class="bento__h">Workflows that run while you shoot</h3>
-          <p class="bento__body">Welcome email when they book. Contract reminder 3 days before deadline. Balance due notice automatically. Review request the day after gallery delivery. Set it once, never touch it again.</p>
-          <span class="bento__live"><span class="pulse-dot"></span>Running now</span>
+      <!-- Panel 2: Get Paid -->
+      <div class="feat-panel" role="tabpanel" id="panel-1" aria-labelledby="tab-1">
+        <div class="feat-panel__text">
+          <span class="feat-panel__replace">Replaces DocuSign · QuickBooks</span>
+          <h3 class="feat-panel__h">Contracts signed. Invoices paid. Done.</h3>
+          <p class="feat-panel__desc">Send a contract from your portal — your client signs with a click, no DocuSign account needed. Invoice them in the same place. They pay by card through Stripe, straight to your account. Tips, travel fees, and add-ons handled the same way.</p>
+          <div class="feat-panel__bullets">
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>E-signature contracts in 30 seconds</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Stripe invoices paid direct to your account</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Deposit links, tip links, travel fee links</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>All records stored in the client portal forever</div>
+          </div>
+          <a href="/signup" class="feat-panel__cta">Start using this free →</a>
         </div>
+        <div class="feat-visual">
+          <div class="feat-mini-grid">
+            <div class="feat-mini-card">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6H8z"/><path d="M14 3v6h6"/></svg>
+              <div class="feat-mini-label">Contract</div>
+              <div class="feat-mini-val">Signed ✓</div>
+              <div class="feat-mini-sub">Jun 14, 2026</div>
+            </div>
+            <div class="feat-mini-card">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg>
+              <div class="feat-mini-label">Invoice</div>
+              <div class="feat-mini-val">$3,200 paid ✓</div>
+              <div class="feat-mini-sub">via Stripe</div>
+            </div>
+          </div>
+          <div class="feat-mini-receipt">Balance remaining: $0</div>
+        </div>
+      </div>
 
-        <!-- Medium 2: Everything else (curiosity) -->
-        <div class="bento-tile bento--everything reveal d1">
-          <h3 class="bento__h">Plus everything else you need</h3>
-          <p class="bento__body">Questionnaires, proposals, lead capture forms, client messaging, payment links, file sharing, pipeline tracking, and more. All inside one subscription.</p>
-          <a href="/signup" class="bento__link">Explore all features →</a>
+      <!-- Panel 3: Deliver Work -->
+      <div class="feat-panel" role="tabpanel" id="panel-2" aria-labelledby="tab-2">
+        <div class="feat-panel__text">
+          <span class="feat-panel__replace">Replaces Pixieset · Dropbox · WeTransfer</span>
+          <h3 class="feat-panel__h">One link. Their gallery is inside.</h3>
+          <p class="feat-panel__desc">Upload photos and videos directly to the client portal. Set a password if you want. Your client gets notified, opens their portal, and everything is there — full resolution downloads, video, favorites. No expiring links. No third-party gallery app.</p>
+          <div class="feat-panel__bullets">
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo and video gallery in the portal</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Password protection and download controls</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Clients favorite images before downloading</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Works perfectly on phones at the wedding</div>
+          </div>
+          <a href="/signup" class="feat-panel__cta">Start using this free →</a>
+        </div>
+        <div class="feat-visual">
+          <div class="feat-photo-grid">
+            <div class="feat-photo-cell feat-photo-cell--a"></div>
+            <div class="feat-photo-cell feat-photo-cell--b"></div>
+            <div class="feat-photo-cell feat-photo-cell--a feat-photo-cell--fav">♥</div>
+            <div class="feat-photo-cell feat-photo-cell--b"></div>
+            <div class="feat-photo-cell feat-photo-cell--a"></div>
+            <div class="feat-photo-cell feat-photo-cell--b"></div>
+          </div>
+          <div class="feat-photo-caption">48 photos · 2 videos delivered</div>
+        </div>
+      </div>
+
+      <!-- Panel 4: Run on Autopilot -->
+      <div class="feat-panel" role="tabpanel" id="panel-3" aria-labelledby="tab-3">
+        <div class="feat-panel__text">
+          <span class="feat-panel__replace">Workflows &amp; Automation</span>
+          <h3 class="feat-panel__h">Set it once. It runs forever.</h3>
+          <p class="feat-panel__desc">PortalKit sends the right message at the right time without you doing anything. Welcome email when they book. Contract reminder if they haven't signed. Balance due notice before the wedding. Review request the day after gallery delivery. Your business runs while you shoot.</p>
+          <div class="feat-panel__bullets">
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Welcome email sent automatically on booking</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contract and invoice reminders fire themselves</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Gallery delivery triggers review request</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Review goes to Google, WeddingWire, The Knot</div>
+          </div>
+          <a href="/signup" class="feat-panel__cta">Start using this free →</a>
+        </div>
+        <div class="feat-visual">
+          <div class="feat-workflow">
+            <div class="feat-wf-row"><span class="feat-wf-dot feat-wf-dot--green"></span><span><span class="feat-wf-label">Booking confirmed</span> · welcome sent</span></div>
+            <div class="feat-wf-row"><span class="feat-wf-dot feat-wf-dot--gold"></span><span><span class="feat-wf-label">Day 5</span> · contract reminder sent</span></div>
+            <div class="feat-wf-row"><span class="feat-wf-dot feat-wf-dot--green"></span><span><span class="feat-wf-label">Gallery delivered</span> · client notified</span></div>
+            <div class="feat-wf-row"><span class="feat-wf-dot feat-wf-dot--gold"></span><span><span class="feat-wf-label">Day +1</span> · review request sent</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 5: Grow Your Studio -->
+      <div class="feat-panel" role="tabpanel" id="panel-4" aria-labelledby="tab-4">
+        <div class="feat-panel__text">
+          <span class="feat-panel__replace">Social &amp; Lead Generation</span>
+          <h3 class="feat-panel__h">Your booking link works everywhere.</h3>
+          <p class="feat-panel__desc">Put your PortalKit booking page link in your Instagram bio, TikTok profile, Pinterest boards, and Google Business listing. When couples DM you, send the link. They book themselves. Every inquiry goes into your pipeline automatically so nothing falls through.</p>
+          <div class="feat-panel__bullets">
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Booking link works in every social bio</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Lead form embeds directly on your website</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Every inquiry captured in your pipeline</div>
+            <div class="feat-panel__bullet"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Questionnaires gather details before the shoot</div>
+          </div>
+          <a href="/signup" class="feat-panel__cta">Start using this free →</a>
+        </div>
+        <div class="feat-visual">
+          <div class="feat-social-row"><span class="feat-social-dot feat-social-dot--ig"></span>Instagram bio<span class="feat-social-clicks">24 clicks this week</span></div>
+          <div class="feat-social-row"><span class="feat-social-dot feat-social-dot--tiktok"></span>TikTok profile<span class="feat-social-clicks">11 clicks this week</span></div>
+          <div class="feat-social-row"><span class="feat-social-dot feat-social-dot--pin"></span>Pinterest boards<span class="feat-social-clicks">8 clicks this week</span></div>
+          <div class="feat-social-summary">→ 3 new inquiries this week</div>
         </div>
       </div>
     </div>
@@ -999,14 +1101,31 @@
     }, { passive: true });
   }
 
-  // Bento tile cursor glow
-  document.querySelectorAll('.bento-tile').forEach(function (tile) {
-    tile.addEventListener('mousemove', function (e) {
-      var rect = tile.getBoundingClientRect();
-      tile.style.setProperty('--mx', (e.clientX - rect.left) + 'px');
-      tile.style.setProperty('--my', (e.clientY - rect.top) + 'px');
+  // Feature tab switcher
+  var featTabs = document.querySelectorAll('.feat-tab');
+  var featPanels = document.querySelectorAll('.feat-panel');
+  function switchTab(index) {
+    featTabs.forEach(function (t, i) {
+      t.classList.toggle('active', i === index);
+      t.setAttribute('aria-selected', i === index);
     });
+    featPanels.forEach(function (p, i) {
+      if (i === index) {
+        p.style.display = 'grid';
+        p.style.opacity = '0';
+        requestAnimationFrame(function () {
+          p.style.transition = 'opacity 0.3s ease';
+          p.style.opacity = '1';
+        });
+      } else {
+        p.style.display = 'none';
+      }
+    });
+  }
+  featTabs.forEach(function (tab, i) {
+    tab.addEventListener('click', function () { switchTab(i); });
   });
+  if (featTabs.length) switchTab(0);
 
   // Reveal on scroll (once)
   var reveals = document.querySelectorAll('.reveal');
