@@ -103,15 +103,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --green:      #1B4332;
-      --green-dark: #0D2B1E;
-      --gold:       #C8A96E;
-      --gold-hover: #B8923F;
-      --cream:      #FDFAF5;
-      --cream-2:    #F5F0E8;
-      --ink:        #1A1F1C;
-      --ink-soft:   #4A5568;
-      --border:     rgba(27,67,50,0.12);
+      --green:       #1B4332;
+      --green-dark:  #0D2B1E;
+      --green-mid:   #2D6A4F;
+      --gold:        #C8A96E;
+      --gold-light:  rgba(200,169,110,0.12);
+      --gold-border: rgba(200,169,110,0.35);
+      --cream:       #FDFAF5;
+      --cream-2:     #F5F0E8;
+      --ink:         #1A1F1C;
+      --ink-soft:    #4A5568;
+      --border:      rgba(27,67,50,0.10);
       --fd: 'Plus Jakarta Sans', system-ui, sans-serif;
       --fb: 'DM Sans', system-ui, sans-serif;
       --hero-img: url('https://images.pexels.com/photos/32778169/pexels-photo-32778169.jpeg?auto=compress&cs=tinysrgb&w=1920&q=80');
@@ -136,23 +138,23 @@
     /* ── Buttons ─────────────────────────────────── */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--fd); font-weight: 600; font-size: 15px; cursor: pointer; border: 1px solid transparent; transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; white-space: nowrap; }
     .btn-gold { background: var(--gold); color: var(--green); height: 50px; padding: 0 28px; border-radius: 8px; }
-    .btn-gold:hover { background: var(--gold-hover); color: var(--cream); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(200,169,110,0.30); }
+    .btn-gold:hover { background: #b8923f; color: var(--cream); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(200,169,110,0.30); }
     .btn-outline { background: transparent; color: var(--green); border-color: rgba(27,67,50,0.4); height: 50px; padding: 0 28px; border-radius: 8px; }
     .btn-outline:hover { background: var(--green); color: var(--cream); border-color: var(--green); }
     .btn-outline-light { background: transparent; color: var(--cream); border-color: rgba(253,250,245,0.35); height: 50px; padding: 0 28px; border-radius: 8px; }
     .btn-outline-light:hover { background: rgba(253,250,245,0.1); border-color: var(--cream); }
     .btn-full { width: 100%; }
     .btn-pill { height: 40px; padding: 0 18px; border-radius: 100px; font-size: 14px; background: var(--gold); color: var(--green); }
-    .btn-pill:hover { background: var(--gold-hover); color: var(--cream); transform: translateY(-1px); }
+    .btn-pill:hover { background: #b8923f; color: var(--cream); transform: translateY(-1px); }
 
     /* ── Reveal on scroll ────────────────────────── */
-    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease-out, transform 0.5s ease-out; transition-delay: calc(var(--delay, 0) * 0.08s); }
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.55s ease-out, transform 0.55s ease-out; transition-delay: calc(var(--delay, 0) * 0.09s); }
     .reveal.visible { opacity: 1; transform: none; }
     .d1 { --delay: 1; } .d2 { --delay: 2; } .d3 { --delay: 3; } .d4 { --delay: 4; }
 
     /* ── Nav ─────────────────────────────────────── */
     .nav { position: fixed; inset: 0 0 auto 0; z-index: 1000; height: 60px; display: flex; align-items: center; background: transparent; transition: background 0.3s ease, backdrop-filter 0.3s ease, box-shadow 0.3s ease; }
-    .nav.scrolled { background: rgba(13,43,30,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 1px 0 rgba(253,250,245,0.06); }
+    .nav.scrolled { background: rgba(13,43,30,0.97); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: 0 1px 0 rgba(253,250,245,0.06); }
     .nav__inner { width: 100%; max-width: 1140px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--fd); font-weight: 600; font-size: 19px; color: var(--cream); letter-spacing: -0.01em; }
     .brand__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); display: inline-block; }
@@ -174,9 +176,9 @@
     .mobilemenu__cta .btn-gold { width: 100%; }
 
     /* ── Hero ────────────────────────────────────── */
-    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background: linear-gradient(160deg, rgba(13,43,30,0.80) 0%, rgba(27,67,50,0.60) 40%, rgba(13,43,30,0.85) 100%), var(--hero-img) 50% 30% / cover no-repeat scroll; }
+    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background-image: linear-gradient(160deg, rgba(13,43,30,0.80) 0%, rgba(27,67,50,0.60) 40%, rgba(13,43,30,0.85) 100%), var(--hero-img); background-size: cover; background-repeat: no-repeat; background-attachment: scroll; background-position: calc(50% + var(--px, 0px)) calc(25% + var(--py, 0px)); transition: background-position 0.1s ease-out; }
     .hero__inner { position: relative; z-index: 1; max-width: 680px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
-    .hero__badge { border: 1px solid rgba(200,169,110,0.5); background: rgba(200,169,110,0.1); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 12px; letter-spacing: 0.08em; color: var(--gold); }
+    .hero__badge { border: 1px solid var(--gold-border); background: var(--gold-light); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 12px; letter-spacing: 0.08em; color: var(--gold); }
     .hero__title { font-family: var(--fd); font-weight: 700; font-size: 38px; line-height: 1.08; letter-spacing: -0.03em; color: var(--cream); margin-top: 22px; }
     .hero__title em { font-style: normal; color: var(--gold); display: block; }
     .hero__sub { font-family: var(--fb); font-size: 15px; line-height: 1.65; color: rgba(253,250,245,0.72); max-width: 480px; margin-top: 20px; }
@@ -185,13 +187,14 @@
     .hero__secondary { display: inline-flex; align-items: center; justify-content: center; height: 44px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.65); transition: color 0.2s; }
     .hero__secondary:hover { color: var(--cream); text-decoration: underline; }
     .hero__trust { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.4); margin-top: 14px; }
-    .hero__scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: rgba(253,250,245,0.3); z-index: 1; transition: opacity 0.4s ease; }
+    .hero__scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: rgba(253,250,245,0.3); z-index: 1; opacity: 1; transition: opacity 0.4s ease; animation: fadeIn 0.6s ease-out 0.8s backwards; }
     .hero__scroll.hidden { opacity: 0; pointer-events: none; }
     .hero__scroll svg { width: 26px; height: 26px; animation: chevBounce 2s ease-in-out infinite; }
 
-    @keyframes heroReveal { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes heroUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes chevBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
-    .hr { opacity: 0; animation: heroReveal 0.6s ease-out forwards; }
+    .hr { opacity: 0; animation: heroUp 0.6s ease-out forwards; }
     .hr1 { animation-delay: 0.10s; } .hr2 { animation-delay: 0.25s; } .hr3 { animation-delay: 0.40s; } .hr4 { animation-delay: 0.55s; } .hr5 { animation-delay: 0.65s; }
 
     /* ── Proof bar ───────────────────────────────── */
@@ -209,7 +212,6 @@
     .sec--green { background: var(--green); }
     .sec--dark { background: var(--green-dark); }
     .sec-head { text-align: center; max-width: 680px; margin: 0 auto; }
-    .sec-head--left { text-align: left; margin: 0; }
     .sec-sub { font-family: var(--fb); font-size: 16px; color: var(--ink-soft); margin-top: 14px; line-height: 1.6; }
     .sec--green .sec-sub, .sec--dark .sec-sub { color: rgba(253,250,245,0.65); }
 
@@ -236,15 +238,33 @@
     .step__t { font-family: var(--fd); font-weight: 600; font-size: 19px; color: var(--cream); margin-top: 10px; }
     .step__d { font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.62); line-height: 1.6; margin-top: 4px; }
 
-    /* ── Features ────────────────────────────────── */
-    .features__h { font-size: 28px; color: var(--ink); }
-    .fgrid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
-    .fcard { position: relative; background: #FFFFFF; border: 1px solid rgba(27,67,50,0.08); border-left: 3px solid transparent; border-radius: 12px; padding: 24px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-left-color 0.2s ease; }
-    .fcard:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(27,67,50,0.1); border-left-color: var(--green); }
-    .fcard__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-    .fcard__icon svg { width: 22px; height: 22px; }
-    .fcard__name { font-family: var(--fd); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 8px; }
-    .fcard__desc { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+    /* ── Features (bento) ────────────────────────── */
+    .bento { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .bento-tile { position: relative; overflow: hidden; background: #FFFFFF; border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: box-shadow 0.25s ease; }
+    .bento-tile::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 50%), rgba(200,169,110,0.08), transparent 60%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; z-index: 0; }
+    .bento-tile:hover { box-shadow: 0 0 0 2px rgba(200,169,110,0.3); }
+    .bento-tile:hover::before { opacity: 1; }
+    .bento-tile > * { position: relative; z-index: 1; }
+    .bento__accent { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gold); border-radius: 16px 16px 0 0; z-index: 2; }
+    .bento__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+    .bento__icon svg { width: 22px; height: 22px; }
+    .bento__h { font-family: var(--fd); font-weight: 700; font-size: 20px; color: var(--ink); letter-spacing: -0.01em; }
+    .bento--gallery .bento__h { font-size: 24px; }
+    .bento__body { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin-top: 10px; }
+    .bento__pill { display: inline-flex; align-items: center; margin-top: 16px; padding: 4px 12px; border: 1px solid var(--gold-border); border-radius: 100px; font-family: var(--fb); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--gold); }
+    .bento--gallery .bento__body { max-width: 620px; }
+    .bento--social { background: var(--green); border-color: transparent; }
+    .bento--social .bento__h { color: var(--gold); }
+    .bento--social .bento__body { color: rgba(253,250,245,0.75); }
+    .bento__split { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    .bento__col-t { font-family: var(--fd); font-weight: 700; font-size: 18px; color: var(--ink); margin-top: 6px; }
+    .bento--everything { background: var(--cream-2); }
+    .bento__link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--gold); min-height: 44px; }
+    .bento__link:hover { color: #b8923f; }
+    .bento__live { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-family: var(--fb); font-size: 12px; font-weight: 600; color: var(--green-mid); }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-mid); position: relative; }
+    .pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--green-mid); animation: pulse 1.8s ease-out infinite; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(3.4); opacity: 0; } }
 
     /* ── Testimonials ────────────────────────────── */
     .testi__grid { max-width: 1000px; margin: 44px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
@@ -266,7 +286,7 @@
     .toolcard__name { font-family: var(--fd); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 8px; }
     .toolcard__desc { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
     .toolcard__link { font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--gold); margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
-    .toolcard__link:hover { color: var(--gold-hover); }
+    .toolcard__link:hover { color: #b8923f; }
 
     /* ── Comparison ──────────────────────────────── */
     .compare__scroll { margin-top: 44px; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(27,67,50,0.06); }
@@ -280,26 +300,42 @@
     .cmp__pk--head { color: var(--green); }
     .cmp__total td { font-weight: 800; color: var(--ink); background: var(--cream-2); }
 
-    /* ── Pricing (dark) ──────────────────────────── */
-    .pricing__h { font-size: 28px; color: var(--cream); margin-top: 14px; }
-    .toggle { display: inline-flex; margin: 28px auto 0; padding: 4px; background: rgba(255,255,255,0.08); border: 1px solid rgba(253,250,245,0.14); border-radius: 100px; gap: 4px; }
-    .toggle__btn { height: 38px; padding: 0 18px; border: none; background: transparent; border-radius: 100px; font-family: var(--fb); font-weight: 600; font-size: 14px; color: rgba(253,250,245,0.7); cursor: pointer; transition: color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-    .toggle__btn.active { background: rgba(255,255,255,0.14); color: var(--cream); }
-    .toggle__save { font-family: var(--fb); font-size: 11px; font-weight: 700; color: var(--green); background: var(--gold); padding: 2px 7px; border-radius: 100px; }
-    .plans { max-width: 720px; margin: 36px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
-    .plan { background: rgba(255,255,255,0.06); border-radius: 16px; padding: 28px; border: 1px solid rgba(253,250,245,0.12); }
-    .plan--featured { background: rgba(255,255,255,0.12); border: 2px solid var(--gold); }
-    .plan__tag { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); background: var(--gold); padding: 4px 12px; border-radius: 100px; margin-bottom: 16px; }
-    .plan__name { font-family: var(--fd); font-weight: 600; font-size: 15px; color: rgba(253,250,245,0.7); }
-    .plan__price { display: flex; align-items: baseline; gap: 4px; margin-top: 6px; }
-    .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 52px; line-height: 1; color: var(--cream); letter-spacing: -0.03em; }
-    .plan__per { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.7); }
-    .plan__bill { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.6); margin-top: 8px; }
-    .plan__list { margin: 22px 0 24px; display: flex; flex-direction: column; gap: 12px; }
-    .plan__li { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.9); }
-    .plan__li svg { flex-shrink: 0; width: 18px; height: 18px; color: var(--gold); margin-top: 2px; }
-    .pricing__reassure { text-align: center; font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.6); margin-top: 22px; }
-    .plan[hidden] { display: none; }
+    /* ── Pricing (dark, value anchor + cards) ────── */
+    .pricing__grid { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: start; }
+    .panchor__h { font-family: var(--fd); font-weight: 700; font-size: 32px; line-height: 1.12; letter-spacing: -0.02em; color: var(--cream); margin-top: 14px; }
+    .panchor__was { color: rgba(253,250,245,0.55); }
+    .panchor__now { color: var(--gold); }
+    .panchor__list { margin-top: 28px; display: none; }
+    .panchor__row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-family: var(--fb); font-size: 15px; }
+    .panchor__row span:first-child { color: rgba(253,250,245,0.7); }
+    .panchor__cost { color: rgba(253,250,245,0.35); text-decoration: line-through; }
+    .panchor__divider { height: 1px; background: rgba(255,255,255,0.16); margin: 8px 0; }
+    .panchor__row--total span { color: rgba(253,250,245,0.85); font-weight: 600; }
+    .panchor__row--total .panchor__cost { color: rgba(253,250,245,0.85); text-decoration: none; }
+    .panchor__row--pk { border-bottom: none; }
+    .panchor__row--pk span { color: var(--gold); font-weight: 700; }
+    .panchor__mobile { margin-top: 22px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.75); line-height: 1.6; }
+    .panchor__mobile strong { color: var(--gold); font-weight: 700; }
+
+    .plans { display: flex; flex-direction: column; gap: 18px; }
+    .plan-annual { background: rgba(255,255,255,0.08); border: 1px solid var(--gold-border); border-radius: 16px; padding: 28px; }
+    .plan-monthly { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; }
+    .plan__badge { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-border); padding: 4px 12px; border-radius: 100px; margin-bottom: 14px; }
+    .plan__price { display: flex; align-items: baseline; gap: 4px; }
+    .plan-annual .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 52px; line-height: 1; color: var(--gold); letter-spacing: -0.03em; }
+    .plan-monthly .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 36px; line-height: 1; color: rgba(253,250,245,0.9); letter-spacing: -0.02em; }
+    .plan__per { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.6); }
+    .plan-monthly .plan__per { font-size: 15px; }
+    .plan__bill { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.5); margin-top: 6px; }
+    .plan-monthly .plan__bill { font-size: 12px; }
+    .plan__sep { height: 1px; background: rgba(255,255,255,0.12); margin: 20px 0; }
+    .plan-monthly .plan__sep { margin: 14px 0; }
+    .plan__list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; }
+    .plan-monthly .plan__list { gap: 9px; margin-bottom: 16px; }
+    .plan__li { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.85); }
+    .plan-monthly .plan__li { font-size: 13px; }
+    .plan__li svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--gold); margin-top: 2px; }
+    .plan__sub { text-align: center; font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.4); margin-top: 12px; }
 
     /* ── FAQ ─────────────────────────────────────── */
     .faqs { max-width: 760px; margin: 44px auto 0; display: flex; flex-direction: column; gap: 12px; }
@@ -312,7 +348,7 @@
     .faq__a p { padding: 0 20px 22px; font-family: var(--fb); font-size: 15px; color: var(--ink-soft); line-height: 1.65; }
     .faq__more { text-align: center; margin-top: 28px; }
     .faq__more a { font-family: var(--fb); font-weight: 600; font-size: 15px; color: var(--green); }
-    .faq__more a:hover { color: var(--gold-hover); }
+    .faq__more a:hover { color: #b8923f; }
 
     /* ── Final CTA ───────────────────────────────── */
     .finale { text-align: center; }
@@ -334,7 +370,7 @@
     .footer__copy { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.45); }
     .footer__social { display: flex; gap: 16px; }
     .footer__social a { color: var(--gold); transition: color 0.2s; }
-    .footer__social a:hover { color: var(--gold-hover); }
+    .footer__social a:hover { color: #b8923f; }
 
     /* ── Sticky mobile CTA ───────────────────────── */
     #stickyCTA { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 990; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: rgba(13,43,30,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-top: 1px solid rgba(253,250,245,0.1); }
@@ -357,14 +393,15 @@
 
     /* ── Tablet ──────────────────────────────────── */
     @media (min-width: 640px) {
-      .fgrid { grid-template-columns: repeat(2, 1fr); }
       .tools__grid { grid-template-columns: repeat(2, 1fr); }
       .footer__top { grid-template-columns: 2fr 1fr 1fr 1fr; }
       .footer__brandcol { grid-column: auto; }
+      .bento__split { grid-template-columns: 1fr 1px 1fr; column-gap: 28px; }
+      .bento__divider { background: var(--border); }
     }
 
     /* ── Desktop ─────────────────────────────────── */
-    @media (min-width: 768px) {
+    @media (min-width: 900px) {
       .wrap { padding: 0 24px; }
       .nav { height: 64px; }
       .nav__inner { padding: 0 24px; }
@@ -381,12 +418,19 @@
       .problem__h { font-size: 40px; }
       .solution__h { font-size: 40px; }
       .features__h { font-size: 40px; }
-      .fgrid { grid-template-columns: repeat(4, 1fr); }
+      .bento { grid-template-columns: repeat(6, 1fr); }
+      .bento--gallery { grid-column: span 4; }
+      .bento--booking { grid-column: span 2; }
+      .bento--social { grid-column: span 2; }
+      .bento--contracts { grid-column: span 4; }
+      .bento--automation { grid-column: span 3; }
+      .bento--everything { grid-column: span 3; }
       .testi__grid { grid-template-columns: repeat(3, 1fr); }
       .tools__grid { grid-template-columns: repeat(4, 1fr); }
-      .pricing__h { font-size: 40px; }
-      .plans { grid-template-columns: repeat(2, 1fr); }
-      .plan[hidden] { display: block; }
+      .pricing__grid { grid-template-columns: 3fr 2fr; gap: 48px; }
+      .panchor__h { font-size: 44px; }
+      .panchor__list { display: block; }
+      .panchor__mobile { display: none; }
       .finale__h { font-size: 48px; }
       .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; }
     }
@@ -400,7 +444,10 @@
       html { scroll-behavior: auto; }
       .reveal { opacity: 1; transform: none; transition: none; }
       .hr { opacity: 1; animation: none; }
+      .hero__scroll { animation: none; }
       .hero__scroll svg { animation: none; }
+      .pulse-dot::after { animation: none; }
+      .hero { transition: none; }
     }
   </style>
   <noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
@@ -415,14 +462,14 @@
     <a href="/" class="brand" aria-label="PortalKit home"><span class="brand__dot"></span>PortalKit</a>
     <div class="nav__links">
       <a href="#features" class="nav__link">Features</a>
-      <a href="#how-it-works" class="nav__link">How It Works</a>
+      <a href="#how-it-works" class="nav__link">How it works</a>
       <a href="#pricing" class="nav__link">Pricing</a>
       <a href="#faq" class="nav__link">FAQ</a>
       <a href="/blog" class="nav__link">Blog</a>
     </div>
     <div class="nav__actions">
       <a href="/signin" class="nav__signin">Sign in</a>
-      <a href="/signup" class="btn btn-pill">Start 14-Day Free Trial</a>
+      <a href="/signup" class="btn btn-pill">Start free trial</a>
     </div>
     <button class="nav__burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="mobilemenu">
       <span></span><span></span><span></span>
@@ -432,16 +479,16 @@
 
 <div class="mobilemenu" id="mobilemenu">
   <a href="#features">Features</a>
-  <a href="#how-it-works">How It Works</a>
+  <a href="#how-it-works">How it works</a>
   <a href="#pricing">Pricing</a>
   <a href="#faq">FAQ</a>
   <a href="/blog">Blog</a>
   <a href="/signin">Sign in</a>
-  <div class="mobilemenu__cta"><a href="/signup" class="btn btn-gold">Start 14-Day Free Trial</a></div>
+  <div class="mobilemenu__cta"><a href="/signup" class="btn btn-gold">Start free trial</a></div>
 </div>
 
 <!-- ── Hero ────────────────────────────────────────── -->
-<header class="hero">
+<header class="hero" id="hero">
   <div class="hero__inner">
     <span class="hero__badge hr hr1">The client portal wedding photographers actually use</span>
     <h1 class="hero__title hr hr2">One link. <em>Your client has everything.</em></h1>
@@ -450,7 +497,7 @@
       <a href="/signup" class="btn btn-gold">Start 14-day free trial →</a>
       <a href="#how-it-works" class="hero__secondary">See how it works</a>
     </div>
-    <p class="hero__trust hr hr5">No credit card required · Cancel anytime</p>
+    <p class="hero__trust hr hr5">Card required · Cancel before day 14 and pay nothing</p>
   </div>
   <div class="hero__scroll" id="heroScroll" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -527,84 +574,69 @@
     </div>
   </section>
 
-  <!-- ── Features ──────────────────────────────────── -->
+  <!-- ── Features (bento) ──────────────────────────── -->
   <section class="sec sec--cream2" id="features">
     <div class="wrap">
       <div class="sec-head">
-        <span class="eyebrow reveal">Everything included</span>
-        <h2 class="sec-title features__h reveal d1">Everything a wedding photographer needs. In one place.</h2>
-        <p class="sec-sub reveal d2">14 tools. One subscription. One link per client.</p>
+        <span class="eyebrow reveal">Features</span>
+        <h2 class="sec-title features__h reveal d1">The tools pros are switching to.</h2>
+        <p class="sec-sub reveal d2">Every feature your clients experience. None they have to create an account for.</p>
       </div>
-      <div class="fgrid">
-        <div class="fcard reveal">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
-          <div class="fcard__name">Dashboard</div>
-          <p class="fcard__desc">See every active client, upcoming wedding, and pending task at a glance. Your entire business in one view.</p>
+
+      <div class="bento">
+        <!-- Large 1: Gallery Delivery -->
+        <div class="bento-tile bento--gallery reveal">
+          <span class="bento__accent"></span>
+          <h3 class="bento__h">Deliver galleries clients actually love</h3>
+          <p class="bento__body">Upload photos and videos. Set a password. Your client clicks one link in their portal, browses, favorites, and downloads. No Pixieset, no Dropbox, no expired links. Works on their phone at the wedding.</p>
+          <span class="bento__pill">Replaces Pixieset · Dropbox · WeTransfer</span>
         </div>
-        <div class="fcard reveal d1">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg></div>
-          <div class="fcard__name">Clients</div>
-          <p class="fcard__desc">A dedicated profile for every couple — contact info, wedding details, notes, and their full portal history.</p>
+
+        <!-- Small 1: Booking -->
+        <div class="bento-tile bento--booking reveal d1">
+          <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/><path d="M8 14l2.5 2.5L16 12"/></svg></div>
+          <h3 class="bento__h">Book clients on autopilot</h3>
+          <p class="bento__body">Public booking page. Clients pick a date, pick a package, pay a deposit. You wake up booked.</p>
+          <span class="bento__pill">Replaces Calendly</span>
         </div>
-        <div class="fcard reveal d2">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3a8.38 8.38 0 0 1 8.5 8.5z"/></svg></div>
-          <div class="fcard__name">Messages</div>
-          <p class="fcard__desc">Threaded client messaging built into the portal. No more lost emails or scattered text chains.</p>
+
+        <!-- Small 2: Social FOMO (dark) -->
+        <div class="bento-tile bento--social reveal">
+          <h3 class="bento__h">Your booking page drives traffic.</h3>
+          <p class="bento__body">Wedding photographers are using their PortalKit booking link in Instagram bio, TikTok, Pinterest, and their Google Business profile. When couples DM you, you send the link. They book themselves.</p>
         </div>
-        <div class="fcard reveal d3">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg></div>
-          <div class="fcard__name">Gallery Delivery</div>
-          <p class="fcard__desc">Upload photos and videos directly to the client portal. Password-protect, set download limits, deliver in one click. Replaces Pixieset and Pic-Time.</p>
+
+        <!-- Large 2: Contracts + Invoices -->
+        <div class="bento-tile bento--contracts reveal d1">
+          <div class="bento__split">
+            <div>
+              <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6H8z"/><path d="M14 3v6h6"/><path d="M8 16l2 2 4-4"/></svg></div>
+              <div class="bento__col-t">Contracts</div>
+              <p class="bento__body">E-signature, legally binding, stored in their portal. Send in 30 seconds.</p>
+              <span class="bento__pill">Replaces DocuSign</span>
+            </div>
+            <div class="bento__divider"></div>
+            <div>
+              <div class="bento__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg></div>
+              <div class="bento__col-t">Invoices</div>
+              <p class="bento__body">Stripe payments direct to your account. Deposit, balance, tips, travel fees. All in one place.</p>
+              <span class="bento__pill">Replaces QuickBooks</span>
+            </div>
+          </div>
         </div>
-        <div class="fcard reveal">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg></div>
-          <div class="fcard__name">Pipeline</div>
-          <p class="fcard__desc">Track every inquiry from first contact to booked. Kanban-style board so nothing falls through the cracks.</p>
+
+        <!-- Medium 1: Automation -->
+        <div class="bento-tile bento--automation reveal">
+          <h3 class="bento__h">Workflows that run while you shoot</h3>
+          <p class="bento__body">Welcome email when they book. Contract reminder 3 days before deadline. Balance due notice automatically. Review request the day after gallery delivery. Set it once, never touch it again.</p>
+          <span class="bento__live"><span class="pulse-dot"></span>Running now</span>
         </div>
-        <div class="fcard reveal d1">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/><path d="M8 14l2.5 2.5L16 12"/></svg></div>
-          <div class="fcard__name">Booking</div>
-          <p class="fcard__desc">A public booking page with your availability and session types. Clients self-book, you get notified. Replaces Calendly.</p>
-        </div>
-        <div class="fcard reveal d2">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3.5V6h6V3.5"/><path d="M9 11h6M9 15h4"/></svg></div>
-          <div class="fcard__name">Lead Form</div>
-          <p class="fcard__desc">An embeddable lead capture form for your website. Inquiries go straight into your pipeline automatically.</p>
-        </div>
-        <div class="fcard reveal d3">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M12 11v10"/></svg></div>
-          <div class="fcard__name">Proposals</div>
-          <p class="fcard__desc">Send Silver, Gold, Platinum package proposals with custom pricing. Clients pick a package and pay a deposit in one click.</p>
-        </div>
-        <div class="fcard reveal">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6H8z"/><path d="M14 3v6h6"/><path d="M8 16l2 2 4-4"/></svg></div>
-          <div class="fcard__name">Contracts</div>
-          <p class="fcard__desc">Legally binding e-signature contracts. Send, sign, and store — all inside the client portal. Replaces DocuSign.</p>
-        </div>
-        <div class="fcard reveal d1">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg></div>
-          <div class="fcard__name">Invoices</div>
-          <p class="fcard__desc">Create and send professional invoices. Clients pay via Stripe card or bank transfer. Replaces QuickBooks for photographers.</p>
-        </div>
-        <div class="fcard reveal d2">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5"/></svg></div>
-          <div class="fcard__name">Payment Links</div>
-          <p class="fcard__desc">Reusable tip links, travel fee links, and add-on payment links. Send a link and get paid in seconds.</p>
-        </div>
-        <div class="fcard reveal d3">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M8 12l1.5 1.5L12 11M8 17l1.5 1.5L12 16"/><path d="M15 12h2M15 17h2"/></svg></div>
-          <div class="fcard__name">Questionnaires</div>
-          <p class="fcard__desc">Custom wedding questionnaires that save your clients' answers to their portal. Never chase missing details before the wedding again.</p>
-        </div>
-        <div class="fcard reveal">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
-          <div class="fcard__name">Files</div>
-          <p class="fcard__desc">Share contracts, shot lists, vendor contacts, and any document securely. Clients download from their portal — no WeTransfer links that expire.</p>
-        </div>
-        <div class="fcard reveal d1">
-          <div class="fcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg></div>
-          <div class="fcard__name">Workflows</div>
-          <p class="fcard__desc">Automated sequences that fire welcome emails, contract reminders, balance due notices, and review requests. Set it once, runs forever.</p>
+
+        <!-- Medium 2: Everything else (curiosity) -->
+        <div class="bento-tile bento--everything reveal d1">
+          <h3 class="bento__h">Plus everything else you need</h3>
+          <p class="bento__body">Questionnaires, proposals, lead capture forms, client messaging, payment links, file sharing, pipeline tracking, and more. All inside one subscription.</p>
+          <a href="/signup" class="bento__link">Explore all features →</a>
         </div>
       </div>
     </div>
@@ -622,7 +654,7 @@
           <img class="tcard__img" src="https://images.pexels.com/photos/26654423/pexels-photo-26654423.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Wedding photographer capturing a couple in a forest">
           <div class="tcard__body">
             <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"I used to spend 45 minutes onboarding every new client. Now I send one link and everything — contract, invoice, questionnaire, gallery — lives in one place. It changed how my studio runs."</blockquote>
+            <blockquote class="tcard__quote">"I used to spend like 45 minutes just getting a new client set up across DocuSign and email and Dropbox. Now I literally send one link and they have everything. It changed how I run my whole business."</blockquote>
             <figcaption class="tcard__author">Sarah M. · Nashville, TN</figcaption>
           </div>
         </figure>
@@ -630,7 +662,7 @@
         <figure class="tcard tcard--bordered reveal d1">
           <div class="tcard__body">
             <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"Switched from HoneyBook the same week I found PortalKit. Got back $52 a month immediately, and my clients think I run a much bigger studio. The portal just looks more professional than anything I was using before."</blockquote>
+            <blockquote class="tcard__quote">"Switched from HoneyBook the week I found this. Got back $52 a month immediately. The shot list builder alone is worth it, HoneyBook dosnt even have that. My second shooters stopped texting me asking for the schedule."</blockquote>
             <figcaption class="tcard__author">Marcus T. · Austin, TX</figcaption>
           </div>
         </figure>
@@ -639,7 +671,7 @@
           <img class="tcard__img" src="https://images.pexels.com/photos/30930989/pexels-photo-30930989.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Winter wedding couple embracing outdoors">
           <div class="tcard__body">
             <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"My Google review count doubled in 2 months from the automated review requests alone. The gallery delivery, timeline approval, and vendor sheets are the details no other tool bothered to build for wedding photographers."</blockquote>
+            <blockquote class="tcard__quote">"The automated review request after gallery delivery is genius. My Google review count literally doubled in about 2 months without me doing anything. Clients just get the message and they leave the review."</blockquote>
             <figcaption class="tcard__author">Jennifer K. · Chicago, IL</figcaption>
           </div>
         </figure>
@@ -716,52 +748,61 @@
     </div>
   </section>
 
-  <!-- ── Pricing (dark) ────────────────────────────── -->
+  <!-- ── Pricing (value anchor + cards) ────────────── -->
   <section class="sec sec--green" id="pricing">
     <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow reveal">Pricing</span>
-        <h2 class="sec-title pricing__h reveal d1">Simple pricing. No surprises.</h2>
-        <div class="toggle reveal d1" role="tablist" aria-label="Choose billing period">
-          <button class="toggle__btn active" id="tgAnnual" role="tab" aria-selected="true">Annual <span class="toggle__save">Save $120</span></button>
-          <button class="toggle__btn" id="tgMonthly" role="tab" aria-selected="false">Monthly</button>
+      <div class="pricing__grid">
+        <div class="pricing__anchor reveal">
+          <span class="eyebrow">Pricing</span>
+          <h2 class="panchor__h">Replace <span class="panchor__was">$<span id="count87">87</span>/mo</span> of tools with <span class="panchor__now">$<span id="count29">29</span>/mo.</span></h2>
+          <div class="panchor__list">
+            <div class="panchor__row"><span>DocuSign</span><span class="panchor__cost">$15/mo</span></div>
+            <div class="panchor__row"><span>Pixieset</span><span class="panchor__cost">$20/mo</span></div>
+            <div class="panchor__row"><span>Calendly</span><span class="panchor__cost">$12/mo</span></div>
+            <div class="panchor__row"><span>Dropbox</span><span class="panchor__cost">$10/mo</span></div>
+            <div class="panchor__row"><span>HoneyBook</span><span class="panchor__cost">$30/mo</span></div>
+            <div class="panchor__divider"></div>
+            <div class="panchor__row panchor__row--total"><span>Total</span><span class="panchor__cost">$87/mo</span></div>
+            <div class="panchor__row panchor__row--pk"><span>PortalKit</span><span>$29/mo</span></div>
+          </div>
+          <p class="panchor__mobile">Replacing <strong>$87/mo</strong> of tools → <strong>$29/mo</strong> with PortalKit.</p>
+        </div>
+
+        <div class="plans reveal d1">
+          <div class="plan-annual">
+            <span class="plan__badge">Most popular</span>
+            <div class="plan__price"><span class="plan__amt">$29</span><span class="plan__per">/mo</span></div>
+            <p class="plan__bill">$348 billed annually</p>
+            <div class="plan__sep"></div>
+            <div class="plan__list">
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
+            </div>
+            <a href="/signup" class="btn btn-gold btn-full">Start 14-day free trial</a>
+            <p class="plan__sub">Card required · Cancel before day 14, pay nothing</p>
+          </div>
+
+          <div class="plan-monthly">
+            <div class="plan__price"><span class="plan__amt">$39</span><span class="plan__per">/mo</span></div>
+            <p class="plan__bill">Billed monthly</p>
+            <div class="plan__sep"></div>
+            <div class="plan__list">
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
+              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
+            </div>
+            <a href="/signup" class="btn btn-outline-light btn-full">Start 14-day free trial</a>
+            <p class="plan__sub">Card required · Cancel before day 14, pay nothing</p>
+          </div>
         </div>
       </div>
-
-      <div class="plans">
-        <div class="plan plan--featured reveal" id="planAnnual">
-          <span class="plan__tag">Best value</span>
-          <div class="plan__name">Annual</div>
-          <div class="plan__price"><span class="plan__amt">$29</span><span class="plan__per">/mo</span></div>
-          <p class="plan__bill">$348 billed annually</p>
-          <div class="plan__list">
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
-          </div>
-          <a href="/signup" class="btn btn-gold btn-full">Start 14-day free trial</a>
-        </div>
-
-        <div class="plan reveal d1" id="planMonthly" hidden>
-          <div class="plan__name">Monthly</div>
-          <div class="plan__price"><span class="plan__amt">$39</span><span class="plan__per">/mo</span></div>
-          <p class="plan__bill">Billed monthly, no commitment</p>
-          <div class="plan__list">
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-            <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
-          </div>
-          <a href="/signup" class="btn btn-outline-light btn-full">Start 14-day free trial</a>
-        </div>
-      </div>
-
-      <p class="pricing__reassure reveal">Cancel anytime. Your data is always yours.</p>
     </div>
   </section>
 
@@ -831,8 +872,8 @@
     <div class="wrap">
       <h2 class="finale__h reveal">Your next client deserves better.</h2>
       <p class="finale__sub reveal d1">Set up your first portal in 10 minutes.</p>
-      <div class="finale__btn reveal d2"><a href="/signup" class="btn btn-gold">Start free — no card required</a></div>
-      <p class="finale__note reveal d3">14-day free trial · $0 today · Cancel anytime</p>
+      <div class="finale__btn reveal d2"><a href="/signup" class="btn btn-gold">Start your free trial</a></div>
+      <p class="finale__note reveal d3">14-day free trial · Card required · Cancel before day 14 and pay nothing</p>
     </div>
   </section>
 
@@ -899,7 +940,7 @@
 <!-- Sticky mobile CTA -->
 <div id="stickyCTA">
   <a href="/signup" class="btn btn-gold">Start free trial</a>
-  <p>$0 today · Cancel anytime</p>
+  <p>Card required · Cancel before day 14, pay nothing</p>
 </div>
 
 <!-- Exit-intent lead capture -->
@@ -916,6 +957,8 @@
 </div>
 
 <script>
+  var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   // Sticky nav + hero chevron
   var nav = document.getElementById('nav');
   var heroScroll = document.getElementById('heroScroll');
@@ -945,6 +988,26 @@
     });
   });
 
+  // Hero mouse parallax (desktop, fine pointer only)
+  var hero = document.getElementById('hero');
+  if (hero && window.matchMedia('(pointer: fine)').matches && !prefersReduced) {
+    window.addEventListener('mousemove', function (e) {
+      var x = (e.clientX / window.innerWidth - 0.5) * 20;
+      var y = (e.clientY / window.innerHeight - 0.5) * 20;
+      hero.style.setProperty('--px', x + 'px');
+      hero.style.setProperty('--py', y + 'px');
+    }, { passive: true });
+  }
+
+  // Bento tile cursor glow
+  document.querySelectorAll('.bento-tile').forEach(function (tile) {
+    tile.addEventListener('mousemove', function (e) {
+      var rect = tile.getBoundingClientRect();
+      tile.style.setProperty('--mx', (e.clientX - rect.left) + 'px');
+      tile.style.setProperty('--my', (e.clientY - rect.top) + 'px');
+    });
+  });
+
   // Reveal on scroll (once)
   var reveals = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window) {
@@ -952,11 +1015,40 @@
       entries.forEach(function (e) {
         if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
       });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
     reveals.forEach(function (el) { io.observe(el); });
   } else {
     reveals.forEach(function (el) { el.classList.add('visible'); });
   }
+
+  // Pricing number counters
+  (function () {
+    var section = document.getElementById('pricing');
+    var el87 = document.getElementById('count87');
+    var el29 = document.getElementById('count29');
+    if (!section || !el87 || !el29) return;
+    function count(el, target, dur) {
+      if (prefersReduced) { el.textContent = target; return; }
+      var start = null;
+      el.textContent = '0';
+      function step(ts) {
+        if (!start) start = ts;
+        var p = Math.min((ts - start) / dur, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(eased * target);
+        if (p < 1) requestAnimationFrame(step); else el.textContent = target;
+      }
+      requestAnimationFrame(step);
+    }
+    if ('IntersectionObserver' in window) {
+      var pio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { count(el87, 87, 1200); count(el29, 29, 900); pio.disconnect(); }
+        });
+      }, { threshold: 0.3 });
+      pio.observe(section);
+    }
+  })();
 
   // FAQ accordion
   document.querySelectorAll('.faq__q').forEach(function (btn) {
@@ -969,27 +1061,6 @@
       });
       if (!open) { item.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
     });
-  });
-
-  // Pricing toggle
-  var tgA = document.getElementById('tgAnnual');
-  var tgM = document.getElementById('tgMonthly');
-  var pA = document.getElementById('planAnnual');
-  var pM = document.getElementById('planMonthly');
-  function isDesktop() { return window.matchMedia('(min-width: 768px)').matches; }
-  function setPlan(annual) {
-    tgA.classList.toggle('active', annual);
-    tgM.classList.toggle('active', !annual);
-    tgA.setAttribute('aria-selected', annual);
-    tgM.setAttribute('aria-selected', !annual);
-    if (isDesktop()) { pA.hidden = false; pM.hidden = false; }
-    else { pA.hidden = !annual; pM.hidden = annual; }
-  }
-  tgA.addEventListener('click', function () { setPlan(true); });
-  tgM.addEventListener('click', function () { setPlan(false); });
-  window.addEventListener('resize', function () {
-    if (isDesktop()) { pA.hidden = false; pM.hidden = false; }
-    else { setPlan(tgA.classList.contains('active')); }
   });
 
   // Sticky mobile CTA — after hero, hidden near pricing/footer
