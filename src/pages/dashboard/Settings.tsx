@@ -52,6 +52,7 @@ export default function Settings() {
   const [deleteComment, setDeleteComment] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   // Confirm modals
   const [showSwitchAnnualModal, setShowSwitchAnnualModal] = useState(false)
@@ -662,7 +663,7 @@ export default function Settings() {
               <p style={{ fontSize: 14, fontWeight: 600, color: '#DC2626', marginBottom: 4 }}>Delete Account</p>
               <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Permanently delete your account and all data. This cannot be undone.</p>
             </div>
-            <button onClick={() => { setDeleteModal(true); setDeleteReason(''); setDeleteComment(''); setDeleteErr('') }}
+            <button onClick={() => { setDeleteModal(true); setDeleteReason(''); setDeleteComment(''); setDeleteErr(''); setDeleteConfirmText('') }}
               style={{ fontSize: 13, fontWeight: 600, padding: '8px 16px', borderRadius: 8, cursor: 'pointer', color: '#DC2626', background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', flexShrink: 0 }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.12)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
@@ -743,17 +744,29 @@ export default function Settings() {
               This will permanently delete your account, all clients, portals, contracts, and invoices. This cannot be undone.
             </p>
 
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+              Type <span style={{ fontFamily: 'monospace', color: '#A32D2D' }}>DELETE</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              style={{ width: '100%', marginBottom: 14, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+            />
+
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => { setDeleteModal(false); setDeleteReason(''); setDeleteComment(''); setDeleteErr('') }}
+                onClick={() => { setDeleteModal(false); setDeleteReason(''); setDeleteComment(''); setDeleteErr(''); setDeleteConfirmText('') }}
                 style={{ flex: 1, padding: '10px', background: 'none', border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
               >
                 Keep My Account
               </button>
               <button
                 onClick={handleConfirmDelete}
-                disabled={deleteLoading}
-                style={{ flex: 1, padding: '10px', background: '#A32D2D', color: 'white', border: 'none', borderRadius: 8, cursor: deleteLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: deleteLoading ? 0.7 : 1 }}
+                disabled={deleteLoading || deleteConfirmText !== 'DELETE'}
+                style={{ flex: 1, padding: '10px', background: '#A32D2D', color: 'white', border: 'none', borderRadius: 8, cursor: (deleteLoading || deleteConfirmText !== 'DELETE') ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: (deleteLoading || deleteConfirmText !== 'DELETE') ? 0.5 : 1 }}
               >
                 {deleteLoading ? 'Deleting…' : 'Delete Account'}
               </button>

@@ -46,6 +46,11 @@ export default function ContentEngine() {
   // Outreach state
   const [showAllSends, setShowAllSends] = useState(false)
 
+  // Blog generation state
+  const [blogTopic, setBlogTopic] = useState('')
+  const [blogGenerating, setBlogGenerating] = useState(false)
+  const [blogResult, setBlogResult] = useState<{ title: string; url: string } | null>(null)
+
   const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
 
   const showToast = useCallback((msg: string, type: ToastType = 'success') => {
@@ -53,6 +58,27 @@ export default function ContentEngine() {
     setToasts(prev => [...prev, { id, msg, type }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
   }, [])
+
+  const generateBlogPost = useCallback(async () => {
+    setBlogGenerating(true)
+    setBlogResult(null)
+    try {
+      const res = await fetch(`${API_URL}/api/admin/blog/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
+        body: JSON.stringify({ topic: blogTopic.trim() || undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Generation failed')
+      setBlogResult({ title: data.title, url: data.url })
+      setBlogTopic('')
+      showToast('Blog post generated', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to generate blog post', 'error')
+    } finally {
+      setBlogGenerating(false)
+    }
+  }, [blogTopic, showToast])
 
   const fetchPosts = useCallback(async () => {
     setLoading(true)
@@ -502,6 +528,41 @@ export default function ContentEngine() {
       {/* Posts tab */}
       {activeTab === 'posts' && (
         <div>
+          <div style={{
+            background: 'white', borderRadius: 10, padding: 16, marginBottom: 16,
+            border: '1px solid var(--border-subtle)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+          }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>Generate Blog Post</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Writes a post with Claude Haiku and publishes it at <code>/blog/p/&lt;slug&gt;</code>. Leave the topic blank to let Claude pick one.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <input
+                type="text"
+                value={blogTopic}
+                onChange={e => setBlogTopic(e.target.value)}
+                placeholder="Optional topic (e.g. wedding day timeline tips)"
+                style={{ flex: 1, minWidth: 200, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', fontSize: 13, fontFamily: 'inherit' }}
+              />
+              <button
+                onClick={generateBlogPost}
+                disabled={blogGenerating}
+                style={{
+                  padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  color: '#1B4332', background: '#C9A84C', border: 'none',
+                  cursor: blogGenerating ? 'not-allowed' : 'pointer', opacity: blogGenerating ? 0.6 : 1, whiteSpace: 'nowrap' as const,
+                }}
+              >
+                {blogGenerating ? 'Generating…' : 'Generate Blog Post'}
+              </button>
+            </div>
+            {blogResult && (
+              <p style={{ fontSize: 13, color: 'var(--color-green, #1B4332)', margin: '12px 0 0' }}>
+                ✓ Published: <strong>{blogResult.title}</strong>{' · '}
+                <a href={blogResult.url} target="_blank" rel="noopener" style={{ color: '#1B4332', fontWeight: 600 }}>View post →</a>
+              </p>
+            )}
+          </div>
           {loading ? (
             <p style={{ color: '#6B7280', fontSize: 14 }}>Loading...</p>
           ) : posts.length === 0 ? (

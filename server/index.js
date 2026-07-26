@@ -745,6 +745,17 @@ async function initDb() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS blog_posts (
+          id SERIAL PRIMARY KEY,
+          slug TEXT UNIQUE NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          html_body TEXT NOT NULL,
+          post_date TEXT,
+          published BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS clients (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -3878,6 +3889,26 @@ async function runDailyJobs() {
   await sendTrialExpiryReminders().catch(e => console.error('Trial reminder error:', e.message))
   await sendOnboardingSequence().catch(e => console.error('Onboarding seq error:', e.message))
   await sendFreeToolNurtureEmails().catch(e => console.error('Tool nurture:', e.message))
+  // Inactive-account auto-purge — DRY RUN ONLY (logs candidates, deletes nothing).
+  // Runs once daily at 04:00 UTC. Flip to real deletion only after auditing these logs.
+  if (hour === 4) {
+    try {
+      const candidates = await pool.query(`
+        SELECT id, email, plan, created_at
+        FROM users
+        WHERE (plan IS NULL OR plan = 'free')
+          AND stripe_subscription_id IS NULL
+          AND created_at < NOW() - INTERVAL '90 days'
+        ORDER BY created_at ASC
+      `)
+      console.log(`🗑️ Auto-purge (dry run): ${candidates.rowCount} inactive free account(s) match purge criteria — NO data deleted.`)
+      for (const u of candidates.rows) {
+        console.log(`🗑️ Auto-purge (dry run): would purge ${u.email} (id ${u.id}, plan ${u.plan || 'null'}, created ${new Date(u.created_at).toISOString().slice(0, 10)})`)
+      }
+    } catch (e) {
+      console.error('Auto-purge dry run error:', e.message)
+    }
+  }
   if (hour === 13) {
     await sendColdOutreach().catch(e => console.error('Cold outreach:', e.message))
   }
@@ -4092,7 +4123,7 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
   }
 })
 
-app.delete('/api/users/me', requireAuth, async (req, res) => {
+async function deleteAccountHandler(req, res) {
   const { reason, comment } = req.body || {}
   try {
     await pool.query(
@@ -4124,13 +4155,32 @@ app.delete('/api/users/me', requireAuth, async (req, res) => {
       }).catch(err => console.error('Cancellation notification email failed:', err))
     }
 
+    // Cancel any active Stripe subscription so billing stops on deletion.
+    if (stripe && req.user.stripe_subscription_id) {
+      try {
+        await stripe.subscriptions.cancel(req.user.stripe_subscription_id)
+      } catch (e) {
+        console.error('Stripe subscription cancel on delete failed:', e.message)
+      }
+    }
+
+    // affiliate_conversions references users(id) without ON DELETE CASCADE,
+    // so its rows must be cleared first or the user delete will fail its FK.
+    // Every other user-owned table cascades from users(id).
+    await pool.query('DELETE FROM affiliate_conversions WHERE user_id=$1', [req.user.id]).catch(() => {})
+
     await pool.query('DELETE FROM users WHERE id=$1', [req.userId])
-    res.json({ success: true })
+    console.log('🗑️ Account deleted:', req.user.email)
+    res.json({ success: true, message: 'Account deleted' })
   } catch (err) {
     console.error('Delete account error:', err)
     res.status(500).json({ error: 'Server error' })
   }
-})
+}
+
+app.delete('/api/users/me', requireAuth, deleteAccountHandler)
+// Alias requested for GDPR deletion; same handler.
+app.delete('/api/user/account', requireAuth, deleteAccountHandler)
 
 // ── AUTH ──────────────────────────────────────────────────────
 
@@ -7946,6 +7996,181 @@ app.post('/api/admin/generate-content', async (req, res) => {
     await generateAndScheduleWeeklyContent()
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Blog (DB-backed dynamic posts) ────────────────────────────
+function slugify(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'post'
+}
+
+function renderBlogPost(post) {
+  const title = post.title || 'PortalKit Blog'
+  const description = (post.description || '').replace(/"/g, '&quot;')
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title} — PortalKit</title>
+  <meta name="description" content="${description}" />
+  <link rel="canonical" href="https://getportalkit.com/blog/p/${post.slug}" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #FDFAF5; color: #2D2416; line-height: 1.6; }
+    a { color: #1B4332; }
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; border-bottom: 1px solid #E8E2D9; background: #fff; }
+    .logo { font-size: 18px; font-weight: 800; color: #1B4332; letter-spacing: -0.03em; text-decoration: none; }
+    .nav-links { display: flex; gap: 24px; font-size: 14px; font-weight: 500; color: #6B5E4A; }
+    .nav-links a { color: #6B5E4A; text-decoration: none; }
+    .nav-links a:hover { color: #1B4332; }
+    .btn { display: inline-block; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; background: #1B4332; color: #FDFAF5; text-decoration: none; }
+    article { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
+    .breadcrumb { font-size: 13px; color: #9C8E7A; margin-bottom: 24px; }
+    .breadcrumb a { color: #6B5E4A; text-decoration: none; }
+    .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #1B4332; background: #E8F5EE; padding: 3px 8px; border-radius: 99px; display: inline-block; margin-bottom: 14px; }
+    h1 { font-size: clamp(24px, 4vw, 38px); font-weight: 800; color: #1A1208; letter-spacing: -0.03em; margin-bottom: 14px; line-height: 1.2; }
+    .meta { font-size: 13px; color: #9C8E7A; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #E8E2D9; }
+    h2 { font-size: 22px; font-weight: 700; color: #1B4332; margin: 36px 0 12px; }
+    h3 { font-size: 17px; font-weight: 700; color: #1A1208; margin: 24px 0 8px; }
+    p { font-size: 16px; color: #3D3226; margin-bottom: 16px; line-height: 1.75; }
+    ul, ol { padding-left: 24px; margin-bottom: 16px; }
+    li { font-size: 15px; color: #3D3226; margin-bottom: 6px; line-height: 1.6; }
+    .cta-box { background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%); border-radius: 16px; padding: 32px; margin: 40px 0; text-align: center; color: #FDFAF5; }
+    .cta-box h2 { color: #FDFAF5; margin: 0 0 10px; font-size: 22px; }
+    .cta-box p { color: rgba(253,250,245,0.8); margin-bottom: 20px; font-size: 15px; }
+    .cta-btn { display: inline-block; background: #FDFAF5; color: #1B4332; font-weight: 700; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-size: 15px; }
+    footer { text-align: center; padding: 32px 20px; border-top: 1px solid #E8E2D9; font-size: 13px; color: #9C8E7A; }
+    footer a { color: #6B5E4A; margin: 0 8px; text-decoration: none; }
+    @media (max-width: 600px) { nav { padding: 14px 20px; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="logo" href="/">PortalKit</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+    </div>
+    <a class="btn" href="/signup">Start Free Trial</a>
+  </nav>
+
+  <article>
+    <div class="breadcrumb"><a href="/blog">← Blog</a></div>
+    <span class="tag">Guide</span>
+    <h1>${title}</h1>
+    <div class="meta">${post.post_date || ''} · By the PortalKit Team</div>
+    ${post.html_body || ''}
+    <div class="cta-box">
+      <h2>Try PortalKit free for 14 days</h2>
+      <p>Client portals, contracts, invoicing, gallery delivery, shot lists, booking, and more — built for wedding photographers. From $29/month on the annual plan.</p>
+      <a class="cta-btn" href="/signup">Start your free trial →</a>
+    </div>
+  </article>
+
+  <footer>
+    <p style="margin-bottom:10px;">© 2026 PortalKit by Kilpian LLC</p>
+    <a href="/">Home</a>
+    <a href="/blog">Blog</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="mailto:hello@getportalkit.com">Contact</a>
+  </footer>
+</body>
+</html>`
+}
+
+// Public: list published DB-backed posts
+app.get('/api/blog', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, title, description, post_date, created_at FROM blog_posts WHERE published = TRUE ORDER BY created_at DESC'
+    )
+    res.json(rows)
+  } catch (err) {
+    console.error('Blog list error:', err.message)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Public: render a single DB-backed post as a full HTML page
+app.get('/api/blog/:slug', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM blog_posts WHERE slug = $1 AND published = TRUE',
+      [req.params.slug]
+    )
+    if (!rows.length) return res.status(404).send('Post not found')
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.send(renderBlogPost(rows[0]))
+  } catch (err) {
+    console.error('Blog render error:', err.message)
+    res.status(500).send('Server error')
+  }
+})
+
+// Admin: generate a blog post with Claude Haiku and store it in the DB
+app.post('/api/admin/blog/generate', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  if (!anthropic) return res.status(500).json({ error: 'Anthropic not configured' })
+  const { topic } = req.body || {}
+  try {
+    const system = `You are a content writer for PortalKit, a client portal for wedding photographers. Write a helpful blog post for wedding photographers. The post must:
+- Be 600-900 words
+- Have a clear headline (H1)
+- Have 3-4 subheadings (H2)
+- Be practical and specific, not generic
+- Mention PortalKit naturally 2-3 times as a solution
+- Price PortalKit at $29/month (annual plan)
+- Correctly state PortalKit includes gallery delivery (photographers upload photos and videos to the client portal; clients download from their private link)
+- Never say PortalKit lacks any feature it has
+- End with a CTA to try PortalKit free
+Return ONLY valid JSON (no markdown fences) with these exact fields:
+{ "title": string, "slug": string, "description": string, "html_body": string, "date": string }
+"html_body" must be HTML using <h2>, <p>, <ul>/<li> only (no <h1>, no <head>, no <html> — the H1 and page shell are added separately).`
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2500,
+      system,
+      messages: [{
+        role: 'user',
+        content: topic
+          ? `Write the blog post about this topic: ${topic}`
+          : 'Pick a strong, specific topic wedding photographers care about and write the post.',
+      }],
+    })
+
+    let raw = (msg.content?.[0]?.text || '').trim()
+    raw = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+    let data
+    try { data = JSON.parse(raw) } catch {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (!m) throw new Error('Model did not return valid JSON')
+      data = JSON.parse(m[0])
+    }
+
+    let slug = slugify(data.slug || data.title)
+    // Ensure slug uniqueness
+    const exists = await pool.query('SELECT 1 FROM blog_posts WHERE slug = $1', [slug])
+    if (exists.rowCount) slug = `${slug}-${Date.now().toString(36).slice(-4)}`
+
+    const postDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+    await pool.query(
+      'INSERT INTO blog_posts (slug, title, description, html_body, post_date) VALUES ($1,$2,$3,$4,$5)',
+      [slug, data.title || 'Untitled', data.description || '', data.html_body || '', postDate]
+    )
+    console.log('📝 Blog post generated:', slug)
+    res.json({ success: true, slug, title: data.title, url: `/blog/p/${slug}` })
+  } catch (err) {
+    console.error('Blog generate error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.post('/api/admin/generate-reddit-content', async (req, res) => {
