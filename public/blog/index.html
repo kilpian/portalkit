@@ -88,5 +88,58 @@
     <a href="/terms">Terms</a>
     <a href="mailto:hello@getportalkit.com">Contact</a>
   </footer>
+
+  <script>
+    // Pull DB-backed generated posts and show them above the static posts.
+    // Fails silently so the hand-written posts always render.
+    (function () {
+      var postsEl = document.querySelector('.posts');
+      if (!postsEl) return;
+      fetch('https://portalkit-production.up.railway.app/api/blog')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (posts) {
+          if (!Array.isArray(posts) || !posts.length) return;
+          var firstStatic = postsEl.firstElementChild;
+          posts.forEach(function (post) {
+            if (!post || !post.slug) return;
+            var a = document.createElement('a');
+            a.className = 'card';
+            a.href = '/blog/p/' + post.slug;
+
+            var tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.textContent = 'Article';
+            a.appendChild(tag);
+
+            var h2 = document.createElement('h2');
+            h2.textContent = post.title || 'Untitled';
+            a.appendChild(h2);
+
+            if (post.description) {
+              var p = document.createElement('p');
+              p.textContent = post.description;
+              a.appendChild(p);
+            }
+
+            var row = document.createElement('div');
+            row.setAttribute('style', 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;');
+            var meta = document.createElement('span');
+            meta.className = 'meta';
+            meta.textContent = post.post_date || '';
+            var more = document.createElement('span');
+            more.className = 'read-more';
+            more.textContent = 'Read article →';
+            row.appendChild(meta);
+            row.appendChild(more);
+            a.appendChild(row);
+
+            // Insert before the first static card so newest generated posts sit on top, newest first.
+            if (firstStatic) postsEl.insertBefore(a, firstStatic);
+            else postsEl.appendChild(a);
+          });
+        })
+        .catch(function () {});
+    })();
+  </script>
 </body>
 </html>
