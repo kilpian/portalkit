@@ -197,11 +197,15 @@
 
     /* ── Hero ────────────────────────────────────── */
     .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background-image: linear-gradient(160deg, rgba(13,43,30,0.55) 0%, rgba(27,67,50,0.35) 40%, rgba(13,43,30,0.65) 100%), var(--hero-img); background-size: cover; background-repeat: no-repeat; background-attachment: scroll; background-position: center 15%; }
+    @media (max-width: 767px) {
+      .hero { background-position: center 35%; }
+      .hero__sub { font-size: 16px; color: #FFFFFF; font-weight: 500; }
+    }
     .hero__inner { position: relative; z-index: 1; max-width: 680px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
-    .hero__badge { border: 1px solid var(--gold-border); background: var(--gold-light); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 12px; letter-spacing: 0.08em; color: var(--gold); }
+    .hero__badge { background: rgba(13,43,30,0.75); border: 1px solid rgba(200,169,110,0.5); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 13px; letter-spacing: 0.04em; color: var(--cream); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
     .hero__title { font-family: var(--fd); font-weight: 700; font-size: 48px; line-height: 1.08; letter-spacing: -0.03em; color: var(--cream); margin-top: 22px; text-shadow: 0 2px 20px rgba(0,0,0,0.4); }
     .hero__title em { font-style: normal; color: var(--gold); display: block; }
-    .hero__sub { font-family: var(--fb); font-size: 17px; line-height: 1.65; color: rgba(253,250,245,0.88); max-width: 480px; margin-top: 20px; text-shadow: 0 2px 20px rgba(0,0,0,0.4); }
+    .hero__sub { font-family: var(--fb); font-size: 17px; line-height: 1.6; color: rgba(253,250,245,0.95); font-weight: 500; max-width: 420px; margin-top: 20px; text-shadow: 0 1px 12px rgba(0,0,0,0.5); }
     .hero__cta { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin-top: 32px; width: 100%; max-width: 340px; }
     .hero__cta .btn-gold { width: 100%; }
     .hero__secondary { display: inline-flex; align-items: center; justify-content: center; height: 44px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.65); transition: color 0.2s; }
@@ -331,15 +335,21 @@
     .tcard__author { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 14px; }
 
     /* ── Free tools ──────────────────────────────── */
-    .tools__grid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 18px; }
-    .toolcard { display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid rgba(27,67,50,0.08); border-left: 3px solid transparent; border-radius: 12px; padding: 24px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-left-color 0.2s ease; }
-    .toolcard:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(27,67,50,0.1); border-left-color: var(--green); }
-    .toolcard__icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(27,67,50,0.06); color: var(--green); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-    .toolcard__icon svg { width: 22px; height: 22px; }
-    .toolcard__name { font-family: var(--fd); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 8px; }
-    .toolcard__desc { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
-    .toolcard__link { font-family: var(--fb); font-weight: 600; font-size: 14px; color: var(--gold); margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
-    .toolcard__link:hover { color: #b8923f; }
+    .tools__grid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .tool-card-new { display: flex; align-items: stretch; background: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid rgba(27,67,50,0.10); transition: transform 0.2s ease, box-shadow 0.2s ease; text-decoration: none; color: inherit; }
+    .tool-card-new:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(27,67,50,0.12); }
+    .tool-card-new__num { display: flex; align-items: center; justify-content: center; width: 80px; flex-shrink: 0; background: var(--green); font-family: var(--fd); font-weight: 700; font-size: 28px; color: var(--gold); letter-spacing: -0.02em; }
+    .tool-card-new__body { padding: 22px 24px; flex: 1; }
+    .tool-card-new__tag { display: inline-block; font-family: var(--fb); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+    .tool-card-new__name { font-family: var(--fd); font-weight: 700; font-size: 17px; color: var(--ink); margin-bottom: 6px; line-height: 1.2; }
+    .tool-card-new__desc { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 12px; }
+    .tool-card-new__link { font-family: var(--fb); font-weight: 700; font-size: 13px; color: var(--green); display: inline-flex; align-items: center; gap: 5px; min-height: 44px; }
+    .tool-card-new__link::after { content: '→'; transition: transform 0.2s ease; }
+    .tool-card-new:hover .tool-card-new__link::after { transform: translateX(4px); }
+    @media (max-width: 640px) {
+      .tool-card-new { flex-direction: column; }
+      .tool-card-new__num { width: 100%; height: 48px; font-size: 20px; flex-direction: row; gap: 10px; }
+    }
 
     /* ── Comparison ──────────────────────────────── */
     .compare__scroll { margin-top: 44px; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(27,67,50,0.06); }
@@ -470,7 +480,6 @@
       .solution__h { font-size: 40px; }
       .features__h { font-size: 40px; }
       .testi__grid { grid-template-columns: repeat(3, 1fr); }
-      .tools__grid { grid-template-columns: repeat(4, 1fr); }
       .pricing__grid { grid-template-columns: 3fr 2fr; gap: 48px; }
       .panchor__h { font-size: 44px; }
       .panchor__list { display: block; }
@@ -492,6 +501,8 @@
       .hero__scroll svg { animation: none; }
       .hero { transition: none; }
     }
+
+    @media (min-width: 900px) { .panchor__list { display: none; } }
   </style>
   <noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
 </head>
@@ -542,7 +553,6 @@
       <a href="/signup" class="btn btn-gold">Start 14-day free trial →</a>
       <a href="#how-it-works" class="hero__secondary">See how it works</a>
     </div>
-    <p class="hero__trust hr hr5">14-day free trial · Cancel anytime</p>
   </div>
   <div class="hero__scroll" id="heroScroll" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -815,30 +825,42 @@
         <p class="sec-sub reveal d2">No account needed. Use them now.</p>
       </div>
       <div class="tools__grid">
-        <div class="toolcard reveal">
-          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
-          <div class="toolcard__name">Shot List Generator</div>
-          <p class="toolcard__desc">Build a complete wedding day shot list in minutes. Covers getting ready, ceremony, family formals, and reception.</p>
-          <a href="/tools/shot-list" class="toolcard__link">Use free →</a>
-        </div>
-        <div class="toolcard reveal d1">
-          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
-          <div class="toolcard__name">Wedding Day Timeline Generator</div>
-          <p class="toolcard__desc">Create a realistic hour-by-hour wedding day timeline. Share it with the couple and their vendors instantly.</p>
-          <a href="/tools/timeline" class="toolcard__link">Use free →</a>
-        </div>
-        <div class="toolcard reveal d2">
-          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l1.5 1.5L13 11"/><path d="M16 12h1"/></svg></div>
-          <div class="toolcard__name">Client Questionnaire Builder</div>
-          <p class="toolcard__desc">Generate a wedding questionnaire that captures every detail you need. Send it to couples before the big day.</p>
-          <a href="/tools/questionnaire" class="toolcard__link">Use free →</a>
-        </div>
-        <div class="toolcard reveal d3">
-          <div class="toolcard__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg></div>
-          <div class="toolcard__name">Pricing Guide Generator</div>
-          <p class="toolcard__desc">Create a polished pricing guide for your packages. Present your rates with confidence and win more bookings.</p>
-          <a href="/tools/pricing-guide" class="toolcard__link">Use free →</a>
-        </div>
+        <a href="/tools/shot-list" class="tool-card-new">
+          <div class="tool-card-new__num">01</div>
+          <div class="tool-card-new__body">
+            <span class="tool-card-new__tag">Free forever</span>
+            <div class="tool-card-new__name">Shot List Generator</div>
+            <p class="tool-card-new__desc">Build a complete, professional shot list in under 2 minutes. Covers getting ready, ceremony, family formals, and reception. Share with your second shooter instantly.</p>
+            <span class="tool-card-new__link">Generate my shot list</span>
+          </div>
+        </a>
+        <a href="/tools/timeline" class="tool-card-new">
+          <div class="tool-card-new__num">02</div>
+          <div class="tool-card-new__body">
+            <span class="tool-card-new__tag">Free forever</span>
+            <div class="tool-card-new__name">Wedding Day Timeline</div>
+            <p class="tool-card-new__desc">Create a realistic hour-by-hour schedule your couples and vendors can follow. No more confusion on the wedding day.</p>
+            <span class="tool-card-new__link">Build my timeline</span>
+          </div>
+        </a>
+        <a href="/tools/questionnaire" class="tool-card-new">
+          <div class="tool-card-new__num">03</div>
+          <div class="tool-card-new__body">
+            <span class="tool-card-new__tag">Free forever</span>
+            <div class="tool-card-new__name">Client Questionnaire</div>
+            <p class="tool-card-new__desc">Generate a wedding questionnaire that captures every detail before the big day. Never chase missing information again.</p>
+            <span class="tool-card-new__link">Create my questionnaire</span>
+          </div>
+        </a>
+        <a href="/tools/pricing-guide" class="tool-card-new">
+          <div class="tool-card-new__num">04</div>
+          <div class="tool-card-new__body">
+            <span class="tool-card-new__tag">Free forever</span>
+            <div class="tool-card-new__name">Pricing Guide</div>
+            <p class="tool-card-new__desc">Build a polished pricing guide for your packages. Stop sending plain rate sheets. Present your value with confidence.</p>
+            <span class="tool-card-new__link">Build my pricing guide</span>
+          </div>
+        </a>
       </div>
     </div>
   </section>
