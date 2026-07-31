@@ -196,10 +196,12 @@
     .mobilemenu__cta .btn-gold { width: 100%; }
 
     /* ── Hero ────────────────────────────────────── */
-    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background-image: linear-gradient(160deg, rgba(13,43,30,0.55) 0%, rgba(27,67,50,0.35) 40%, rgba(13,43,30,0.65) 100%), var(--hero-img); background-size: cover; background-repeat: no-repeat; background-attachment: scroll; background-position: center 15%; }
+    .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 0 56px; background-image: linear-gradient(160deg, rgba(13,43,30,0.55) 0%, rgba(27,67,50,0.35) 40%, rgba(13,43,30,0.65) 100%), var(--hero-img); background-size: cover; background-repeat: no-repeat; background-attachment: scroll; background-position: 60% 40%; }
     @media (max-width: 767px) {
-      .hero { background-position: center 35%; }
       .hero__sub { font-size: 16px; color: #FFFFFF; font-weight: 500; }
+    }
+    @media (min-width: 768px) {
+      .hero { background-position: 30% 20%; }
     }
     .hero__inner { position: relative; z-index: 1; max-width: 680px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
     .hero__badge { background: rgba(13,43,30,0.75); border: 1px solid rgba(200,169,110,0.5); border-radius: 100px; padding: 6px 16px; font-family: var(--fb); font-size: 13px; letter-spacing: 0.04em; color: var(--cream); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
@@ -363,42 +365,32 @@
     .cmp__pk--head { color: var(--green); }
     .cmp__total td { font-weight: 800; color: var(--ink); background: var(--cream-2); }
 
-    /* ── Pricing (dark, value anchor + cards) ────── */
-    .pricing__grid { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: start; }
-    .panchor__h { font-family: var(--fd); font-weight: 700; font-size: 32px; line-height: 1.12; letter-spacing: -0.02em; color: var(--cream); margin-top: 14px; }
-    .panchor__was { color: rgba(253,250,245,0.55); }
-    .panchor__now { color: var(--gold); }
-    .panchor__list { margin-top: 28px; display: none; }
-    .panchor__row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-family: var(--fb); font-size: 15px; }
-    .panchor__row span:first-child { color: rgba(253,250,245,0.7); }
-    .panchor__cost { color: rgba(253,250,245,0.35); text-decoration: line-through; }
-    .panchor__divider { height: 1px; background: rgba(255,255,255,0.16); margin: 8px 0; }
-    .panchor__row--total span { color: rgba(253,250,245,0.85); font-weight: 600; }
-    .panchor__row--total .panchor__cost { color: rgba(253,250,245,0.85); text-decoration: none; }
-    .panchor__row--pk { border-bottom: none; }
-    .panchor__row--pk span { color: var(--gold); font-weight: 700; }
-    .panchor__mobile { margin-top: 22px; font-family: var(--fb); font-size: 15px; color: rgba(253,250,245,0.75); line-height: 1.6; }
-    .panchor__mobile strong { color: var(--gold); font-weight: 700; }
-
-    .plans { display: flex; flex-direction: column; gap: 18px; }
-    .plan-annual { background: rgba(255,255,255,0.08); border: 1px solid var(--gold-border); border-radius: 16px; padding: 28px; }
-    .plan-monthly { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; }
-    .plan__badge { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-border); padding: 4px 12px; border-radius: 100px; margin-bottom: 14px; }
-    .plan__price { display: flex; align-items: baseline; gap: 4px; }
-    .plan-annual .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 52px; line-height: 1; color: var(--gold); letter-spacing: -0.03em; }
-    .plan-monthly .plan__amt { font-family: var(--fd); font-weight: 700; font-size: 36px; line-height: 1; color: rgba(253,250,245,0.9); letter-spacing: -0.02em; }
-    .plan__per { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.6); }
-    .plan-monthly .plan__per { font-size: 15px; }
-    .plan__bill { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.5); margin-top: 6px; }
-    .plan-monthly .plan__bill { font-size: 12px; }
-    .plan__sep { height: 1px; background: rgba(255,255,255,0.12); margin: 20px 0; }
-    .plan-monthly .plan__sep { margin: 14px 0; }
-    .plan__list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; }
-    .plan-monthly .plan__list { gap: 9px; margin-bottom: 16px; }
-    .plan__li { display: flex; align-items: flex-start; gap: 10px; font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.85); }
-    .plan-monthly .plan__li { font-size: 13px; }
-    .plan__li svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--gold); margin-top: 2px; }
-    .plan__sub { text-align: center; font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.4); margin-top: 12px; }
+    /* ── Pricing (dark) ──────────────────────────── */
+    .pricing__h { font-family: var(--fd); font-weight: 700; font-size: 28px; line-height: 1.12; letter-spacing: -0.02em; color: var(--cream); margin-top: 14px; }
+    .pricing__sub { font-family: var(--fb); font-size: 17px; color: rgba(253,250,245,0.72); line-height: 1.65; max-width: 560px; margin: 16px auto 0; text-align: center; }
+    .pricing__counter { text-align: center; font-family: var(--fd); font-weight: 700; font-size: 22px; margin: 24px 0 40px; color: rgba(253,250,245,0.85); }
+    .panchor__was { color: rgba(253,250,245,0.45); text-decoration: line-through; }
+    .panchor__now { color: var(--gold); font-size: 28px; }
+    .plans-grid { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 760px; margin: 0 auto; }
+    .plan-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 32px 28px; display: flex; flex-direction: column; }
+    .plan-card--featured { background: rgba(255,255,255,0.12); border: 2px solid var(--gold); position: relative; }
+    .plan-card__badge { display: inline-block; font-family: var(--fb); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); background: var(--gold); padding: 4px 12px; border-radius: 100px; margin-bottom: 16px; align-self: flex-start; }
+    .plan-card__name { font-family: var(--fb); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(253,250,245,0.55); margin-bottom: 12px; }
+    .plan-card__price { display: flex; align-items: baseline; gap: 2px; margin-bottom: 6px; }
+    .plan-card__dollar { font-family: var(--fd); font-size: 24px; font-weight: 700; color: rgba(253,250,245,0.7); line-height: 1; }
+    .plan-card__amt { font-family: var(--fd); font-size: 64px; font-weight: 700; color: var(--cream); line-height: 1; letter-spacing: -0.04em; }
+    .plan-card--featured .plan-card__amt { color: var(--gold); }
+    .plan-card__amt--dim { color: rgba(253,250,245,0.75); font-size: 52px; }
+    .plan-card__per { font-family: var(--fb); font-size: 18px; color: rgba(253,250,245,0.5); font-weight: 400; }
+    .plan-card__bill { font-family: var(--fb); font-size: 13px; color: rgba(253,250,245,0.5); margin-bottom: 20px; }
+    .plan-card__divider { height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 20px; }
+    .plan-card__list { list-style: none; padding: 0; margin: 0 0 28px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .plan-card__list li { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.85); padding-left: 22px; position: relative; line-height: 1.4; }
+    .plan-card__list li::before { content: '✓'; position: absolute; left: 0; color: var(--gold); font-weight: 700; font-size: 13px; }
+    .plan-card__cta { display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 10px; font-family: var(--fb); font-weight: 700; font-size: 15px; text-decoration: none; text-align: center; transition: all 0.2s ease; margin-bottom: 12px; }
+    .plan-card__note { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.35); text-align: center; }
+    .pricing__reassure { text-align: center; font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.45); margin-top: 28px; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+    @media (min-width: 640px) { .plans-grid { grid-template-columns: repeat(2, 1fr); } }
 
     /* ── FAQ ─────────────────────────────────────── */
     .faqs { max-width: 760px; margin: 44px auto 0; display: flex; flex-direction: column; gap: 12px; }
@@ -480,10 +472,7 @@
       .solution__h { font-size: 40px; }
       .features__h { font-size: 40px; }
       .testi__grid { grid-template-columns: repeat(3, 1fr); }
-      .pricing__grid { grid-template-columns: 3fr 2fr; gap: 48px; }
-      .panchor__h { font-size: 44px; }
-      .panchor__list { display: block; }
-      .panchor__mobile { display: none; }
+      .pricing__h { font-size: 40px; }
       .finale__h { font-size: 48px; }
       .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; }
     }
@@ -502,7 +491,6 @@
       .hero { transition: none; }
     }
 
-    @media (min-width: 900px) { .panchor__list { display: none; } }
   </style>
   <noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
 </head>
@@ -900,58 +888,64 @@
   <!-- ── Pricing (value anchor + cards) ────────────── -->
   <section class="sec sec--green" id="pricing">
     <div class="wrap">
-      <div class="pricing__grid">
-        <div class="pricing__anchor reveal">
-          <span class="eyebrow">Pricing</span>
-          <h2 class="panchor__h">Replace <span class="panchor__was">$<span id="count87">87</span>/mo</span> of tools with <span class="panchor__now">$<span id="count29">29</span>/mo.</span></h2>
-          <div class="panchor__list">
-            <div class="panchor__row"><span>DocuSign</span><span class="panchor__cost">$15/mo</span></div>
-            <div class="panchor__row"><span>Pixieset</span><span class="panchor__cost">$20/mo</span></div>
-            <div class="panchor__row"><span>Calendly</span><span class="panchor__cost">$12/mo</span></div>
-            <div class="panchor__row"><span>Dropbox</span><span class="panchor__cost">$10/mo</span></div>
-            <div class="panchor__row"><span>HoneyBook</span><span class="panchor__cost">$30/mo</span></div>
-            <div class="panchor__divider"></div>
-            <div class="panchor__row panchor__row--total"><span>Total</span><span class="panchor__cost">$87/mo</span></div>
-            <div class="panchor__row panchor__row--pk"><span>PortalKit</span><span>$29/mo</span></div>
-          </div>
-          <p class="panchor__mobile">Replacing <strong>$87/mo</strong> of tools → <strong>$29/mo</strong> with PortalKit.</p>
-        </div>
-
-        <div class="plans reveal d1">
-          <div class="plan-annual">
-            <span class="plan__badge">Most popular</span>
-            <div class="plan__price"><span class="plan__amt">$29</span><span class="plan__per">/mo</span></div>
-            <p class="plan__bill">$348 billed annually</p>
-            <div class="plan__sep"></div>
-            <div class="plan__list">
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
-            </div>
-            <a href="/signup" class="btn btn-gold btn-full">Start 14-day free trial</a>
-            <p class="plan__sub">14-day free trial · Cancel anytime</p>
-          </div>
-
-          <div class="plan-monthly">
-            <div class="plan__price"><span class="plan__amt">$39</span><span class="plan__per">/mo</span></div>
-            <p class="plan__bill">Billed monthly</p>
-            <div class="plan__sep"></div>
-            <div class="plan__list">
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Unlimited client portals</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Contracts with e-signatures</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Invoices &amp; payments (Stripe)</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Photo &amp; video gallery delivery</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Shot lists, timelines &amp; booking</div>
-              <div class="plan__li"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-8"/></svg>Automated workflows &amp; review requests</div>
-            </div>
-            <a href="/signup" class="btn btn-outline-light btn-full">Start 14-day free trial</a>
-            <p class="plan__sub">14-day free trial · Cancel anytime</p>
-          </div>
-        </div>
+      <div class="sec-head reveal">
+        <span class="eyebrow">Pricing</span>
+        <h2 class="sec-title pricing__h">One price.<br>Everything included.</h2>
+        <p class="pricing__sub">Most photographers pay $87/month across 6 tools that don't talk to each other. PortalKit replaces all of them. You'll save money on day one.</p>
       </div>
+
+      <p class="pricing__counter reveal d1">
+        Replacing <span class="panchor__was">$<span id="count87">87</span>/mo</span> of tools with <span class="panchor__now">$<span id="count29">29</span>/mo.</span>
+      </p>
+
+      <div class="plans-grid reveal d2">
+
+        <div class="plan-card plan-card--featured">
+          <div class="plan-card__badge">Most popular</div>
+          <div class="plan-card__name">Annual plan</div>
+          <div class="plan-card__price">
+            <span class="plan-card__dollar">$</span>
+            <span class="plan-card__amt">29</span>
+            <span class="plan-card__per">/mo</span>
+          </div>
+          <p class="plan-card__bill">Billed $348/year · Save $120 vs monthly</p>
+          <div class="plan-card__divider"></div>
+          <ul class="plan-card__list">
+            <li>Unlimited client portals</li>
+            <li>Contracts with e-signatures</li>
+            <li>Invoices &amp; payments (Stripe)</li>
+            <li>Photo &amp; video gallery delivery</li>
+            <li>Shot lists, timelines &amp; booking</li>
+            <li>Automated workflows &amp; reviews</li>
+          </ul>
+          <a href="/signup" class="btn btn-gold btn-full plan-card__cta">Start 14-day free trial</a>
+          <p class="plan-card__note">14-day free trial · Cancel anytime</p>
+        </div>
+
+        <div class="plan-card">
+          <div class="plan-card__name">Monthly plan</div>
+          <div class="plan-card__price">
+            <span class="plan-card__dollar">$</span>
+            <span class="plan-card__amt plan-card__amt--dim">39</span>
+            <span class="plan-card__per">/mo</span>
+          </div>
+          <p class="plan-card__bill">Billed monthly · No commitment</p>
+          <div class="plan-card__divider"></div>
+          <ul class="plan-card__list">
+            <li>Everything in Annual plan</li>
+            <li>Unlimited client portals</li>
+            <li>Contracts with e-signatures</li>
+            <li>Invoices &amp; payments (Stripe)</li>
+            <li>Photo &amp; video gallery delivery</li>
+            <li>Shot lists, timelines &amp; booking</li>
+          </ul>
+          <a href="/signup" class="btn btn-outline-light btn-full plan-card__cta">Start 14-day free trial</a>
+          <p class="plan-card__note">14-day free trial · Cancel anytime</p>
+        </div>
+
+      </div>
+
+      <p class="pricing__reassure reveal d3">No setup fees. No contracts. No price increases. Your data is always yours — export anytime.</p>
     </div>
   </section>
 
