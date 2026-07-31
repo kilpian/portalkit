@@ -97,7 +97,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Preload above-the-fold hero image -->
-  <link rel="preload" as="image" href="https://images.pexels.com/photos/33123053/pexels-photo-33123053.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=1920&amp;q=80" fetchpriority="high">
+  <link rel="preload" as="image" href="https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=1920&amp;q=80" fetchpriority="high">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -199,12 +199,12 @@
     @media (max-width: 767px) {
       .hero__sub { font-size: 16px; color: #FFFFFF; font-weight: 500; }
     }
-    .hero__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 20%; z-index: 0; }
+    .hero__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 70%; z-index: 0; }
     @media (max-width: 767px) {
-      .hero__bg { object-position: center 15%; }
+      .hero__bg { object-position: center 65%; }
     }
     @media (min-width: 768px) {
-      .hero__bg { object-position: center 20%; }
+      .hero__bg { object-position: center 72%; }
     }
     .hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(160deg, rgba(13,43,30,0.62) 0%, rgba(27,67,50,0.42) 45%, rgba(13,43,30,0.72) 100%); z-index: 1; pointer-events: none; }
     .hero__inner { position: relative; z-index: 2; max-width: 680px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
@@ -538,7 +538,7 @@
 <!-- ── Hero ────────────────────────────────────────── -->
 <header class="hero" id="hero">
   <img
-    src="https://images.pexels.com/photos/33123053/pexels-photo-33123053.jpeg?auto=compress&cs=tinysrgb&w=1920&q=80"
+    src="https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?auto=compress&cs=tinysrgb&w=1920&q=80"
     alt=""
     aria-hidden="true"
     class="hero__bg"
@@ -549,7 +549,7 @@
   <div class="hero__inner">
     <span class="hero__badge hr hr1">The client portal wedding photographers actually use</span>
     <h1 class="hero__title hr hr2">One link. <em>Your client has everything.</em></h1>
-    <p class="hero__sub hr hr3">Contracts, invoices, shot lists, galleries — one private portal per client. Replace six tools with one link.</p>
+    <p class="hero__sub hr hr3">Contracts, invoices, shot lists, galleries — one private portal per client. Replace six tools or more at a fraction of the cost.</p>
     <div class="hero__cta hr hr4">
       <a href="/signup" class="btn btn-gold">Start 14-day free trial →</a>
       <a href="#how-it-works" class="hero__secondary">See how it works</a>
