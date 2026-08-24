@@ -4126,6 +4126,45 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
 async function deleteAccountHandler(req, res) {
   const { reason, comment } = req.body || {}
   try {
+    // Cancel any active Stripe subscription BEFORE deleting or logging
+    // anything. If this fails, the deletion must not proceed — otherwise
+    // the customer keeps being billed with no account left to manage it.
+    if (stripe && req.user.stripe_subscription_id) {
+      try {
+        await stripe.subscriptions.cancel(req.user.stripe_subscription_id)
+      } catch (e) {
+        console.error('🚨 CRITICAL: Stripe cancel failed during account deletion:', e.message)
+        if (resend) {
+          resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            reply_to: 'hello@getportalkit.com',
+            to: 'hello@getportalkit.com',
+            subject: `🚨 CRITICAL: Stripe cancel failed during account deletion — ${req.user.email}`,
+            html: emailTemplate({
+              title: 'Account deletion blocked — Stripe cancellation failed',
+              preheader: 'A customer tried to delete their account but Stripe subscription cancellation failed.',
+              body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Deletion blocked</h2>
+                <p style="font-size:14px;color:#374151;margin:0 0 12px;">The account was <strong>NOT</strong> deleted. Resolve the Stripe issue manually, then ask the customer to retry.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+                  <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${req.user.email}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${req.user.business_name || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${req.user.plan || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Stripe subscription ID:</td><td>${req.user.stripe_subscription_id}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Stripe error:</td><td>${e.message}</td></tr>
+                </table>`,
+              ctaText: null,
+              ctaUrl: null,
+              footerNote: 'PortalKit Internal Notification',
+            }),
+          }).catch(err => console.error('Admin alert email failed:', err))
+        }
+        return res.status(500).json({
+          error: 'We could not cancel your subscription. Your account has NOT been deleted. Please contact support so we can resolve this manually.'
+        })
+      }
+    }
+
+    // Only reaches here if Stripe cancellation succeeded or there was no subscription.
     await pool.query(
       'INSERT INTO cancellations (user_id, email, business_name, plan, reason, comment) VALUES ($1,$2,$3,$4,$5,$6)',
       [req.user.id, req.user.email, req.user.business_name, req.user.plan, reason || null, comment || null]
@@ -4153,15 +4192,6 @@ async function deleteAccountHandler(req, res) {
           footerNote: 'PortalKit Internal Notification',
         }),
       }).catch(err => console.error('Cancellation notification email failed:', err))
-    }
-
-    // Cancel any active Stripe subscription so billing stops on deletion.
-    if (stripe && req.user.stripe_subscription_id) {
-      try {
-        await stripe.subscriptions.cancel(req.user.stripe_subscription_id)
-      } catch (e) {
-        console.error('Stripe subscription cancel on delete failed:', e.message)
-      }
     }
 
     // affiliate_conversions references users(id) without ON DELETE CASCADE,
@@ -7989,6 +8019,63 @@ function checkAdminSecret(req, res) {
   if (!match) { res.status(401).json({ error: 'Unauthorized' }); return false }
   return true
 }
+
+// TEMPORARY one-time audit route — reports active Stripe subscriptions with
+// no matching users row (i.e. someone being billed with no account tied to
+// it). Read-only: does not cancel or modify anything. Safe to remove once
+// the audit has been run and any findings resolved manually.
+app.get('/api/admin/audit/orphaned-subscriptions', async (req, res) => {
+  if (!checkAdminSecret(req, res)) return
+  if (!stripe) return res.status(500).json({ error: 'Stripe not configured' })
+  try {
+    const subscriptions = []
+    let startingAfter
+    for (;;) {
+      const page = await stripe.subscriptions.list({
+        status: 'active',
+        limit: 100,
+        expand: ['data.customer'],
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      })
+      subscriptions.push(...page.data)
+      if (!page.has_more || page.data.length === 0) break
+      startingAfter = page.data[page.data.length - 1].id
+    }
+
+    const subIds = subscriptions.map(s => s.id)
+    const { rows } = subIds.length
+      ? await pool.query('SELECT stripe_subscription_id FROM users WHERE stripe_subscription_id = ANY($1::text[])', [subIds])
+      : { rows: [] }
+    const matchedIds = new Set(rows.map(r => r.stripe_subscription_id))
+
+    const orphaned = subscriptions
+      .filter(s => !matchedIds.has(s.id))
+      .map(s => {
+        const item = s.items?.data?.[0]
+        return {
+          subscription_id: s.id,
+          customer_id: typeof s.customer === 'string' ? s.customer : s.customer?.id,
+          customer_email: typeof s.customer === 'object' ? s.customer?.email : null,
+          status: s.status,
+          amount: item?.price?.unit_amount ?? null,
+          currency: item?.price?.currency ?? null,
+          interval: item?.price?.recurring?.interval ?? null,
+          created: s.created ? new Date(s.created * 1000).toISOString() : null,
+          current_period_end: s.current_period_end ? new Date(s.current_period_end * 1000).toISOString() : null,
+        }
+      })
+
+    console.log(`🔍 Orphaned subscription audit: ${subscriptions.length} active subs checked, ${orphaned.length} orphaned`)
+    res.json({
+      checked: subscriptions.length,
+      orphaned_count: orphaned.length,
+      orphaned,
+    })
+  } catch (err) {
+    console.error('Orphaned subscription audit error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 app.post('/api/admin/generate-content', async (req, res) => {
   if (!checkAdminSecret(req, res)) return
