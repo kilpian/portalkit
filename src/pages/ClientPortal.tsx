@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import posthog from 'posthog-js'
@@ -208,8 +208,8 @@ function PortalMessages({ token }: { token: string }) {
 }
 
 // ── Invoice Payment ───────────────────────────────────────────
-function CheckoutForm({ amount, brandColor, onSuccess }: {
-  amount: number; brandColor: string; onSuccess: () => void
+function CheckoutForm({ amount, brandColor, onSuccess, token, invoiceId }: {
+  amount: number; brandColor: string; onSuccess: () => void; token: string; invoiceId: number
 }) {
   const stripe = useStripe()
   const elements = useElements()
@@ -230,6 +230,17 @@ function CheckoutForm({ amount, brandColor, onSuccess }: {
       setError(stripeError.message || 'Payment failed')
       setPaying(false)
     } else if (paymentIntent?.status === 'succeeded') {
+      // Stripe confirms the charge succeeded, but that alone must not be
+      // treated as "paid" — mark it paid in our DB synchronously before
+      // showing any success state, rather than relying solely on the async
+      // webhook (which may be delayed, or in the past, misconfigured).
+      try {
+        await axios.post(`${API_URL}/api/portals/${token}/invoices/${invoiceId}/confirm`, {
+          payment_intent_id: paymentIntent.id,
+        })
+      } catch (confirmErr) {
+        console.error('Invoice confirm call failed (webhook will still process this payment):', confirmErr)
+      }
       setSucceeded(true)
       setTimeout(onSuccess, 1500)
     } else {
@@ -330,7 +341,7 @@ function PaymentModal({ invoice, token, photographerName, brandColor, onSuccess,
               },
             }}
           >
-            <CheckoutForm amount={invoice.amount_cents} brandColor={brandColor} onSuccess={onSuccess} />
+            <CheckoutForm amount={invoice.amount_cents} brandColor={brandColor} onSuccess={onSuccess} token={token} invoiceId={invoice.id} />
           </Elements>
         )}
 
@@ -1193,6 +1204,14 @@ export function ClientPortalContent({ token }: { token: string }) {
     document.head.appendChild(link)
   }, [])
 
+  // Re-fetches authoritative portal data from the server. Used after a
+  // payment succeeds so the invoice/gallery-lock state reflects the real DB
+  // write rather than an optimistic local patch.
+  const refetchPortal = useCallback(() => {
+    if (!token) return Promise.resolve()
+    return axios.get<PortalData>(`${API_URL}/api/portals/${token}`).then(r => setData(r.data))
+  }, [token])
+
   useEffect(() => {
     if (!token) { setError('Invalid portal link.'); setLoading(false); return }
     axios.get<PortalData>(`${API_URL}/api/portals/${token}`)
@@ -1539,11 +1558,10 @@ export function ClientPortalContent({ token }: { token: string }) {
             brandColor={data.photographer_brand_color || '#1B4332'}
             onClose={() => setPayingInvoice(null)}
             onSuccess={() => {
-              const paidId = payingInvoice.id
-              setData(prev => prev ? {
-                ...prev,
-                invoices: prev.invoices.map(inv => inv.id === paidId ? { ...inv, status: 'paid' } : inv),
-              } : prev)
+              // Refetch authoritative state from the server instead of
+              // optimistically patching local state — the invoice status,
+              // gallery unlock, etc. must reflect the real DB write.
+              refetchPortal()
               setPayingInvoice(null)
               setToast('✓ Payment received')
               setTimeout(() => setToast(''), 3000)

@@ -5,7 +5,7 @@ import { loadConnectAndInitialize } from '@stripe/connect-js'
 import type { StripeConnectInstance } from '@stripe/connect-js'
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
-import { trialDaysLeft } from '../../lib/plan'
+import { trialDaysLeft, isSubscribed } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
 import ConfirmModal from '../../components/ConfirmModal'
 
@@ -87,7 +87,9 @@ export default function Settings() {
   const [referralCopied, setReferralCopied] = useState(false)
 
   const days = trialDaysLeft(user)
-  const isActive = user?.plan === 'active'
+  // Uses the same resolved-status helper the rest of the app uses (lib/plan.ts),
+  // instead of a local re-implementation of the "is this plan active" check.
+  const isActive = isSubscribed(user ?? null)
 
   useEffect(() => {
     if (searchParams.get('upgraded') === 'true') {

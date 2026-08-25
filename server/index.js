@@ -10,6 +10,7 @@ import { createClerkClient, verifyToken } from '@clerk/backend'
 import Anthropic from '@anthropic-ai/sdk'
 import { Webhook } from 'svix'
 import multer from 'multer'
+import { fileTypeFromBuffer } from 'file-type'
 import fs from 'fs'
 import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -478,43 +479,8 @@ app.post('/api/stripe/webhook',
         }
         case 'payment_intent.succeeded': {
           const pi = event.data.object
-          const invoiceId = pi.metadata?.invoice_id
-          if (invoiceId) {
-            await pool.query(
-              "UPDATE invoices SET status='paid', paid_at=NOW() WHERE id=$1",
-              [invoiceId]
-            ).catch(e => console.error('Invoice paid update failed:', e))
-            console.log(`💳 Invoice ${invoiceId} marked as paid via Stripe Connect`)
-
-            const clientEmail = pi.metadata?.client_email
-            if (clientEmail && resend) {
-              try {
-                const amountStr = (pi.amount / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-                const photographerName = pi.metadata?.photographer_name || 'Your photographer'
-                const invoiceRef = pi.metadata?.invoice_number ? `Invoice #${pi.metadata.invoice_number}` : 'Photography services'
-                const portalToken = pi.metadata?.portal_token
-                const portalUrl = portalToken
-                  ? `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${portalToken}`
-                  : 'https://getportalkit.com'
-                await resend.emails.send({
-                  from: 'PortalKit <hello@mail.getportalkit.com>',
-                  reply_to: "hello@getportalkit.com",
-                  to: clientEmail,
-                  subject: `Payment receipt — ${amountStr}`,
-                  html: emailTemplate({
-                    title: 'Payment Receipt',
-                    preheader: `Your ${amountStr} payment to ${photographerName} was successful.`,
-                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment received ✓</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Thank you — your payment was successful. Here are the details for your records:</p><table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:14px;color:#2D2416;"><tr><td style="padding:6px 0;color:#9C8E7A;">Amount paid</td><td style="padding:6px 0;text-align:right;font-weight:700;">${amountStr}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Paid to</td><td style="padding:6px 0;text-align:right;">${photographerName}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Reference</td><td style="padding:6px 0;text-align:right;">${invoiceRef}</td></tr></table><p style="color:#9C8E7A;font-size:13px;margin:0;">This receipt confirms your payment. No further action is needed.</p>`,
-                    ctaText: 'View your portal →',
-                    ctaUrl: portalUrl,
-                    footerNote: 'PortalKit by Kilpian LLC',
-                  }),
-                })
-                console.log(`📧 Payment receipt sent to ${clientEmail}`)
-              } catch (emailErr) {
-                console.error('Receipt email failed:', emailErr)
-              }
-            }
+          if (pi.metadata?.invoice_id) {
+            await markInvoicePaidAndNotify(pi.metadata, pi.amount)
           }
           break
         }
@@ -724,6 +690,81 @@ function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) 
   </table>
 </body>
 </html>`
+}
+
+// Shared side-effects for a successfully paid invoice. Called from both the
+// Stripe webhook (payment_intent.succeeded) and the client-triggered confirm
+// route, so the DB write and notifications happen exactly once no matter
+// which path gets there first — idempotent via the `status != 'paid'` guard.
+async function markInvoicePaidAndNotify(meta, amountCents) {
+  const invoiceId = meta?.invoice_id
+  if (!invoiceId) return { updated: false }
+
+  const result = await pool.query(
+    "UPDATE invoices SET status='paid', paid_at=NOW() WHERE id=$1 AND status != 'paid' RETURNING *",
+    [invoiceId]
+  ).catch(e => { console.error('Invoice paid update failed:', e); return { rowCount: 0 } })
+
+  const amountStr = (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+
+  if (!result.rowCount) {
+    console.log(`💳 Connect payment processed: invoice ${invoiceId} already marked paid — skipping duplicate notification`)
+    return { updated: false }
+  }
+  console.log(`💳 Connect payment processed: invoice ${invoiceId} marked paid (${amountStr})`)
+
+  const photographerName = meta.photographer_name || 'Your photographer'
+  const invoiceRef = meta.invoice_number ? `Invoice #${meta.invoice_number}` : 'Photography services'
+  const portalUrl = meta.portal_token
+    ? `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${meta.portal_token}`
+    : 'https://getportalkit.com'
+
+  if (meta.client_email && resend) {
+    try {
+      await resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        reply_to: "hello@getportalkit.com",
+        to: meta.client_email,
+        subject: `Payment receipt — ${amountStr}`,
+        html: emailTemplate({
+          title: 'Payment Receipt',
+          preheader: `Your ${amountStr} payment to ${photographerName} was successful.`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment received ✓</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Thank you — your payment was successful. Here are the details for your records:</p><table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:14px;color:#2D2416;"><tr><td style="padding:6px 0;color:#9C8E7A;">Amount paid</td><td style="padding:6px 0;text-align:right;font-weight:700;">${amountStr}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Paid to</td><td style="padding:6px 0;text-align:right;">${photographerName}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Reference</td><td style="padding:6px 0;text-align:right;">${invoiceRef}</td></tr></table><p style="color:#9C8E7A;font-size:13px;margin:0;">This receipt confirms your payment. No further action is needed.</p>`,
+          ctaText: 'View your portal →',
+          ctaUrl: portalUrl,
+          footerNote: 'PortalKit by Kilpian LLC',
+        }),
+      })
+      console.log(`📧 Payment receipt sent to ${meta.client_email}`)
+    } catch (emailErr) {
+      console.error('Receipt email failed:', emailErr)
+    }
+  }
+
+  // Photographer-facing "you got paid" notification — did not exist before.
+  if (meta.photographer_email && resend) {
+    try {
+      await resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        reply_to: "hello@getportalkit.com",
+        to: meta.photographer_email,
+        subject: `You got paid — ${amountStr}${meta.client_name ? ` from ${meta.client_name}` : ''}`,
+        html: emailTemplate({
+          title: 'Payment Received',
+          preheader: `${meta.client_name || 'A client'} paid ${amountStr}.`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Payment received 💰</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${meta.client_name || 'Your client'}</strong> just paid <strong>${amountStr}</strong> on ${invoiceRef}. Funds are on their way to your connected Stripe account.</p>`,
+          ctaText: 'View in Dashboard →',
+          ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/invoices`,
+          footerNote: 'PortalKit · payments for photographers',
+        }),
+      })
+      console.log(`📧 Payment notification sent to photographer ${meta.photographer_email}`)
+    } catch (emailErr) {
+      console.error('Photographer payment notification failed:', emailErr)
+    }
+  }
+
+  return { updated: true, invoice: result.rows[0] }
 }
 
 async function initDb() {
@@ -3974,6 +4015,12 @@ async function requireAuth(req, res, next) {
 
       if (byEmail.rows.length > 0) {
         console.log('Re-signup detected - resetting account')
+        // Note: stripe_connect_id/stripe_connect_enabled are deliberately NOT
+        // reset here. That's the photographer's Stripe Connect payout
+        // destination (how they get paid by their clients) — it has no
+        // relationship to their PortalKit login/subscription being reset,
+        // and wiping it forced a brand-new Stripe Express account to be
+        // created on every re-signup instead of reusing the existing one.
         const updated = await pool.query(
           `UPDATE users SET
             clerk_id = $1,
@@ -3981,9 +4028,7 @@ async function requireAuth(req, res, next) {
             trial_ends_at = NOW() + INTERVAL '14 days',
             onboarding_completed = FALSE,
             stripe_subscription_id = NULL,
-            stripe_customer_id = NULL,
-            stripe_connect_id = NULL,
-            stripe_connect_enabled = FALSE
+            stripe_customer_id = NULL
           WHERE email = $2
           RETURNING *`,
           [clerkId, email]
@@ -4007,6 +4052,16 @@ async function requireAuth(req, res, next) {
         )
         console.log('New user created:', newUser.rows[0].id)
         req.user = newUser.rows[0]
+
+        // New accounts get the welcome/portal-link workflow ON by default —
+        // previously it defaulted off and was buried in Workflow settings,
+        // so new clients never got a welcome email unless the photographer
+        // found and enabled it manually. Scoped to signup time only, so
+        // existing accounts' saved preference is never touched retroactively.
+        await pool.query(
+          'INSERT INTO workflow_settings (user_id, send_welcome_on_client_create) VALUES ($1, TRUE) ON CONFLICT (user_id) DO NOTHING',
+          [newUser.rows[0].id]
+        ).catch(e => console.error('Default workflow_settings creation failed:', e.message))
       }
     }
 
@@ -4217,9 +4272,13 @@ app.delete('/api/user/account', requireAuth, deleteAccountHandler)
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   const user = req.user
   if (user.email === 'derauzoma@gmail.com') {
+    // 'active' (not 'pro') because every plan-gating check in the app —
+    // lib/plan.ts's isSubscribed()/hasAccess(), DashboardLayout's isPaid,
+    // and this same check used to live inline in Settings — only recognizes
+    // the literal string 'active'. 'pro' silently failed all of them.
     return res.json({
       ...user,
-      plan: 'pro',
+      plan: 'active',
       subscription_status: 'active',
       is_admin: true,
     })
@@ -4374,28 +4433,42 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
 
 // ── STRIPE CONNECT (Account Sessions approach — no OAuth client ID needed) ──
 
+// Reuses an existing Connect Express account if the user has one AND it
+// still verifies as valid on Stripe's side; only creates a new account when
+// there is none stored, or the stored one no longer resolves (deleted /
+// deauthorized). Prevents creating a duplicate Express account every time a
+// user goes through onboarding.
+async function getOrCreateConnectAccountId(user) {
+  if (user.stripe_connect_id) {
+    try {
+      await stripe.accounts.retrieve(user.stripe_connect_id)
+      return user.stripe_connect_id // still valid — reuse it
+    } catch (err) {
+      console.warn(`Stored Connect account ${user.stripe_connect_id} is no longer valid (${err.message}) — creating a replacement.`)
+    }
+  }
+
+  const account = await stripe.accounts.create({
+    type: 'express',
+    email: user.email,
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    business_type: 'individual',
+    metadata: { user_id: String(user.id) },
+  })
+  await pool.query(
+    'UPDATE users SET stripe_connect_id=$1, stripe_connect_enabled=FALSE WHERE id=$2',
+    [account.id, user.id]
+  )
+  return account.id
+}
+
 app.post('/api/stripe/connect/onboard', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
-    let connectId = req.user.stripe_connect_id
-
-    if (!connectId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        email: req.user.email,
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true },
-        },
-        business_type: 'individual',
-        metadata: { user_id: String(req.user.id) },
-      })
-      connectId = account.id
-      await pool.query(
-        'UPDATE users SET stripe_connect_id=$1 WHERE id=$2',
-        [connectId, req.user.id]
-      )
-    }
+    const connectId = await getOrCreateConnectAccountId(req.user)
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
     const accountLink = await stripe.accountLinks.create({
@@ -4455,26 +4528,10 @@ app.post('/api/stripe/connect/account-session', requireAuth, async (req, res) =>
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
 
-    if (!req.user.stripe_connect_id) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        email: req.user.email,
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true },
-        },
-        business_type: 'individual',
-        metadata: { user_id: String(req.user.id) },
-      })
-      await pool.query(
-        'UPDATE users SET stripe_connect_id=$1 WHERE id=$2',
-        [account.id, req.user.id]
-      )
-      req.user.stripe_connect_id = account.id
-    }
+    const connectId = await getOrCreateConnectAccountId(req.user)
 
     const accountSession = await stripe.accountSessions.create({
-      account: req.user.stripe_connect_id,
+      account: connectId,
       components: {
         account_onboarding: { enabled: true },
       },
@@ -4482,7 +4539,7 @@ app.post('/api/stripe/connect/account-session', requireAuth, async (req, res) =>
 
     res.json({
       client_secret: accountSession.client_secret,
-      account_id: req.user.stripe_connect_id,
+      account_id: connectId,
     })
   } catch (err) {
     console.error('Account session error:', { message: err.message, type: err.type, code: err.code })
@@ -4666,13 +4723,14 @@ app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res)
 
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   try {
-    const [clients, invoices, user, upcomingMain, upcomingEvents, stageCounts] = await Promise.all([
+    const [clients, invoices, user, upcomingMain, upcomingEvents, stageCounts, sessionTypeCount] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
       pool.query("SELECT COUNT(*) FROM invoices WHERE user_id=$1 AND status != 'paid'", [req.userId]),
       pool.query('SELECT plan, trial_ends_at FROM users WHERE id=$1', [req.userId]),
       pool.query(`SELECT COUNT(*) FROM clients WHERE user_id=$1 AND event_date >= CURRENT_DATE AND event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
       pool.query(`SELECT COUNT(*) FROM client_events ce JOIN clients c ON ce.client_id = c.id WHERE c.user_id=$1 AND ce.event_date >= CURRENT_DATE AND ce.event_date <= CURRENT_DATE + INTERVAL '30 days'`, [req.userId]),
       pool.query(`SELECT COALESCE(stage,'inquiry') as stage, COUNT(*) FROM clients WHERE user_id=$1 GROUP BY stage`, [req.userId]),
+      pool.query('SELECT COUNT(*) FROM session_types WHERE user_id=$1 AND active=TRUE', [req.userId]),
     ])
     const u = user.rows[0]
     let trial_days_remaining = null
@@ -4692,6 +4750,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       upcoming_events: parseInt(upcomingMain.rows[0].count, 10) + parseInt(upcomingEvents.rows[0].count, 10),
       trial_days_remaining,
       pipeline_counts,
+      session_type_count: parseInt(sessionTypeCount.rows[0].count, 10),
       _expired: !!req.trialExpired,
     })
   } catch (err) {
@@ -5220,12 +5279,33 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
 
 // ── FILES ─────────────────────────────────────────────────────
 
+// Authoritative allowlists, keyed by the file's REAL content-sniffed mime
+// type (from file-type's magic-byte detection), never the client-supplied
+// Content-Type — that field is just a string in the multipart request and
+// is trivial to spoof (rename an .exe to photo.jpg and claim image/jpeg).
+const GALLERY_ALLOWED_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+  'video/mp4', 'video/quicktime',
+])
+const FILES_ALLOWED_MIMES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      // .xlsx
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/x-cfb', // legacy .doc/.xls/.ppt — all share the same OLE compound-file signature
+])
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'video/mp4', 'video/quicktime', 'application/zip']
-    cb(null, allowed.includes(file.mimetype))
+    // Cheap first-pass rejection on the claimed Content-Type, purely to
+    // avoid buffering obviously-wrong uploads. NOT the security boundary —
+    // the real check is the post-buffer content sniff below, since this
+    // client-supplied mimetype can't be trusted.
+    const claimed = new Set([...GALLERY_ALLOWED_MIMES, ...FILES_ALLOWED_MIMES, 'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint'])
+    cb(null, claimed.has(file.mimetype))
   },
 })
 
@@ -5266,6 +5346,21 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
       if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
     }
 
+    // Authoritative validation: sniff the real file content (magic bytes),
+    // never trust the client-supplied mimetype/extension. A gallery upload
+    // (has gallery_id) must be a real photo/video; a plain Files upload
+    // must be a real document. Anything else, or anything unrecognizable, is rejected.
+    const detected = await fileTypeFromBuffer(req.file.buffer)
+    const detectedMime = detected?.mime
+    const targetAllowlist = gallery_id ? GALLERY_ALLOWED_MIMES : FILES_ALLOWED_MIMES
+    if (!detectedMime || !targetAllowlist.has(detectedMime)) {
+      return res.status(400).json({
+        error: gallery_id
+          ? 'Gallery uploads must be a real JPG, PNG, HEIC, WEBP, MP4, or MOV file.'
+          : 'File uploads must be a real PDF, DOC, DOCX, XLSX, or PPTX file.',
+      })
+    }
+
     let storageKey = null
     let storageUrl = null
 
@@ -5275,7 +5370,7 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
         Bucket: R2_BUCKET,
         Key: storageKey,
         Body: req.file.buffer,
-        ContentType: req.file.mimetype,
+        ContentType: detectedMime,
         ContentDisposition: `attachment; filename="${req.file.originalname}"`,
       }))
       storageUrl = await generateDownloadUrl(storageKey)
@@ -5286,7 +5381,7 @@ app.post('/api/files/upload', requireAuth, upload.single('file'), async (req, re
     const result = await pool.query(
       `INSERT INTO files (user_id, client_id, gallery_id, filename, original_name, mime_type, size_bytes, storage_url, storage_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [req.userId, client_id || null, gallery_id || null, storageKey, req.file.originalname, req.file.mimetype, req.file.size, storageUrl, storageKey]
+      [req.userId, client_id || null, gallery_id || null, storageKey, req.file.originalname, detectedMime, req.file.size, storageUrl, storageKey]
     )
     res.json(result.rows[0])
   } catch (err) {
@@ -6042,7 +6137,7 @@ app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
 
     const clientResult = await pool.query(
       `SELECT c.*, u.stripe_connect_id, u.stripe_connect_enabled,
-              u.business_name as photographer_business, u.full_name as photographer_name
+              u.business_name as photographer_business, u.full_name as photographer_name, u.email as photographer_email
        FROM clients c JOIN users u ON u.id = c.user_id
        WHERE c.portal_token=$1`,
       [req.params.token]
@@ -6081,8 +6176,10 @@ app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
         client_id: String(client.id),
         invoice_number: invoice.invoice_number || '',
         client_email: client.email || '',
+        client_name: client.name || '',
         portal_token: req.params.token,
         photographer_name: client.photographer_business || client.photographer_name || 'Your photographer',
+        photographer_email: client.photographer_email || '',
       },
     }, { idempotencyKey })
 
@@ -6092,6 +6189,34 @@ app.post('/api/portals/:token/invoices/:invoiceId/pay', async (req, res) => {
     })
   } catch (err) {
     console.error('Portal payment intent error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Synchronous confirmation the client calls right after stripe.confirmPayment()
+// resolves. This is the fix for payments appearing "Paid" in the UI without
+// a real DB write: we verify the PaymentIntent server-side with Stripe (never
+// trust client-supplied status) and mark the invoice paid BEFORE the frontend
+// is allowed to show the success state. Idempotent — safe if the webhook
+// (the async source of truth) also fires for the same payment.
+app.post('/api/portals/:token/invoices/:invoiceId/confirm', async (req, res) => {
+  const { payment_intent_id } = req.body || {}
+  if (!payment_intent_id) return res.status(400).json({ error: 'Missing payment_intent_id' })
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+
+    const pi = await stripe.paymentIntents.retrieve(payment_intent_id)
+    if (pi.status !== 'succeeded') {
+      return res.status(400).json({ error: 'Payment has not succeeded yet.' })
+    }
+    if (pi.metadata?.invoice_id !== String(req.params.invoiceId) || pi.metadata?.portal_token !== req.params.token) {
+      return res.status(403).json({ error: 'This payment does not match the requested invoice.' })
+    }
+
+    const { updated, invoice } = await markInvoicePaidAndNotify(pi.metadata, pi.amount)
+    res.json({ success: true, alreadyProcessed: !updated, invoice: invoice || null })
+  } catch (err) {
+    console.error('Invoice payment confirm error:', err)
     res.status(500).json({ error: err.message })
   }
 })

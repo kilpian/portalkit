@@ -79,7 +79,11 @@ export default function GalleryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const imageFiles = (activeGallery?.files ?? []).filter(f => f.mime_type?.startsWith('image/'))
+  // Includes videos too — this used to filter to images only, which made
+  // uploaded videos vanish from the admin gallery view entirely even though
+  // they were correctly stored and tagged with this gallery's id.
+  const imageFiles = activeGallery?.files ?? []
+  const isVideoFile = (mime: string | null | undefined) => !!mime?.startsWith('video/')
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -410,7 +414,7 @@ export default function GalleryPage() {
 
   // ── GALLERY VIEW ──────────────────────────────────────────────
   if (!activeGallery) return null
-  const photos = activeGallery.files.filter(f => f.mime_type?.startsWith('image/'))
+  const photos = activeGallery.files
 
   return (
     <div style={{ padding: '28px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
@@ -478,7 +482,14 @@ export default function GalleryPage() {
               className="gallery-thumb"
               onClick={() => deleteFileId !== f.id && setLightboxIndex(idx)}
             >
-              <img src={f.storage_url} alt={f.original_name} style={{ width: '100%', display: 'block', borderRadius: 8 }} loading="lazy" />
+              {isVideoFile(f.mime_type) ? (
+                <div style={{ width: '100%', background: '#000', borderRadius: 8, position: 'relative', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  <video src={f.storage_url} style={{ width: '100%', borderRadius: 8, objectFit: 'cover', maxHeight: 200 }} preload="metadata" muted />
+                  <div style={{ position: 'absolute', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, pointerEvents: 'none' }}>▶</div>
+                </div>
+              ) : (
+                <img src={f.storage_url} alt={f.original_name} style={{ width: '100%', display: 'block', borderRadius: 8 }} loading="lazy" />
+              )}
               <div className="gallery-thumb-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', transition: 'background 0.15s', borderRadius: 8 }}>
                 {activeGallery && f.id === activeGallery.cover_file_id && (
                   <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(201,168,76,0.9)', borderRadius: 4, padding: '2px 6px', fontSize: 11, color: '#fff', fontWeight: 700, pointerEvents: 'none', zIndex: 1 }}>★ Cover</div>
@@ -518,7 +529,11 @@ export default function GalleryPage() {
             <button onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1) }} style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
           )}
           <button onClick={() => setLightboxIndex(null)} style={{ position: 'fixed', top: 16, right: 16, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-          <img onClick={e => e.stopPropagation()} src={photos[lightboxIndex].storage_url} alt={photos[lightboxIndex].original_name} style={{ maxWidth: '92vw', maxHeight: '80vh', borderRadius: 8, objectFit: 'contain', display: 'block' }} />
+          {isVideoFile(photos[lightboxIndex].mime_type) ? (
+            <video onClick={e => e.stopPropagation()} src={photos[lightboxIndex].storage_url} controls autoPlay style={{ maxWidth: '92vw', maxHeight: '80vh', borderRadius: 8, display: 'block' }} />
+          ) : (
+            <img onClick={e => e.stopPropagation()} src={photos[lightboxIndex].storage_url} alt={photos[lightboxIndex].original_name} style={{ maxWidth: '92vw', maxHeight: '80vh', borderRadius: 8, objectFit: 'contain', display: 'block' }} />
+          )}
           <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
             <span>{photos[lightboxIndex].original_name}</span>
             <span style={{ opacity: 0.4 }}>·</span>

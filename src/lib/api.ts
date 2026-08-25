@@ -14,6 +14,7 @@ export interface DashboardStats {
   upcoming_events: number
   trial_days_remaining: number | null
   pipeline_counts?: { inquiry: number; consultation: number; booked: number; in_progress: number; delivered: number; archived: number }
+  session_type_count?: number
   _expired?: boolean
 }
 

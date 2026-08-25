@@ -5,9 +5,12 @@ export default function SignInPage() {
   return (
     <div className="auth-page" style={{ background: '#FDFAF5', minHeight: '100vh' }}>
       <header className="auth-header">
-        <Link to="/" className="auth-logo">
+        {/* Real browser navigation, not a router Link — "/" is the static
+            marketing homepage (public/index.html), not an SPA route. A
+            client-side Link renders the SPA's blank Landing stub instead. */}
+        <a href="/" className="auth-logo">
           Portal<em>Kit</em>
-        </Link>
+        </a>
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-dim)' }}>
           No account?{' '}
           <Link to="/signup" style={{ color: 'var(--green)', fontWeight: 600 }}>

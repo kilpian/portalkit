@@ -234,6 +234,22 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {!loading && stats?.session_type_count === 0 && (
+        <Link
+          to="/dashboard/booking"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+            background: 'var(--color-green-bg, #EAF3DE)', border: '1px solid var(--color-green-border, #BFE0A8)',
+            borderRadius: 10, padding: '14px 18px', marginBottom: 24, textDecoration: 'none',
+          }}
+        >
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)', margin: 0 }}>📅 Your booking page isn't live yet</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>Add a session type so clients can book you directly — right now your public booking page has nothing to show.</p>
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap' }}>Add session type →</span>
+        </Link>
+      )}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
