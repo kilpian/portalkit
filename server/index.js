@@ -259,17 +259,19 @@ app.post('/api/stripe/webhook',
         }
         case 'invoice.payment_succeeded': {
           const inv = event.data.object
-          console.log('💳 Webhook: invoice.payment_succeeded for customer:', inv.customer)
+          console.log('💳 Webhook: invoice.payment_succeeded for customer:', inv.customer, 'amount_paid:', inv.amount_paid, 'billing_reason:', inv.billing_reason)
           await pool.query(
             'UPDATE users SET plan=$1 WHERE stripe_customer_id=$2',
             ['active', inv.customer]
           ).catch(() => {})
+
+          const userResult = await pool.query(
+            'SELECT id, email, full_name, booking_username FROM users WHERE stripe_customer_id=$1',
+            [inv.customer]
+          )
+          const u = userResult.rows[0]
+
           if (inv.billing_reason === 'subscription_create') {
-            const userResult = await pool.query(
-              'SELECT id, email, full_name, booking_username FROM users WHERE stripe_customer_id=$1',
-              [inv.customer]
-            )
-            const u = userResult.rows[0]
             if (u && resend) {
               try {
                 const firstName = u.full_name?.split(' ')[0] || 'there'
@@ -305,62 +307,6 @@ app.post('/api/stripe/webhook',
               }
             }
 
-            // Handle referral conversion — if this user was referred, reward referrer
-            if (u) {
-              try {
-                const referralRow = await pool.query(
-                  `SELECT r.*, ref_user.email as referrer_email, ref_user.full_name as referrer_name, ref_user.stripe_subscription_id
-                   FROM referrals r
-                   JOIN users ref_user ON ref_user.id = r.referrer_user_id
-                   WHERE r.referred_user_id = $1 AND r.status != 'converted'`,
-                  [u.id]
-                )
-                if (referralRow.rows.length > 0) {
-                  const ref = referralRow.rows[0]
-                  await pool.query(
-                    `UPDATE referrals SET status='converted', reward_given_at=NOW() WHERE id=$1`,
-                    [ref.id]
-                  )
-                  // Extend referrer's subscription by 30 days
-                  if (stripe && ref.stripe_subscription_id) {
-                    try {
-                      const sub = await stripe.subscriptions.retrieve(ref.stripe_subscription_id)
-                      const currentPeriodEnd = sub.current_period_end
-                      await stripe.subscriptions.update(ref.stripe_subscription_id, {
-                        trial_end: currentPeriodEnd + (30 * 24 * 60 * 60),
-                      })
-                    } catch (stripeErr) {
-                      console.error('Referral subscription extend failed:', stripeErr.message)
-                    }
-                  }
-                  // Send referrer a "you earned a free month" email
-                  if (resend && ref.referrer_email) {
-                    const refFirstName = ref.referrer_name?.split(' ')[0] || 'there'
-                    await resend.emails.send({
-                      from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
-                      reply_to: "hello@getportalkit.com",
-                      to: ref.referrer_email,
-                      subject: "You just earned a free month of PortalKit! 🎉",
-                      html: emailTemplate({
-                        title: "You earned a free month!",
-                        preheader: "Someone you referred just subscribed to PortalKit.",
-                        body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 12px;">You earned a free month, ${refFirstName}! 🎉</h2>
-<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">A photographer you referred just subscribed to PortalKit. As a thank-you, we've added <strong>30 free days</strong> to your subscription — no charge, no action needed.</p>
-<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Keep sharing your referral link to earn more free months. You'll get one free month for every photographer who subscribes.</p>
-<p style="color:#9C8E7A;font-size:13px;margin:0;">— Chidera at PortalKit</p>`,
-                        ctaText: 'Share your referral link →',
-                        ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
-                        footerNote: 'PortalKit by Kilpian LLC',
-                      }),
-                    }).catch(err => console.error('Referral reward email failed:', err))
-                  }
-                  console.log(`🎁 Referral converted: referrer ${ref.referrer_email} earned a free month`)
-                }
-              } catch (refErr) {
-                console.error('Referral conversion error:', refErr.message)
-              }
-            }
-
             // Handle affiliate commission on first subscription payment
             if (u) {
               try {
@@ -386,6 +332,54 @@ app.post('/api/stripe/webhook',
               } catch (affErr) {
                 console.error('Affiliate commission error:', affErr.message)
               }
+            }
+          }
+
+          // Referral reward trigger — gated on amount_paid > 0, NOT
+          // billing_reason alone. For the standard 14-day-trial signup flow,
+          // Stripe creates a $0 invoice at subscription creation (billing_
+          // reason 'subscription_create') and fires this same event for it
+          // since a $0 invoice is trivially "paid" — no money ever changes
+          // hands. The real charge for those signups lands later as a
+          // 'subscription_cycle' invoice when the trial ends. amount_paid is
+          // the only reliable signal that an actual charge succeeded, so the
+          // reward is never even queued off a $0 invoice.
+          //
+          // Per the anti-abuse policy, a real charge does NOT grant the
+          // reward immediately — it only moves the referral to
+          // 'awaiting_reward' and captures the card fingerprint used. The
+          // actual grant happens in processReferralRewards() (runDailyJobs)
+          // after a 5-day hold with no cancellation/refund, plus the
+          // duplicate-card and velocity checks.
+          if (u && inv.amount_paid > 0) {
+            try {
+              const referralRow = await pool.query(
+                `SELECT r.id, r.referrer_user_id
+                 FROM referrals r
+                 WHERE r.referred_user_id = $1 AND r.status = 'signed_up'`,
+                [u.id]
+              )
+              if (referralRow.rows.length > 0) {
+                const ref = referralRow.rows[0]
+
+                let fingerprint = null
+                try {
+                  if (stripe && inv.payment_intent) {
+                    const pi = await stripe.paymentIntents.retrieve(inv.payment_intent, { expand: ['payment_method'] })
+                    fingerprint = pi.payment_method?.card?.fingerprint || null
+                  }
+                } catch (fpErr) {
+                  console.error('Referral fingerprint lookup failed:', fpErr.message)
+                }
+
+                await pool.query(
+                  `UPDATE referrals SET status='awaiting_reward', payment_succeeded_at=NOW(), card_fingerprint=$2 WHERE id=$1`,
+                  [ref.id, fingerprint]
+                )
+                console.log(`⏳ Referral payment confirmed for referral ${ref.id} (referrer ${ref.referrer_user_id}) — reward held for 5-day confirmation window`)
+              }
+            } catch (refErr) {
+              console.error('Referral payment-hold error:', refErr.message)
             }
           }
           break
@@ -441,10 +435,20 @@ app.post('/api/stripe/webhook',
           const sub = event.data.object
           console.log('💳 Webhook: customer.subscription.deleted for subscription:', sub.id)
           const cancelResult = await pool.query(
-            'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2 RETURNING email, full_name',
+            'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2 RETURNING id, email, full_name',
             ['cancelled', sub.id]
           )
           const u = cancelResult.rows[0]
+
+          // A cancellation during the 5-day hold forfeits any in-flight
+          // referral reward for this account — see processReferralRewards.
+          if (u) {
+            await pool.query(
+              `UPDATE referrals SET status='forfeited' WHERE referred_user_id=$1 AND status='awaiting_reward'`,
+              [u.id]
+            ).catch(err => console.error('Referral forfeit (cancellation) error:', err.message))
+          }
+
           if (u && resend) {
             try {
               await resend.emails.send({
@@ -481,6 +485,31 @@ app.post('/api/stripe/webhook',
           const pi = event.data.object
           if (pi.metadata?.invoice_id) {
             await markInvoicePaidAndNotify(pi.metadata, pi.amount)
+          }
+          break
+        }
+        // NOTE: Add "charge.refunded" to your Stripe webhook destination events list
+        case 'charge.refunded': {
+          const charge = event.data.object
+          console.log('💳 Webhook: charge.refunded for customer:', charge.customer)
+          // A refund during the 5-day hold forfeits any in-flight referral
+          // reward for this account — see processReferralRewards.
+          if (charge.customer) {
+            try {
+              const userRes = await pool.query('SELECT id FROM users WHERE stripe_customer_id=$1', [charge.customer])
+              const refundedUser = userRes.rows[0]
+              if (refundedUser) {
+                const forfeitRes = await pool.query(
+                  `UPDATE referrals SET status='forfeited' WHERE referred_user_id=$1 AND status='awaiting_reward' RETURNING id`,
+                  [refundedUser.id]
+                )
+                if (forfeitRes.rows.length) {
+                  console.log(`⚠️ Referral forfeited due to refund: user ${refundedUser.id}, referral(s) ${forfeitRes.rows.map(r => r.id).join(', ')}`)
+                }
+              }
+            } catch (refundErr) {
+              console.error('Referral forfeit (refund) error:', refundErr.message)
+            }
           }
           break
         }
@@ -1307,6 +1336,30 @@ async function initDb() {
 
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE`).catch(() => {})
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_id INTEGER`).catch(() => {})
+
+      // ── Referral anti-abuse hardening ──────────────────────────
+      // last_login_ip is used to catch self-referrals where someone signs
+      // up a "referred" account from the same device/network as their own
+      // referrer account (see requireAuth, which keeps this fresh).
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip TEXT`).catch(() => {})
+
+      // payment_succeeded_at anchors the 5-day hold before a reward is
+      // actually granted (see processReferralRewards). card_fingerprint is
+      // captured at payment time for the duplicate-card check. flag_reason/
+      // flagged_at record why a referral was routed to manual review.
+      await pool.query(`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS payment_succeeded_at TIMESTAMPTZ`).catch(() => {})
+      await pool.query(`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS card_fingerprint TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS flag_reason TEXT`).catch(() => {})
+      await pool.query(`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS flagged_at TIMESTAMPTZ`).catch(() => {})
+
+      // Widen the status enum: awaiting_reward (payment seen, 5-day hold in
+      // progress), forfeited (cancelled/refunded during the hold), flagged
+      // (duplicate card or velocity cap — held for manual review).
+      await pool.query(`ALTER TABLE referrals DROP CONSTRAINT IF EXISTS referrals_status_check`).catch(() => {})
+      await pool.query(`
+        ALTER TABLE referrals ADD CONSTRAINT referrals_status_check
+        CHECK (status IN ('pending','signed_up','awaiting_reward','converted','forfeited','flagged'))
+      `).catch(() => {})
 
       // ── Feature: Affiliate System ─────────────────────────────
       await pool.query(`
@@ -3922,6 +3975,109 @@ async function importFoundEmails(emails) {
   return { added, skipped }
 }
 
+// Grants referral rewards that have cleared their 5-day anti-abuse hold.
+// A referral only reaches 'awaiting_reward' after a REAL charge succeeded
+// (see the invoice.payment_succeeded webhook handler) — this function is
+// the only place that ever actually grants the reward, and only after:
+//  1. The referred account is still active (a cancellation/refund during
+//     the hold already flips it to 'forfeited' via webhook; the plan check
+//     here is a belt-and-suspenders guard in case that event was missed).
+//  2. No other account referred by the same code shares this card's
+//     fingerprint (flagged for manual review instead of auto-blocked —
+//     a shared card can be a legitimate case, like spouses).
+//  3. The referrer hasn't already hit the 5-per-30-days velocity cap
+//     (flagged for manual review instead of auto-granted).
+async function processReferralRewards() {
+  try {
+    const dueRes = await pool.query(
+      `SELECT r.id, r.referrer_user_id, r.card_fingerprint,
+              ref_user.email as referrer_email, ref_user.full_name as referrer_name, ref_user.stripe_subscription_id,
+              referred.plan as referred_plan
+       FROM referrals r
+       JOIN users ref_user ON ref_user.id = r.referrer_user_id
+       JOIN users referred ON referred.id = r.referred_user_id
+       WHERE r.status = 'awaiting_reward' AND r.payment_succeeded_at <= NOW() - INTERVAL '5 days'`
+    )
+
+    for (const ref of dueRes.rows) {
+      if (ref.referred_plan !== 'active') {
+        await pool.query(`UPDATE referrals SET status='forfeited' WHERE id=$1`, [ref.id])
+        console.log(`⚠️ Referral ${ref.id} forfeited at reward time — referred account plan is '${ref.referred_plan}', not active`)
+        continue
+      }
+
+      if (ref.card_fingerprint) {
+        const dupRes = await pool.query(
+          `SELECT COUNT(DISTINCT referred_user_id) AS cnt FROM referrals
+           WHERE referrer_user_id=$1 AND card_fingerprint=$2 AND referred_user_id IS NOT NULL`,
+          [ref.referrer_user_id, ref.card_fingerprint]
+        )
+        if (Number(dupRes.rows[0]?.cnt || 0) > 1) {
+          await pool.query(
+            `UPDATE referrals SET status='flagged', flag_reason=$2, flagged_at=NOW() WHERE id=$1`,
+            [ref.id, 'duplicate_card_fingerprint']
+          )
+          console.warn(`🚩 Referral ${ref.id} flagged for manual review: card fingerprint reused across multiple accounts referred by ${ref.referrer_email}`)
+          continue
+        }
+      }
+
+      const velocityRes = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM referrals
+         WHERE referrer_user_id=$1 AND status='converted' AND reward_given_at > NOW() - INTERVAL '30 days'`,
+        [ref.referrer_user_id]
+      )
+      if (Number(velocityRes.rows[0]?.cnt || 0) >= 5) {
+        await pool.query(
+          `UPDATE referrals SET status='flagged', flag_reason=$2, flagged_at=NOW() WHERE id=$1`,
+          [ref.id, 'velocity_cap_exceeded']
+        )
+        console.warn(`🚩 Referral ${ref.id} flagged for manual review: referrer ${ref.referrer_email} already hit the 5-per-30-day velocity cap`)
+        continue
+      }
+
+      await pool.query(`UPDATE referrals SET status='converted', reward_given_at=NOW() WHERE id=$1`, [ref.id])
+
+      if (stripe && ref.stripe_subscription_id) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(ref.stripe_subscription_id)
+          const currentPeriodEnd = sub.current_period_end
+          await stripe.subscriptions.update(ref.stripe_subscription_id, {
+            trial_end: currentPeriodEnd + (30 * 24 * 60 * 60),
+          })
+        } catch (stripeErr) {
+          console.error('Referral subscription extend failed:', stripeErr.message)
+        }
+      }
+
+      if (resend && ref.referrer_email) {
+        const refFirstName = ref.referrer_name?.split(' ')[0] || 'there'
+        await resend.emails.send({
+          from: 'Chidera at PortalKit <hello@mail.getportalkit.com>',
+          reply_to: "hello@getportalkit.com",
+          to: ref.referrer_email,
+          subject: "You just earned a free month of PortalKit! 🎉",
+          html: emailTemplate({
+            title: "You earned a free month!",
+            preheader: "Someone you referred just subscribed to PortalKit.",
+            body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 12px;">You earned a free month, ${refFirstName}! 🎉</h2>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">A photographer you referred just subscribed to PortalKit. As a thank-you, we've added <strong>30 free days</strong> to your subscription — no charge, no action needed.</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Keep sharing your referral link to earn more free months. You'll get one free month for every photographer who subscribes.</p>
+<p style="color:#9C8E7A;font-size:13px;margin:0;">— Chidera at PortalKit</p>`,
+            ctaText: 'Share your referral link →',
+            ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
+            footerNote: 'PortalKit by Kilpian LLC',
+          }),
+        }).catch(err => console.error('Referral reward email failed:', err))
+      }
+
+      console.log(`🎁 Referral reward granted: referrer ${ref.referrer_email} earned a free month (referral ${ref.id})`)
+    }
+  } catch (err) {
+    console.error('processReferralRewards error:', err.message)
+  }
+}
+
 async function runDailyJobs() {
   const now = new Date()
   const hour = now.getUTCHours()
@@ -3930,6 +4086,7 @@ async function runDailyJobs() {
   await sendTrialExpiryReminders().catch(e => console.error('Trial reminder error:', e.message))
   await sendOnboardingSequence().catch(e => console.error('Onboarding seq error:', e.message))
   await sendFreeToolNurtureEmails().catch(e => console.error('Tool nurture:', e.message))
+  await processReferralRewards().catch(e => console.error('Referral rewards error:', e.message))
   // Inactive-account auto-purge — DRY RUN ONLY (logs candidates, deletes nothing).
   // Runs once daily at 04:00 UTC. Flip to real deletion only after auditing these logs.
   if (hour === 4) {
@@ -4066,6 +4223,14 @@ async function requireAuth(req, res, next) {
     }
 
     req.userId = String(req.user.id)
+
+    // Fire-and-forget: keep last_login_ip fresh for the referral
+    // self-referral check (same IP as the referrer = likely one person).
+    // Read here reflects the PREVIOUS request's IP, which is exactly what
+    // the self-referral check wants to compare a fresh signup against.
+    if (ip && ip !== 'unknown' && req.user.last_login_ip !== ip) {
+      pool.query('UPDATE users SET last_login_ip=$1 WHERE id=$2', [ip, req.user.id]).catch(() => {})
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`${req.method} ${req.path} — user ${req.user?.id}`)
@@ -4291,15 +4456,28 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
   const { ref, affiliate_code } = req.body || {}
   if (ref && typeof ref === 'string' && ref.length <= 20) {
     try {
-      const referrer = await pool.query('SELECT id, email FROM users WHERE referral_code=$1', [ref.toUpperCase()])
-      if (referrer.rows.length > 0 && referrer.rows[0].id !== req.user.id) {
-        await pool.query(
-          `INSERT INTO referrals (referrer_user_id, referred_email, referred_user_id, status)
-           VALUES ($1, $2, $3, 'signed_up')
-           ON CONFLICT DO NOTHING`,
-          [referrer.rows[0].id, req.user.email, req.user.id]
-        )
-        console.log(`🔗 Referral tracked: ${req.user.email} referred by ${referrer.rows[0].email}`)
+      const referrer = await pool.query('SELECT id, email, last_login_ip FROM users WHERE referral_code=$1', [ref.toUpperCase()])
+      if (referrer.rows.length > 0) {
+        const referrerRow = referrer.rows[0]
+
+        // SELF-REFERRAL BLOCK — reject capture if this is plausibly the same
+        // person: same account, same email, or the referred signup's current
+        // IP matches the referrer's last known login IP.
+        const sameUser = referrerRow.id === req.user.id
+        const sameEmail = !!req.user.email && referrerRow.email?.toLowerCase() === req.user.email.toLowerCase()
+        const sameIp = !!req.clientIp && req.clientIp !== 'unknown' && !!referrerRow.last_login_ip && req.clientIp === referrerRow.last_login_ip
+
+        if (sameUser || sameEmail || sameIp) {
+          console.warn(`🚫 Self-referral blocked: ${req.user.email} tried to use ${referrerRow.email}'s code (reason: ${sameUser ? 'same_account' : sameEmail ? 'same_email' : 'same_ip'})`)
+        } else {
+          await pool.query(
+            `INSERT INTO referrals (referrer_user_id, referred_email, referred_user_id, status)
+             VALUES ($1, $2, $3, 'signed_up')
+             ON CONFLICT DO NOTHING`,
+            [referrerRow.id, req.user.email, req.user.id]
+          )
+          console.log(`🔗 Referral tracked: ${req.user.email} referred by ${referrerRow.email}`)
+        }
       }
     } catch (refErr) {
       console.error('Referral tracking error:', refErr.message)
@@ -8164,6 +8342,29 @@ app.patch('/api/admin/affiliates/:id', async (req, res) => {
   try {
     const result = await pool.query('UPDATE affiliates SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
     res.json(result.rows[0])
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+// ── ADMIN: REFERRALS ──────────────────────────────────────────
+
+// Referrals held for manual review — duplicate card fingerprints across
+// accounts referred by the same code, or a referrer past the 5-per-30-day
+// velocity cap. Nothing here auto-grants or auto-blocks; an admin eyeballs
+// and approves/denies by hand (e.g. by updating status directly).
+app.get('/api/admin/referrals/flagged', async (req, res) => {
+  const secret = req.headers['x-admin-secret']
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    const result = await pool.query(
+      `SELECT r.id, r.status, r.flag_reason, r.flagged_at, r.payment_succeeded_at, r.card_fingerprint,
+              r.referrer_user_id, ref_user.email as referrer_email, ref_user.full_name as referrer_name,
+              r.referred_user_id, r.referred_email, r.created_at
+       FROM referrals r
+       JOIN users ref_user ON ref_user.id = r.referrer_user_id
+       WHERE r.status = 'flagged'
+       ORDER BY r.flagged_at DESC`
+    )
+    res.json(result.rows)
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
