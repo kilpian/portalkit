@@ -4886,6 +4886,43 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/api/clients/:id/send-portal-email', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM clients WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!result.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const client = result.rows[0]
+    if (!client.email) return res.status(400).json({ error: 'This client has no email on file' })
+    if (!resend) return res.status(500).json({ error: 'Email service is not configured' })
+
+    const biz = req.user.business_name || req.user.full_name || 'Your photographer'
+    const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
+    try {
+      await resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        reply_to: 'hello@getportalkit.com',
+        to: client.email,
+        subject: 'Your client portal is ready',
+        html: emailTemplate({
+          title: 'Your Portal Is Ready',
+          preheader: 'View your contract, invoice, and files',
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${sanitize(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client portal is ready. You can view your contract, invoice, and any files I've shared with you here.</p><p style="color:#6B5E4A;line-height:1.6;">Let me know if you have any questions!</p>`,
+          ctaText: 'View Your Portal →',
+          ctaUrl: portalLink,
+          footerNote: `Sent by ${biz}`,
+        }),
+      })
+      console.log(`Portal email sent to ${client.email} for client ${client.id}`)
+      res.json({ success: true, email: client.email })
+    } catch (sendErr) {
+      console.error('Send portal email failed:', sendErr)
+      res.status(502).json({ error: 'Failed to send email. Please try again.' })
+    }
+  } catch (err) {
+    console.error('Send portal email error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── CLIENT EVENTS ─────────────────────────────────────────────
 
 app.get('/api/clients/:id/events', requireAuth, async (req, res) => {

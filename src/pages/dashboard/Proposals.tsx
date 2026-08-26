@@ -27,7 +27,7 @@ export default function Proposals() {
   const [showPropForm, setShowPropForm] = useState(false)
   const [editingProp, setEditingProp] = useState<Proposal | null>(null)
   const [propForm, setPropForm] = useState({ title: '', message: '', client_id: '', expires_at: '', packages: [] as Package[] })
-  const [savingProp, setSavingProp] = useState(false)
+  const [savingAction, setSavingAction] = useState<'draft' | 'send' | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
   const [sending, setSending] = useState<number | null>(null)
   const [aiNotes, setAiNotes] = useState('')
@@ -93,20 +93,27 @@ export default function Proposals() {
     setShowPropForm(true)
   }
 
-  const saveProp = async () => {
+  const saveProp = async (andSend = false) => {
     if (!propForm.title.trim()) return
-    setSavingProp(true)
+    setSavingAction(andSend ? 'send' : 'draft')
     try {
       const data = { ...propForm, client_id: propForm.client_id ? parseInt(propForm.client_id) : null, expires_at: propForm.expires_at || null }
+      let saved: Proposal
       if (editingProp) {
         const res = await authFetch(`/api/proposals/${editingProp.id}`, { method: 'put', data })
-        setProposals(prev => prev.map(p => p.id === editingProp.id ? res.data : p))
+        saved = res.data
+        setProposals(prev => prev.map(p => p.id === editingProp.id ? saved : p))
       } else {
         const res = await authFetch('/api/proposals', { method: 'post', data })
-        setProposals(prev => [res.data, ...prev])
+        saved = res.data
+        setProposals(prev => [saved, ...prev])
+      }
+      if (andSend) {
+        const sendRes = await authFetch(`/api/proposals/${saved.id}/send`, { method: 'post' })
+        setProposals(prev => prev.map(p => p.id === saved.id ? sendRes.data : p))
       }
       setShowPropForm(false)
-    } catch {} finally { setSavingProp(false) }
+    } catch {} finally { setSavingAction(null) }
   }
 
   const sendProposal = async (id: number) => {
@@ -235,11 +242,14 @@ export default function Proposals() {
                 <label style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'block', marginBottom: 6 }}>Expiry Date (optional)</label>
                 <input type="date" value={propForm.expires_at} onChange={e => setPropForm(f => ({ ...f, expires_at: e.target.value }))} style={{ width: '100%', padding: '9px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-              {/* AI-generated starting-point packages are only offered when the
-                  photographer has no real packages yet. Once real packages
-                  exist, generating here would silently discard whatever the
-                  user already selected below — so it's hidden instead. */}
-              {packages.length === 0 && (
+              {/* AI-generated starting-point packages are only offered when this
+                  proposal has no packages attached yet. Once packages are
+                  selected/generated, generating again would silently discard
+                  them — so it's hidden instead. Deliberately checks
+                  propForm.packages (this proposal's picks), not the
+                  photographer's package library — a library with saved
+                  packages shouldn't hide the AI option on a fresh proposal. */}
+              {propForm.packages.length === 0 && (
                 <div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 10, padding: '14px 16px' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: '0 0 8px' }}>✨ No packages yet — generate a starting template with AI</p>
                   <textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} placeholder="Optional: add context (e.g. outdoor wedding, 8 hours, 2 photographers)" rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid #A7F3D0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'none', fontFamily: 'inherit', background: '#fff', marginBottom: 8 }} />
@@ -271,9 +281,20 @@ export default function Proposals() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 22 }}>
               <button onClick={() => setShowPropForm(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #D1D5DB', background: 'transparent', fontSize: 14, cursor: 'pointer', color: '#374151' }}>Cancel</button>
-              <button onClick={saveProp} disabled={savingProp || !propForm.title.trim()} style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                {savingProp ? 'Saving...' : editingProp ? 'Save Changes' : 'Create Proposal'}
-              </button>
+              {editingProp ? (
+                <button onClick={() => saveProp(false)} disabled={savingAction !== null || !propForm.title.trim()} style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  {savingAction === 'draft' ? 'Saving...' : 'Save Changes'}
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => saveProp(false)} disabled={savingAction !== null || !propForm.title.trim()} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #D1D5DB', background: 'transparent', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
+                    {savingAction === 'draft' ? 'Saving...' : 'Save as Draft'}
+                  </button>
+                  <button onClick={() => saveProp(true)} disabled={savingAction !== null || !propForm.title.trim()} title="Saves the proposal and immediately emails it to the selected client" style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                    {savingAction === 'send' ? 'Sending...' : 'Save & Send →'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </>

@@ -133,6 +133,7 @@ export default function Clients() {
   const [sendModal, setSendModal] = useState<Client | null>(null)
   const [sendLinkCopied, setSendLinkCopied] = useState(false)
   const [sendMsgCopied, setSendMsgCopied] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
 
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([])
@@ -320,6 +321,20 @@ export default function Clients() {
   const handleSendToClient = (client: Client) => {
     setSendLinkCopied(false)
     setSendModal(client)
+  }
+
+  const sendPortalEmailNow = async (client: Client) => {
+    setSendingEmail(true)
+    try {
+      const res = await authFetch(`/api/clients/${client.id}/send-portal-email`, { method: 'post' })
+      showToast(`Email sent to ${res.data.email}`)
+      setSendModal(null)
+    } catch (err: unknown) {
+      const ae = err as { response?: { data?: { error?: string } } }
+      showToast(ae?.response?.data?.error || 'Failed to send email.')
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   const updateStage = async (clientId: number, stage: string) => {
@@ -972,8 +987,17 @@ export default function Clients() {
             }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>Send to {sendModal.name}</h3>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
-                Copy the link or the ready-to-send message below.
+                Send the email now, or copy the link/message below to send it yourself.
               </p>
+
+              <button
+                onClick={() => sendPortalEmailNow(sendModal)}
+                disabled={sendingEmail || !sendModal.email}
+                title={sendModal.email ? `Send email to ${sendModal.email}` : 'No email on file for this client'}
+                style={{ width: '100%', fontSize: 14, fontWeight: 700, padding: '11px 16px', borderRadius: 8, border: 'none', background: sendingEmail || !sendModal.email ? 'var(--border)' : 'var(--green)', color: sendingEmail || !sendModal.email ? 'var(--text-muted)' : '#fff', cursor: sendingEmail || !sendModal.email ? 'not-allowed' : 'pointer', marginBottom: 16 }}
+              >
+                {sendingEmail ? 'Sending...' : sendModal.email ? `✉ Send Email Now` : 'No Email On File'}
+              </button>
 
               {/* Portal link row */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>

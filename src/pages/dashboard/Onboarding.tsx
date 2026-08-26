@@ -337,7 +337,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 {billingCycle === 'annual' ? (
                   <>
                     <div style={{ fontSize: 28, fontWeight: 800, color: '#1B4332' }}>$29<span style={{ fontSize: 14, fontWeight: 600, color: '#4B5563' }}>/month</span></div>
-                    <div style={{ fontSize: 13, color: '#4B5563', marginTop: 2 }}>$348 billed today</div>
+                    <div style={{ fontSize: 13, color: '#4B5563', marginTop: 2 }}>$348 billed annually</div>
                     <div style={{ fontSize: 12, color: '#1B4332', fontWeight: 600, marginTop: 2 }}>You save $120/year vs monthly</div>
                   </>
                 ) : (
