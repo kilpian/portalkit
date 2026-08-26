@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useApi } from '../../lib/api'
 import type { Package, Proposal, Client } from '../../lib/api'
+import ConfirmModal from '../../components/ConfirmModal'
 
 function formatCents(cents: number) {
   return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
@@ -32,6 +33,9 @@ export default function Proposals() {
   const [sending, setSending] = useState<number | null>(null)
   const [aiNotes, setAiNotes] = useState('')
   const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<Package[]>([])
+  const [deletePkgId, setDeletePkgId] = useState<number | null>(null)
+  const [deleteProposalId, setDeleteProposalId] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -62,12 +66,14 @@ export default function Proposals() {
   const deletePkg = async (id: number) => {
     await authFetch(`/api/packages/${id}`, { method: 'delete' })
     setPackages(prev => prev.filter(p => p.id !== id))
+    setDeletePkgId(null)
   }
 
   const openNewProp = () => {
     setEditingProp(null)
     setPropForm({ title: '', message: '', client_id: '', expires_at: '', packages: [] })
     setAiNotes('')
+    setAiSuggestions([])
     setShowPropForm(true)
   }
 
@@ -77,8 +83,12 @@ export default function Proposals() {
       const res = await authFetch('/api/ai/generate-proposal', { method: 'post', data: { client_id: propForm.client_id || undefined, notes: aiNotes } })
       const { packages: aiPkgs, message } = res.data
       if (aiPkgs?.length) {
+        // Suggestions land in their own review list — never merged directly
+        // into propForm.packages (what actually gets sent). The photographer
+        // must explicitly add each one they want via addSuggestionToProposal.
         const newPkgs: Package[] = aiPkgs.map((p: Package, i: number) => ({ ...p, id: -(i + 1), user_id: 0, active: true, created_at: new Date().toISOString() }))
-        setPropForm(f => ({ ...f, packages: newPkgs, message: message || f.message }))
+        setAiSuggestions(newPkgs)
+        setPropForm(f => ({ ...f, message: message || f.message }))
       }
     } catch {
       // silent — user can retry
@@ -87,9 +97,18 @@ export default function Proposals() {
     }
   }
 
+  const addSuggestionToProposal = (pkg: Package) => {
+    setPropForm(f => ({ ...f, packages: [...f.packages, pkg] }))
+    setAiSuggestions(prev => prev.filter(p => p.id !== pkg.id))
+  }
+
+  const discardSuggestions = () => setAiSuggestions([])
+
   const openEditProp = (p: Proposal) => {
     setEditingProp(p)
     setPropForm({ title: p.title, message: p.message || '', client_id: p.client_id?.toString() || '', expires_at: p.expires_at ? p.expires_at.split('T')[0] : '', packages: p.packages || [] })
+    setAiNotes('')
+    setAiSuggestions([])
     setShowPropForm(true)
   }
 
@@ -127,6 +146,7 @@ export default function Proposals() {
   const deleteProposal = async (id: number) => {
     await authFetch(`/api/proposals/${id}`, { method: 'delete' })
     setProposals(prev => prev.filter(p => p.id !== id))
+    setDeleteProposalId(null)
   }
 
   const copyLink = (id: number) => {
@@ -146,6 +166,24 @@ export default function Proposals() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 24px)' }}>
+      <ConfirmModal
+        open={deletePkgId !== null}
+        title="Delete this package?"
+        message="This package will be permanently removed. It won't be removed from any proposals it's already attached to."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => deletePkgId !== null && deletePkg(deletePkgId)}
+        onCancel={() => setDeletePkgId(null)}
+      />
+      <ConfirmModal
+        open={deleteProposalId !== null}
+        title="Delete this proposal?"
+        message="This will permanently delete the proposal. If it's already been sent, the client's link will stop working."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => deleteProposalId !== null && deleteProposal(deleteProposalId)}
+        onCancel={() => setDeleteProposalId(null)}
+      />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, color: '#111827', margin: 0 }}>Proposals</h1>
@@ -242,21 +280,47 @@ export default function Proposals() {
                 <label style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'block', marginBottom: 6 }}>Expiry Date (optional)</label>
                 <input type="date" value={propForm.expires_at} onChange={e => setPropForm(f => ({ ...f, expires_at: e.target.value }))} style={{ width: '100%', padding: '9px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-              {/* AI-generated starting-point packages are only offered when this
-                  proposal has no packages attached yet. Once packages are
-                  selected/generated, generating again would silently discard
-                  them — so it's hidden instead. Deliberately checks
-                  propForm.packages (this proposal's picks), not the
-                  photographer's package library — a library with saved
-                  packages shouldn't hide the AI option on a fresh proposal. */}
-              {propForm.packages.length === 0 && (
-                <div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 10, padding: '14px 16px' }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: '0 0 8px' }}>✨ No packages yet — generate a starting template with AI</p>
-                  <textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} placeholder="Optional: add context (e.g. outdoor wedding, 8 hours, 2 photographers)" rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid #A7F3D0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'none', fontFamily: 'inherit', background: '#fff', marginBottom: 8 }} />
-                  <button onClick={generateWithAI} disabled={aiGenerating} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: aiGenerating ? 0.7 : 1 }}>
-                    {aiGenerating ? 'Generating...' : '✨ Generate Packages'}
-                  </button>
-                  <p style={{ fontSize: 11, color: '#065F46', margin: '8px 0 0', opacity: 0.8 }}>You can edit or remove these before sending — nothing goes to your client until you send the proposal.</p>
+              {/* AI suggestions are never merged directly into propForm.packages
+                  (the list that actually gets sent) — they populate a separate
+                  review list below, and the photographer must explicitly add
+                  each one they want. Safe to show regardless of whether the
+                  proposal already has packages, since nothing here can
+                  silently overwrite what's already selected. */}
+              <div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 10, padding: '14px 16px' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: '0 0 8px' }}>✨ Generate package suggestions with AI</p>
+                <textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} placeholder="Optional: add context (e.g. outdoor wedding, 8 hours, 2 photographers, $500 deposit)" rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid #A7F3D0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'none', fontFamily: 'inherit', background: '#fff', marginBottom: 8 }} />
+                <button onClick={generateWithAI} disabled={aiGenerating} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: aiGenerating ? 0.7 : 1 }}>
+                  {aiGenerating ? 'Generating...' : '✨ Generate Suggestions'}
+                </button>
+                <p style={{ fontSize: 11, color: '#065F46', margin: '8px 0 0', opacity: 0.8 }}>Suggestions are shown below for you to review — nothing is added to this proposal until you click "Add to Proposal" on each one.</p>
+              </div>
+              {aiSuggestions.length > 0 && (
+                <div style={{ background: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#5B21B6', margin: 0 }}>✨ AI Suggestions — Review Before Adding</p>
+                    <button onClick={discardSuggestions} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}>Discard all</button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {aiSuggestions.map(pkg => (
+                      <div key={pkg.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 14, fontWeight: 600, color: '#111827', margin: 0 }}>{pkg.name}</p>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#5B21B6', margin: '2px 0' }}>{(pkg.price_cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>
+                          {pkg.description && <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0' }}>{pkg.description}</p>}
+                          {pkg.features?.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                              {pkg.features.map((f, i) => (
+                                <span key={i} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#F5F3FF', color: '#5B21B6', border: '1px solid #DDD6FE' }}>{f}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => addSuggestionToProposal(pkg)} style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 6, border: 'none', background: '#5B21B6', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          + Add to Proposal
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {packages.length > 0 && (
@@ -290,12 +354,20 @@ export default function Proposals() {
                   <button onClick={() => saveProp(false)} disabled={savingAction !== null || !propForm.title.trim()} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #D1D5DB', background: 'transparent', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
                     {savingAction === 'draft' ? 'Saving...' : 'Save as Draft'}
                   </button>
-                  <button onClick={() => saveProp(true)} disabled={savingAction !== null || !propForm.title.trim()} title="Saves the proposal and immediately emails it to the selected client" style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  <button
+                    onClick={() => saveProp(true)}
+                    disabled={savingAction !== null || !propForm.title.trim() || !propForm.client_id}
+                    title={!propForm.client_id ? 'Select a client before sending.' : 'Saves the proposal and immediately emails it to the selected client'}
+                    style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                  >
                     {savingAction === 'send' ? 'Sending...' : 'Save & Send →'}
                   </button>
                 </>
               )}
             </div>
+            {!editingProp && !propForm.client_id && (
+              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 8, textAlign: 'right' }}>Select a client before sending.</p>
+            )}
           </div>
         </>
       )}
@@ -322,7 +394,7 @@ export default function Proposals() {
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => openEditPkg(pkg)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => deletePkg(pkg.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                    <button onClick={() => setDeletePkgId(pkg.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
                   </div>
                 </div>
                 {pkg.description && <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>{pkg.description}</p>}
@@ -368,7 +440,12 @@ export default function Proposals() {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {p.status === 'draft' && (
-                        <button onClick={() => sendProposal(p.id)} disabled={sending === p.id} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#4F46E5', cursor: 'pointer', fontWeight: 500 }}>
+                        <button
+                          onClick={() => sendProposal(p.id)}
+                          disabled={sending === p.id || !p.client_id}
+                          title={!p.client_id ? 'Select a client before sending.' : undefined}
+                          style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #C7D2FE', background: '#EEF2FF', color: '#4F46E5', cursor: 'pointer', fontWeight: 500 }}
+                        >
                           {sending === p.id ? 'Sending...' : 'Send'}
                         </button>
                       )}
@@ -380,7 +457,7 @@ export default function Proposals() {
                       {p.status === 'draft' && (
                         <button onClick={() => openEditProp(p)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
                       )}
-                      <button onClick={() => deleteProposal(p.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                      <button onClick={() => setDeleteProposalId(p.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
                     </div>
                   </div>
                 </div>

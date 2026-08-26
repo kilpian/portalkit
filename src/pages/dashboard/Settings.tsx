@@ -188,10 +188,21 @@ export default function Settings() {
 
   const handleManageBilling = async () => {
     setBillingLoading(true)
+    // Stripe's Customer Portal is a hosted-only product — it can't be embedded
+    // as a component and refuses to render in an iframe (billing.stripe.com
+    // blocks framing outright). Opening a new tab, rather than redirecting
+    // the current one, is the best available option: it keeps the PortalKit
+    // dashboard open behind it instead of navigating away from it.
+    // The blank tab is opened synchronously (before the await) so browsers
+    // don't treat it as a popup and block it.
+    const tab = window.open('', '_blank', 'noopener,noreferrer')
     try {
       const res = await authFetch('/api/stripe/create-portal', { method: 'post' })
-      window.location.href = res.data.url
+      if (tab) tab.location.href = res.data.url
+      else window.open(res.data.url, '_blank', 'noopener,noreferrer')
     } catch {
+      tab?.close()
+    } finally {
       setBillingLoading(false)
     }
   }

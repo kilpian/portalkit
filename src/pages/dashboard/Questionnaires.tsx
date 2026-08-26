@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApi } from '../../lib/api'
 import type { QuestionnaireTemplate, QuestionnaireResponse, QuestionDef, Client } from '../../lib/api'
+import ConfirmModal from '../../components/ConfirmModal'
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Short text' },
@@ -35,6 +36,7 @@ export default function Questionnaires() {
   const [sendTitle, setSendTitle] = useState('')
   const [sending, setSending] = useState(false)
   const [viewResponses, setViewResponses] = useState<QuestionnaireResponse | null>(null)
+  const [deleteTemplateId, setDeleteTemplateId] = useState<number | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -78,11 +80,11 @@ export default function Questionnaires() {
   }
 
   const deleteTemplate = async (id: number) => {
-    if (!confirm('Delete this template?')) return
     try {
       await authFetch(`/api/questionnaire-templates/${id}`, { method: 'delete' })
       setTemplates(prev => prev.filter(t => t.id !== id))
       if (selectedTemplate?.id === id) setSelectedTemplate(null)
+      setDeleteTemplateId(null)
       showToast('Template deleted.')
     } catch { showToast('Failed to delete.') }
   }
@@ -123,6 +125,15 @@ export default function Questionnaires() {
 
   return (
     <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
+      <ConfirmModal
+        open={deleteTemplateId !== null}
+        title="Delete this template?"
+        message="This questionnaire template will be permanently deleted. Responses already collected from clients will not be affected."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => deleteTemplateId !== null && deleteTemplate(deleteTemplateId)}
+        onCancel={() => setDeleteTemplateId(null)}
+      />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Questionnaires</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Create questionnaire templates and send them to clients.</p>
@@ -170,7 +181,7 @@ export default function Questionnaires() {
                   >Send to Client</button>
                 )}
                 {selectedTemplate.id > 0 && (
-                  <button onClick={() => deleteTemplate(selectedTemplate.id)} style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Delete</button>
+                  <button onClick={() => setDeleteTemplateId(selectedTemplate.id)} style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Delete</button>
                 )}
               </div>
             </div>

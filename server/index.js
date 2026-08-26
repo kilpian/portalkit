@@ -6596,11 +6596,11 @@ app.post('/api/ai/generate-proposal', requireAuth, aiLimiter, async (req, res) =
         clientContext = `Client: ${c.name}. Event: ${c.event_type || 'photography session'}. Date: ${c.event_date ? new Date(c.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD'}.`
       }
     }
-    const userPrompt = `Generate 3 wedding photography packages (Silver, Gold, Platinum) for ${businessName}. Client: ${clientContext}. ${notes ? 'Extra context: ' + notes : ''} Return ONLY valid JSON with this exact shape: {"packages":[{"name":"Silver","description":"...","price_cents":0,"deposit_cents":0,"features":["..."]},...],"message":"..."} where message is a warm 2-sentence proposal intro.`
+    const userPrompt = `Generate 3 wedding photography packages (Silver, Gold, Platinum) for ${businessName}. Client: ${clientContext}. ${notes ? 'Photographer\'s notes (follow any specific numbers exactly — see hard-constraint rule below): ' + notes : ''} Return ONLY valid JSON with this exact shape: {"packages":[{"name":"Silver","description":"...","price_cents":0,"deposit_cents":0,"features":["..."]},...],"message":"..."} where message is a warm 2-sentence proposal intro.`
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1200,
-      system: 'You are a pricing expert for professional wedding photographers. Return only valid JSON, no markdown, no code fences.',
+      system: 'You are a pricing expert for professional wedding photographers. Return only valid JSON, no markdown, no code fences. Hard-constraint rule: if the photographer\'s notes mention any specific number — a price, deposit, discount, hour count, session count, or similar figure — you must use that exact number in your output and never replace, round, or "improve" it with a figure of your own invention. Only invent numbers for details the photographer left unspecified.',
       messages: [{ role: 'user', content: userPrompt }],
     })
     const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
@@ -8169,6 +8169,10 @@ app.delete('/api/proposals/:id', requireAuth, async (req, res) => {
 
 app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
   try {
+    const checkRes = await pool.query('SELECT client_id FROM proposals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!checkRes.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    if (!checkRes.rows[0].client_id) return res.status(400).json({ error: 'Select a client before sending this proposal.' })
+
     const result = await pool.query(
       "UPDATE proposals SET status='sent' WHERE id=$1 AND user_id=$2 RETURNING *",
       [req.params.id, req.userId]
@@ -8210,7 +8214,7 @@ app.get('/api/proposals/:id/public', async (req, res) => {
        FROM proposals p
        JOIN users u ON u.id = p.user_id
        LEFT JOIN clients c ON c.id = p.client_id
-       WHERE p.id=$1 AND p.status IN ('sent','viewed','accepted')`,
+       WHERE p.id=$1 AND p.client_id IS NOT NULL AND p.status IN ('sent','viewed','accepted')`,
       [req.params.id]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
