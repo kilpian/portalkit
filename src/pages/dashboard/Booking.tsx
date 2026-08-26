@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useApi } from '../../lib/api'
 import type { SessionType, AvailabilitySlot, Booking } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
-import ConfirmModal from '../../components/ConfirmModal'
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const COLORS = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#BE185D']
@@ -155,24 +154,6 @@ export default function BookingPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 24px)' }}>
-      <ConfirmModal
-        open={deleteBookingId !== null}
-        title="Cancel this booking?"
-        message="This will permanently remove the booking. The client record will remain in your dashboard."
-        confirmLabel="Cancel Booking"
-        danger
-        onConfirm={() => deleteBookingId !== null && handleDeleteBooking(deleteBookingId)}
-        onCancel={() => setDeleteBookingId(null)}
-      />
-      <ConfirmModal
-        open={deleteSessionTypeId !== null}
-        title="Remove this session type?"
-        message="This session type will be deactivated and won't appear on your booking page."
-        confirmLabel="Remove"
-        danger
-        onConfirm={() => deleteSessionTypeId !== null && deleteSessionType(deleteSessionTypeId)}
-        onCancel={() => setDeleteSessionTypeId(null)}
-      />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: 0 }}>Booking</h1>
         {bookingLink && (
@@ -303,18 +284,27 @@ export default function BookingPage() {
                     {t.description && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{t.description}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => { setEditingType(t); setShowTypeForm(true) }}
-                      style={{ fontSize: 12, color: '#6B7280', background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeleteSessionTypeId(t.id)}
-                      style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid #FECACA', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-                    >
-                      Remove
-                    </button>
+                    {deleteSessionTypeId === t.id ? (
+                      <>
+                        <button onClick={() => deleteSessionType(t.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>
+                        <button onClick={() => setDeleteSessionTypeId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setEditingType(t); setShowTypeForm(true) }}
+                          style={{ fontSize: 12, color: '#6B7280', background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteSessionTypeId(t.id)}
+                          style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid #FECACA', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -412,23 +402,30 @@ export default function BookingPage() {
                     }}>
                       {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
                     </span>
-                    {b.status === 'pending' && (
+                    {deleteBookingId === b.id ? (
                       <>
-                        <button
-                          onClick={() => updateBookingStatus(b.id, 'confirmed')}
-                          style={{ fontSize: 12, color: '#059669', background: 'none', border: '1px solid #A7F3D0', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-                        >
-                          Confirm
-                        </button>
+                        <button onClick={() => handleDeleteBooking(b.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>
+                        <button onClick={() => setDeleteBookingId(null)} className="btn btn-ghost btn-sm">Cancel</button>
                       </>
-                    )}
-                    {b.status !== 'cancelled' && (
-                      <button
-                        onClick={() => setDeleteBookingId(b.id)}
-                        style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FCA5A5', borderRadius: 6, background: 'white', color: '#A32D2D', cursor: 'pointer', fontWeight: 600 }}
-                      >
-                        Cancel
-                      </button>
+                    ) : (
+                      <>
+                        {b.status === 'pending' && (
+                          <button
+                            onClick={() => updateBookingStatus(b.id, 'confirmed')}
+                            style={{ fontSize: 12, color: '#059669', background: 'none', border: '1px solid #A7F3D0', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+                          >
+                            Confirm
+                          </button>
+                        )}
+                        {b.status !== 'cancelled' && (
+                          <button
+                            onClick={() => setDeleteBookingId(b.id)}
+                            style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FCA5A5', borderRadius: 6, background: 'white', color: '#A32D2D', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

@@ -194,12 +194,21 @@ export default function Settings() {
     // the current one, is the best available option: it keeps the PortalKit
     // dashboard open behind it instead of navigating away from it.
     // The blank tab is opened synchronously (before the await) so browsers
-    // don't treat it as a popup and block it.
-    const tab = window.open('', '_blank', 'noopener,noreferrer')
+    // don't treat it as a popup and block it. Deliberately no noopener/
+    // noreferrer on THIS call — those force window.open() to return null,
+    // which would leave nothing to navigate once the Stripe URL comes back,
+    // and a second window.open() call after the await gets silently
+    // popup-blocked (browsers allow only one per user gesture). We sever
+    // the opener link ourselves below once we have the reference instead.
+    const tab = window.open('', '_blank')
     try {
       const res = await authFetch('/api/stripe/create-portal', { method: 'post' })
-      if (tab) tab.location.href = res.data.url
-      else window.open(res.data.url, '_blank', 'noopener,noreferrer')
+      if (tab) {
+        tab.opener = null
+        tab.location.href = res.data.url
+      } else {
+        window.open(res.data.url, '_blank', 'noopener,noreferrer')
+      }
     } catch {
       tab?.close()
     } finally {

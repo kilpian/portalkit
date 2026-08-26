@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApi } from '../../lib/api'
 import type { Package, Proposal, Client } from '../../lib/api'
-import ConfirmModal from '../../components/ConfirmModal'
 
 function formatCents(cents: number) {
   return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
@@ -166,24 +165,6 @@ export default function Proposals() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 24px)' }}>
-      <ConfirmModal
-        open={deletePkgId !== null}
-        title="Delete this package?"
-        message="This package will be permanently removed. It won't be removed from any proposals it's already attached to."
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => deletePkgId !== null && deletePkg(deletePkgId)}
-        onCancel={() => setDeletePkgId(null)}
-      />
-      <ConfirmModal
-        open={deleteProposalId !== null}
-        title="Delete this proposal?"
-        message="This will permanently delete the proposal. If it's already been sent, the client's link will stop working."
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => deleteProposalId !== null && deleteProposal(deleteProposalId)}
-        onCancel={() => setDeleteProposalId(null)}
-      />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, color: '#111827', margin: 0 }}>Proposals</h1>
@@ -393,8 +374,17 @@ export default function Proposals() {
                     {pkg.deposit_cents > 0 && <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0' }}>{formatCents(pkg.deposit_cents)} deposit</p>}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => openEditPkg(pkg)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => setDeletePkgId(pkg.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                    {deletePkgId === pkg.id ? (
+                      <>
+                        <button onClick={() => deletePkg(pkg.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>
+                        <button onClick={() => setDeletePkgId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => openEditPkg(pkg)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => setDeletePkgId(pkg.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                      </>
+                    )}
                   </div>
                 </div>
                 {pkg.description && <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>{pkg.description}</p>}
@@ -457,7 +447,14 @@ export default function Proposals() {
                       {p.status === 'draft' && (
                         <button onClick={() => openEditProp(p)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
                       )}
-                      <button onClick={() => setDeleteProposalId(p.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                      {deleteProposalId === p.id ? (
+                        <>
+                          <button onClick={() => deleteProposal(p.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>
+                          <button onClick={() => setDeleteProposalId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setDeleteProposalId(p.id)} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA', background: 'transparent', color: '#DC2626', cursor: 'pointer' }}>✕</button>
+                      )}
                     </div>
                   </div>
                 </div>

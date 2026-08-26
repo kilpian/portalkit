@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApi } from '../../lib/api'
 import type { QuestionnaireTemplate, QuestionnaireResponse, QuestionDef, Client } from '../../lib/api'
-import ConfirmModal from '../../components/ConfirmModal'
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Short text' },
@@ -125,15 +124,6 @@ export default function Questionnaires() {
 
   return (
     <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
-      <ConfirmModal
-        open={deleteTemplateId !== null}
-        title="Delete this template?"
-        message="This questionnaire template will be permanently deleted. Responses already collected from clients will not be affected."
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => deleteTemplateId !== null && deleteTemplate(deleteTemplateId)}
-        onCancel={() => setDeleteTemplateId(null)}
-      />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Questionnaires</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Create questionnaire templates and send them to clients.</p>
@@ -181,7 +171,14 @@ export default function Questionnaires() {
                   >Send to Client</button>
                 )}
                 {selectedTemplate.id > 0 && (
-                  <button onClick={() => setDeleteTemplateId(selectedTemplate.id)} style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Delete</button>
+                  deleteTemplateId === selectedTemplate.id ? (
+                    <>
+                      <button onClick={() => deleteTemplate(selectedTemplate.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>
+                      <button onClick={() => setDeleteTemplateId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setDeleteTemplateId(selectedTemplate.id)} style={{ fontSize: 12, color: '#DC2626', background: 'none', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Delete</button>
+                  )
                 )}
               </div>
             </div>
