@@ -145,10 +145,10 @@ export default function Proposals() {
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 24px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: 0 }}>Proposals</h1>
+          <h1 style={{ fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, color: '#111827', margin: 0 }}>Proposals</h1>
           <p style={{ fontSize: 14, color: '#6B7280', marginTop: 6 }}>Build packages and send branded proposals to clients.</p>
         </div>
         <button
@@ -351,9 +351,9 @@ export default function Proposals() {
               const statusColor = STATUS_COLORS[p.status] || '#6B7280'
               return (
                 <div key={p.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
                         <p style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0 }}>{p.title}</p>
                         <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: statusColor + '18', color: statusColor, fontWeight: 700, border: `1px solid ${statusColor}40` }}>
                           {p.status.toUpperCase()}

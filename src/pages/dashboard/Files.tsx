@@ -189,7 +189,7 @@ export default function Files() {
   )
 
   return (
-    <div style={{ padding: '32px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
       {/* Header + upload */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Files & Galleries</h1>
@@ -240,10 +240,10 @@ export default function Files() {
       </div>
 
       {/* Body: sidebar + content */}
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      <div className="files-body" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
         {/* Sidebar */}
-        <div style={{ width: 200, flexShrink: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+        <div className="files-sidebar" style={{ width: 200, flexShrink: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           {[
             { key: 'all' as SidebarKey, label: 'All Files', count: files.length },
             ...(unassignedFiles.length > 0 ? [{ key: 'unassigned' as SidebarKey, label: 'Unassigned', count: unassignedFiles.length }] : []),
@@ -449,6 +449,10 @@ export default function Files() {
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .file-thumb-card:hover .file-thumb-overlay { background: rgba(0,0,0,0.35) !important; }
+        @media (max-width: 767px) {
+          .files-body { flex-direction: column !important; }
+          .files-sidebar { width: 100% !important; }
+        }
       `}</style>
     </div>
   )

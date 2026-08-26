@@ -367,7 +367,7 @@ export default function Clients() {
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
 
       {/* ── Main list ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 64px', transition: 'padding-right 0.25s' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', minWidth: 0, transition: 'padding-right 0.25s' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
@@ -439,7 +439,8 @@ export default function Clients() {
                     padding: '14px 16px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 14,
+                    flexWrap: 'wrap',
+                    gap: 10,
                     cursor: c._blurred ? 'default' : 'pointer',
                     transition: 'all 0.15s',
                   }}
@@ -554,7 +555,7 @@ export default function Clients() {
       {/* ── Client Info / Edit Panel ── */}
       <aside style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 199,
-        width: PANEL_W,
+        width: `min(${PANEL_W}px, 100vw)`,
         background: 'var(--bg-elevated)',
         boxShadow: '-4px 0 32px rgba(0,0,0,0.12)',
         display: 'flex', flexDirection: 'column',
@@ -930,7 +931,7 @@ export default function Clients() {
       {/* ── Portal Preview Panel ── */}
       <aside style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 199,
-        width: PANEL_W,
+        width: `min(${PANEL_W}px, 100vw)`,
         background: 'var(--bg-primary)',
         boxShadow: '-4px 0 32px rgba(0,0,0,0.12)',
         display: 'flex', flexDirection: 'column',

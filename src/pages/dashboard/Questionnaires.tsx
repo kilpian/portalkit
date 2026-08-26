@@ -122,13 +122,13 @@ export default function Questionnaires() {
   }
 
   return (
-    <div style={{ padding: '32px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Questionnaires</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Create questionnaire templates and send them to clients.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
+      <div className="quest-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left: template library */}
         <div>
           <button onClick={newTemplate} className="btn btn-primary" style={{ width: '100%', marginBottom: 12 }}>
@@ -239,6 +239,7 @@ export default function Questionnaires() {
           <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>No questionnaires sent yet.</p>
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
@@ -268,6 +269,7 @@ export default function Questionnaires() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -326,6 +328,12 @@ export default function Questionnaires() {
           {toast}
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 767px) {
+          .quest-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   )
 }

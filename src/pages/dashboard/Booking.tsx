@@ -154,7 +154,7 @@ export default function BookingPage() {
   })
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 24px)' }}>
       <ConfirmModal
         open={deleteBookingId !== null}
         title="Cancel this booking?"
@@ -219,7 +219,7 @@ export default function BookingPage() {
           {showTypeForm && editingType && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 20 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>{editingType.id ? 'Edit' : 'New'} Session Type</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>Name *</label>
                   <input
@@ -295,9 +295,9 @@ export default function BookingPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {sessionTypes.filter(t => t.active).map(t => (
-                <div key={t.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div key={t.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ width: 12, height: 12, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{t.name}</div>
                     <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{t.duration_minutes} min · ${(t.price_cents / 100).toFixed(0)}</div>
                     {t.description && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{t.description}</div>}
@@ -349,7 +349,7 @@ export default function BookingPage() {
             {DAYS.map((day, idx) => {
               const slot = getSlot(idx)
               return (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px', borderBottom: idx < 6 ? '1px solid #F3F4F6' : 'none' }}>
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: '14px 20px', borderBottom: idx < 6 ? '1px solid #F3F4F6' : 'none' }}>
                   <input
                     type="checkbox"
                     checked={slot.active}
@@ -394,9 +394,9 @@ export default function BookingPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {bookings.map(b => (
-                <div key={b.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div key={b.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                   {b.session_color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: b.session_color, flexShrink: 0 }} />}
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{b.client_name}</div>
                     <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
                       {b.session_type_name && `${b.session_type_name} · `}

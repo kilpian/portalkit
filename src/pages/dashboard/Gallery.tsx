@@ -261,8 +261,8 @@ export default function GalleryPage() {
   // ── LIST VIEW ─────────────────────────────────────────────────
   if (view === 'list') {
     return (
-      <div style={{ padding: '32px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+      <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px,3vw,26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>Gallery</h1>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Deliver photos to clients without leaving PortalKit.</p>
@@ -357,7 +357,7 @@ export default function GalleryPage() {
         {showNew && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex' }} onClick={() => setShowNew(false)}>
             <div style={{ flex: 1 }} />
-            <div onClick={e => e.stopPropagation()} style={{ width: 380, background: 'white', height: '100vh', overflowY: 'auto', padding: 28, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: 'min(380px, 100vw)', background: 'white', height: '100vh', overflowY: 'auto', padding: 28, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--green)', margin: 0 }}>New Gallery</h2>
                 <button onClick={() => setShowNew(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-dim)' }}>✕</button>
@@ -417,7 +417,7 @@ export default function GalleryPage() {
   const photos = activeGallery.files
 
   return (
-    <div style={{ padding: '28px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 28px) clamp(16px, 4vw, 32px) 64px', maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -474,7 +474,7 @@ export default function GalleryPage() {
           <p style={{ fontSize: 14, color: 'var(--text-dim)' }}>No photos yet. Drag and drop or click above to upload.</p>
         </div>
       ) : (
-        <div style={{ columnCount: 4, columnGap: 8, marginBottom: 24 }}>
+        <div className="gallery-cols" style={{ columnCount: 4, columnGap: 8, marginBottom: 24 }}>
           {photos.map((f, idx) => (
             <div
               key={f.id}
@@ -547,7 +547,7 @@ export default function GalleryPage() {
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex' }} onClick={() => setShowSettings(false)}>
           <div style={{ flex: 1 }} />
-          <div onClick={e => e.stopPropagation()} style={{ width: 380, background: 'white', height: '100vh', overflowY: 'auto', padding: 28, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(380px, 100vw)', background: 'white', height: '100vh', overflowY: 'auto', padding: 28, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--green)', margin: 0 }}>Gallery Settings</h2>
               <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-dim)' }}>✕</button>

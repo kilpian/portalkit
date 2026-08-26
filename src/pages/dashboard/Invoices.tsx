@@ -177,7 +177,7 @@ export default function Invoices() {
   const overdueCents = invoices.filter(i => isOverdue(i)).reduce((s, i) => s + i.amount_cents, 0)
 
   return (
-    <div style={{ padding: '32px 32px 64px', maxWidth: 960, margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 960, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -192,7 +192,7 @@ export default function Invoices() {
 
       {/* Stats row */}
       {!loading && invoices.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 24 }}>
           {[
             { label: 'Total Invoiced', value: formatMoney(totalCents), accent: false },
             { label: 'Paid', value: formatMoney(paidCents), accent: paidCents > 0, color: 'var(--color-green)' },
@@ -225,7 +225,7 @@ export default function Invoices() {
             const overdue = isOverdue(inv)
             const effStatus: Invoice['status'] = overdue && inv.status !== 'paid' ? 'overdue' : inv.status
             return (
-              <div key={inv.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div key={inv.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                     <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{formatMoney(inv.amount_cents)}</p>

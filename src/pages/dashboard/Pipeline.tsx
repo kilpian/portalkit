@@ -92,7 +92,7 @@ export default function Pipeline() {
   }
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '32px 32px 64px' }}>
+    <div style={{ height: '100%', overflowY: 'auto', padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 2 }}>
           Pipeline

@@ -224,7 +224,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ padding: '32px 32px 64px', maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 32px) 64px', maxWidth: 900, margin: '0 auto' }}>
         <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 4 }}>
           {greeting()}{firstName ? `, ${firstName}` : ''}.
@@ -331,6 +331,7 @@ export default function Dashboard() {
             <Link to="/dashboard/clients" className="btn btn-primary btn-sm">Add Your First Client</Link>
           </div>
         ) : (
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -356,6 +357,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       </div>

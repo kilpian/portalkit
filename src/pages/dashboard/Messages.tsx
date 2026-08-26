@@ -195,7 +195,10 @@ export default function Messages() {
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Left Panel ── */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+      <div
+        className={`msg-list-panel${selectedClient ? ' msg-list-panel-hidden' : ''}`}
+        style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', background: 'var(--bg-elevated)', overflow: 'hidden' }}
+      >
         {/* Header */}
         <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.03em', marginBottom: 10 }}>Messages</h1>
@@ -271,7 +274,10 @@ export default function Messages() {
       </div>
 
       {/* ── Right Panel ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+      <div
+        className={`msg-thread-panel${selectedClient ? ' msg-thread-panel-active' : ''}`}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)', minWidth: 0 }}
+      >
         {!selectedClient ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--text-dim)' }}>
             <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
@@ -283,6 +289,14 @@ export default function Messages() {
           <>
             {/* Conversation header */}
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <button
+                onClick={() => setSelectedId(null)}
+                className="msg-back-btn"
+                aria-label="Back to client list"
+                style={{ display: 'none', flexShrink: 0, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', padding: 4, marginLeft: -4 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--green)', color: '#FDFAF5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
                 {getInitials(selectedClient.name)}
               </div>
@@ -463,6 +477,16 @@ export default function Messages() {
           </>
         )}
       </div>
+
+      <style>{`
+        @media (max-width: 767px) {
+          .msg-list-panel { width: 100% !important; }
+          .msg-list-panel-hidden { display: none !important; }
+          .msg-thread-panel { display: none !important; }
+          .msg-thread-panel-active { display: flex !important; width: 100% !important; }
+          .msg-back-btn { display: inline-flex !important; }
+        }
+      `}</style>
     </div>
   )
 }
