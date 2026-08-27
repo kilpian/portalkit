@@ -8,6 +8,7 @@ import { useApi } from '../../lib/api'
 import { trialDaysLeft, isSubscribed } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
 import ConfirmModal from '../../components/ConfirmModal'
+import ImportClientsModal from '../../components/ImportClientsModal'
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -45,6 +46,9 @@ export default function Settings() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [switchingAnnual, setSwitchingAnnual] = useState(false)
   const [switchMsg, setSwitchMsg] = useState('')
+
+  // Data import
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
@@ -367,6 +371,8 @@ export default function Settings() {
         onCancel={() => setShowDisconnectModal(false)}
       />
 
+      <ImportClientsModal open={showImportModal} onClose={() => setShowImportModal(false)} />
+
       {showOnboarding && stripeConnectInstance && (
         <div style={{
           position: 'fixed', inset: 0,
@@ -661,6 +667,20 @@ export default function Settings() {
             )}
           </div>
         )}
+
+        {/* ── Import Data ──────────────────────────────────────── */}
+        <SectionCard title="Import Your Data">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Bring your clients over from a spreadsheet or another CRM. Upload a CSV or Excel file, review the column mapping, and confirm — nothing is saved until you approve it.
+              </p>
+            </div>
+            <button onClick={() => setShowImportModal(true)} className="btn btn-ghost btn-sm">
+              Import Your Data →
+            </button>
+          </div>
+        </SectionCard>
 
         {/* ── Security ─────────────────────────────────────────── */}
         <SectionCard title="Security">

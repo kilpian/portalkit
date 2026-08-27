@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Webhook } from 'svix'
 import multer from 'multer'
 import { fileTypeFromBuffer } from 'file-type'
+import { read as readSpreadsheet, utils as xlsxUtils } from 'xlsx'
 import fs from 'fs'
 import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -5099,6 +5100,243 @@ app.post('/api/clients/:id/send-portal-email', requireAuth, async (req, res) => 
     console.error('Send portal email error:', err)
     res.status(500).json({ error: 'Server error' })
   }
+})
+
+// ── CLIENT IMPORT (CSV/XLSX) ───────────────────────────────────
+
+// No mimetype fileFilter here since browsers report wildly inconsistent
+// Content-Types for CSV (text/csv, application/vnd.ms-excel,
+// application/octet-stream, ...). Real validation happens by attempting to
+// actually parse the buffer in the route handler.
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+})
+
+const IMPORT_TARGET_FIELDS = ['client_name', 'partner_name', 'email', 'phone', 'wedding_date', 'venue', 'contract_status', 'invoice_amount', 'notes']
+
+function stringifyCell(v) {
+  if (v === null || v === undefined) return ''
+  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10)
+  return String(v)
+}
+
+// Parses a handful of common export formats: ISO (YYYY-MM-DD), US slash
+// dates (M/D/YYYY or M/D/YY), and native Excel Date objects (from cellDates).
+// Falls back to Date.parse for things like "January 15, 2026". Returns a
+// YYYY-MM-DD string or null if nothing could be made of it.
+function parseFlexibleDate(value) {
+  if (value === null || value === undefined || value === '') return null
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10)
+  }
+  const str = String(value).trim()
+  if (!str) return null
+
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (m) return toIsoDate(m[1], m[2], m[3])
+
+  m = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+  if (m) {
+    let [, mo, d, y] = m
+    if (y.length === 2) y = (Number(y) < 50 ? '20' : '19') + y
+    return toIsoDate(y, mo, d)
+  }
+
+  const parsed = Date.parse(str)
+  if (!isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10)
+  return null
+}
+
+function toIsoDate(y, mo, d) {
+  const yy = String(y).padStart(4, '0')
+  const mm = String(mo).padStart(2, '0')
+  const dd = String(d).padStart(2, '0')
+  const check = new Date(`${yy}-${mm}-${dd}T00:00:00Z`)
+  return isNaN(check.getTime()) ? null : `${yy}-${mm}-${dd}`
+}
+
+function parseSpreadsheet(buffer) {
+  const workbook = readSpreadsheet(buffer, { type: 'buffer', cellDates: true })
+  const sheetName = workbook.SheetNames[0]
+  if (!sheetName) return { headers: [], dataRows: [] }
+  const sheet = workbook.Sheets[sheetName]
+  const rows = xlsxUtils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false })
+  const headers = (rows[0] || []).map(h => stringifyCell(h).trim())
+  const dataRows = rows.slice(1)
+  return { headers, dataRows }
+}
+
+// Asks Claude Haiku to map spreadsheet columns to our client fields. Throws
+// on any failure — the caller falls back to an empty (manual) mapping.
+async function suggestColumnMapping(headers, sampleRows) {
+  const headersSanitized = headers.map(h => sanitizePrompt(h))
+  const sampleLines = sampleRows
+    .map((row, i) => `Row ${i + 1}: ` + row.map(v => sanitizePrompt(String(v)).slice(0, 80)).join(' | '))
+    .join('\n')
+  const prompt = `A photographer is importing a spreadsheet of clients into their CRM.
+
+Headers (in order): ${headersSanitized.map((h, i) => `${i}:"${h}"`).join(', ')}
+
+Sample rows (pipe-separated, same column order as headers):
+${sampleLines}
+
+Map each header to the ONE best-matching target field from this list, or null if nothing clearly fits. Each target field should be used at most once.
+- client_name: the primary client or couple's name
+- partner_name: a second/partner name, only if there's a separate column for it
+- email: email address
+- phone: phone number
+- wedding_date: the wedding/event date
+- venue: venue or location name
+- contract_status: contract or booking status (e.g. signed, pending, booked)
+- invoice_amount: a price, total, or amount owed
+- notes: free-form notes/comments
+
+Return ONLY valid JSON in this exact shape, with one entry per header, using the exact header text as the key: {"mapping": {"<header text>": "<target_field or null>", ...}}`
+
+  const msg = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 800,
+    system: 'You map spreadsheet columns to CRM fields. Return only valid JSON, no markdown, no code fences.',
+    messages: [{ role: 'user', content: prompt }],
+  })
+  const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('AI returned invalid response')
+  const rawMapping = (JSON.parse(jsonMatch[0]).mapping) || {}
+
+  const usedFields = new Set()
+  const mapping = {}
+  for (const header of headers) {
+    let field = rawMapping[header]
+    if (!IMPORT_TARGET_FIELDS.includes(field) || usedFields.has(field)) field = null
+    if (field) usedFields.add(field)
+    mapping[header] = field
+  }
+  const unmatched = headers.filter(h => !mapping[h])
+  return { mapping, unmatched }
+}
+
+app.post('/api/import/analyze', requireAuth, importUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' })
+
+  let headers, dataRows
+  try {
+    ;({ headers, dataRows } = parseSpreadsheet(req.file.buffer))
+  } catch (err) {
+    console.error('Import analyze parse error:', err.message)
+    return res.status(400).json({ error: 'Could not read this file. Please upload a CSV or Excel (.xlsx) file.' })
+  }
+  if (!headers.filter(Boolean).length) return res.status(400).json({ error: 'Could not find column headers in the first row.' })
+  if (!dataRows.length) return res.status(400).json({ error: 'This file has headers but no data rows.' })
+
+  const sampleRows = dataRows.slice(0, 5).map(row => headers.map((_, i) => stringifyCell(row[i])))
+
+  let mapping = {}
+  let unmatchedColumns = [...headers]
+
+  if (anthropic) {
+    const now = Date.now()
+    const timestamps = (aiRateLimit.get(req.userId) || []).filter(t => now - t < 3_600_000)
+    if (timestamps.length < 10) {
+      const allowed = await checkAndIncrementAiCalls(req.userId)
+      if (allowed) {
+        aiRateLimit.set(req.userId, [...timestamps, now])
+        try {
+          const suggested = await suggestColumnMapping(headers, sampleRows)
+          mapping = suggested.mapping
+          unmatchedColumns = suggested.unmatched
+        } catch (err) {
+          console.error('Import analyze AI error:', err.message)
+        }
+      }
+    }
+  }
+  for (const h of headers) if (!(h in mapping)) mapping[h] = null
+
+  res.json({ headers, sampleRows, mapping, unmatchedColumns, totalRows: dataRows.length })
+})
+
+app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' })
+
+  let mapping
+  try {
+    mapping = JSON.parse(req.body.mapping || '{}')
+  } catch {
+    return res.status(400).json({ error: 'Invalid mapping data.' })
+  }
+
+  let headers, dataRows
+  try {
+    ;({ headers, dataRows } = parseSpreadsheet(req.file.buffer))
+  } catch (err) {
+    console.error('Import confirm parse error:', err.message)
+    return res.status(400).json({ error: 'Could not read this file. Please upload a CSV or Excel (.xlsx) file.' })
+  }
+  if (!dataRows.length) return res.status(400).json({ error: 'This file has no data rows.' })
+
+  const headerToIndex = {}
+  headers.forEach((h, i) => { if (!(h in headerToIndex)) headerToIndex[h] = i })
+
+  const fieldToIndex = {}
+  for (const [header, field] of Object.entries(mapping)) {
+    if (!IMPORT_TARGET_FIELDS.includes(field)) continue
+    if (!(header in headerToIndex)) continue
+    if (fieldToIndex[field] !== undefined) continue // first mapped header wins on duplicates
+    fieldToIndex[field] = headerToIndex[header]
+  }
+
+  const getVal = (row, field) => {
+    const idx = fieldToIndex[field]
+    if (idx === undefined) return ''
+    return stringifyCell(row[idx]).trim()
+  }
+
+  let imported = 0
+  const skipped = []
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i]
+    const rowNum = i + 2 // 1-based, +1 to account for the header row
+    const name = getVal(row, 'client_name')
+    if (!name) {
+      skipped.push({ row: rowNum, reason: 'Missing client name' })
+      continue
+    }
+
+    const email = getVal(row, 'email') || null
+    const phone = getVal(row, 'phone') || null
+    const secondaryName = getVal(row, 'partner_name') || null
+    const rawDate = getVal(row, 'wedding_date')
+    const eventDate = rawDate ? parseFlexibleDate(rawDate) : null
+    const venue = getVal(row, 'venue')
+    const contractStatus = getVal(row, 'contract_status')
+    const invoiceAmount = getVal(row, 'invoice_amount')
+    const rawNotes = getVal(row, 'notes')
+
+    // venue / contract_status / invoice_amount have no dedicated client
+    // columns — folded into notes (clearly labeled) rather than dropped.
+    const extraLines = []
+    if (venue) extraLines.push(`Venue: ${venue}`)
+    if (contractStatus) extraLines.push(`Contract status: ${contractStatus}`)
+    if (invoiceAmount) extraLines.push(`Invoice amount: ${invoiceAmount}`)
+    const notes = [rawNotes, ...extraLines].filter(Boolean).join('\n') || null
+
+    try {
+      const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+      await pool.query(
+        `INSERT INTO clients (user_id, name, email, phone, event_date, notes, secondary_name, portal_token)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [req.userId, sanitize(name), email, sanitize(phone), eventDate, sanitize(notes), sanitize(secondaryName), portalToken]
+      )
+      imported++
+    } catch (err) {
+      skipped.push({ row: rowNum, reason: 'Could not save this row: ' + err.message })
+    }
+  }
+
+  res.json({ imported, skipped, skippedCount: skipped.length, total: dataRows.length })
 })
 
 // ── CLIENT EVENTS ─────────────────────────────────────────────

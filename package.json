@@ -52,7 +52,8 @@
     "skia-canvas": "^3.0.8",
     "stripe": "^22.1.1",
     "svix": "^1.93.0",
-    "twitter-api-v2": "^1.29.0"
+    "twitter-api-v2": "^1.29.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
