@@ -190,24 +190,25 @@ export default function Settings() {
     setBillingLoading(true)
     // Stripe's Customer Portal is a hosted-only product — it can't be embedded
     // as a component and refuses to render in an iframe (billing.stripe.com
-    // blocks framing outright). Opening a new tab, rather than redirecting
-    // the current one, is the best available option: it keeps the PortalKit
-    // dashboard open behind it instead of navigating away from it.
-    // The blank tab is opened synchronously (before the await) so browsers
+    // blocks framing outright). Opening a small centered popup, rather than
+    // redirecting the current tab, is the best available option: it keeps
+    // the PortalKit dashboard open behind it instead of navigating away.
+    // The blank popup is opened synchronously (before the await) so browsers
     // don't treat it as a popup and block it. Deliberately no noopener/
     // noreferrer on THIS call — those force window.open() to return null,
     // which would leave nothing to navigate once the Stripe URL comes back,
     // and a second window.open() call after the await gets silently
     // popup-blocked (browsers allow only one per user gesture). We sever
     // the opener link ourselves below once we have the reference instead.
-    const tab = window.open('', '_blank')
+    const popupFeatures = `width=480,height=760,left=${(screen.width - 480) / 2},top=${(screen.height - 760) / 2},resizable=yes,scrollbars=yes`
+    const tab = window.open('', 'stripeBilling', popupFeatures)
     try {
       const res = await authFetch('/api/stripe/create-portal', { method: 'post' })
       if (tab) {
         tab.opener = null
         tab.location.href = res.data.url
       } else {
-        window.open(res.data.url, '_blank', 'noopener,noreferrer')
+        window.open(res.data.url, 'stripeBilling', `noopener,noreferrer,${popupFeatures}`)
       }
     } catch {
       tab?.close()
