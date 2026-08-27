@@ -35,6 +35,7 @@ export default function Proposals() {
   const [aiSuggestions, setAiSuggestions] = useState<Package[]>([])
   const [deletePkgId, setDeletePkgId] = useState<number | null>(null)
   const [deleteProposalId, setDeleteProposalId] = useState<number | null>(null)
+  const [duplicating, setDuplicating] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -117,6 +118,11 @@ export default function Proposals() {
     try {
       const data = { ...propForm, client_id: propForm.client_id ? parseInt(propForm.client_id) : null, expires_at: propForm.expires_at || null }
       let saved: Proposal
+      // Editing a proposal that's already been sent/viewed re-sends it after
+      // saving (same endpoint as a fresh send — resets status to 'sent' and
+      // emails the client again). Accepted proposals can't reach this path:
+      // the Edit button is hidden for them and the backend rejects it too.
+      const needsResend = editingProp && (editingProp.status === 'sent' || editingProp.status === 'viewed')
       if (editingProp) {
         const res = await authFetch(`/api/proposals/${editingProp.id}`, { method: 'put', data })
         saved = res.data
@@ -126,12 +132,20 @@ export default function Proposals() {
         saved = res.data
         setProposals(prev => [saved, ...prev])
       }
-      if (andSend) {
+      if (andSend || needsResend) {
         const sendRes = await authFetch(`/api/proposals/${saved.id}/send`, { method: 'post' })
         setProposals(prev => prev.map(p => p.id === saved.id ? sendRes.data : p))
       }
       setShowPropForm(false)
     } catch {} finally { setSavingAction(null) }
+  }
+
+  const duplicateProposal = async (id: number) => {
+    setDuplicating(id)
+    try {
+      const res = await authFetch(`/api/proposals/${id}/duplicate`, { method: 'post' })
+      setProposals(prev => [res.data, ...prev])
+    } catch {} finally { setDuplicating(null) }
   }
 
   const sendProposal = async (id: number) => {
@@ -328,7 +342,7 @@ export default function Proposals() {
               <button onClick={() => setShowPropForm(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #D1D5DB', background: 'transparent', fontSize: 14, cursor: 'pointer', color: '#374151' }}>Cancel</button>
               {editingProp ? (
                 <button onClick={() => saveProp(false)} disabled={savingAction !== null || !propForm.title.trim()} style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#111827', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                  {savingAction === 'draft' ? 'Saving...' : 'Save Changes'}
+                  {savingAction !== null ? 'Saving...' : (editingProp.status === 'sent' || editingProp.status === 'viewed') ? 'Save & Resend →' : 'Save Changes'}
                 </button>
               ) : (
                 <>
@@ -348,6 +362,9 @@ export default function Proposals() {
             </div>
             {!editingProp && !propForm.client_id && (
               <p style={{ fontSize: 12, color: '#DC2626', marginTop: 8, textAlign: 'right' }}>Select a client before sending.</p>
+            )}
+            {editingProp && (editingProp.status === 'sent' || editingProp.status === 'viewed') && (
+              <p style={{ fontSize: 12, color: '#2563EB', marginTop: 8, textAlign: 'right' }}>Saving will resend the updated proposal to the client.</p>
             )}
           </div>
         </>
@@ -444,9 +461,17 @@ export default function Proposals() {
                           {copied === p.id ? '✓ Copied' : 'Copy Link'}
                         </button>
                       )}
-                      {p.status === 'draft' && (
+                      {p.status !== 'accepted' && (
                         <button onClick={() => openEditProp(p)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}>Edit</button>
                       )}
+                      <button
+                        onClick={() => duplicateProposal(p.id)}
+                        disabled={duplicating === p.id}
+                        title="Create a new draft copy of this proposal with no client attached"
+                        style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: 'transparent', color: '#374151', cursor: 'pointer' }}
+                      >
+                        {duplicating === p.id ? 'Duplicating...' : 'Duplicate'}
+                      </button>
                       {deleteProposalId === p.id ? (
                         <>
                           <button onClick={() => deleteProposal(p.id)} style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Confirm</button>

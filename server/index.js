@@ -8151,6 +8151,12 @@ app.post('/api/proposals', requireAuth, async (req, res) => {
 app.put('/api/proposals/:id', requireAuth, async (req, res) => {
   const { title, message, packages, expires_at } = req.body
   try {
+    const checkRes = await pool.query('SELECT status FROM proposals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!checkRes.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    if (checkRes.rows[0].status === 'accepted') {
+      return res.status(400).json({ error: 'This proposal has already been accepted and can no longer be edited. Duplicate it to make a new one.' })
+    }
+
     const result = await pool.query(
       'UPDATE proposals SET title=$1, message=$2, packages=$3, expires_at=$4 WHERE id=$5 AND user_id=$6 RETURNING *',
       [sanitize(title), sanitize(message) || null, JSON.stringify(packages || []), expires_at || null, req.params.id, req.userId]
@@ -8164,6 +8170,19 @@ app.delete('/api/proposals/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM proposals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
     res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+})
+
+app.post('/api/proposals/:id/duplicate', requireAuth, async (req, res) => {
+  try {
+    const srcRes = await pool.query('SELECT title, message, packages FROM proposals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    if (!srcRes.rows.length) return res.status(404).json({ error: 'Proposal not found' })
+    const src = srcRes.rows[0]
+    const result = await pool.query(
+      'INSERT INTO proposals (user_id, client_id, title, message, packages) VALUES ($1, NULL, $2, $3, $4) RETURNING *',
+      [req.userId, src.title, src.message, JSON.stringify(src.packages || [])]
+    )
+    res.status(201).json(result.rows[0])
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
