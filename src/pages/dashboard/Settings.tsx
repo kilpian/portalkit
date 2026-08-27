@@ -9,6 +9,7 @@ import { trialDaysLeft, isSubscribed } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
 import ConfirmModal from '../../components/ConfirmModal'
 import ImportClientsModal from '../../components/ImportClientsModal'
+import ManageSubscriptionModal from '../../components/ManageSubscriptionModal'
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -42,7 +43,7 @@ export default function Settings() {
   const [brandingErr, setBrandingErr] = useState('')
 
   // Billing
-  const [billingLoading, setBillingLoading] = useState(false)
+  const [showManageSubModal, setShowManageSubModal] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [switchingAnnual, setSwitchingAnnual] = useState(false)
   const [switchMsg, setSwitchMsg] = useState('')
@@ -189,37 +190,6 @@ export default function Settings() {
   }
 
   const handleUpgrade = () => setShowUpgradeModal(true)
-
-  const handleManageBilling = async () => {
-    setBillingLoading(true)
-    // Stripe's Customer Portal is a hosted-only product — it can't be embedded
-    // as a component and refuses to render in an iframe (billing.stripe.com
-    // blocks framing outright). Opening a small centered popup, rather than
-    // redirecting the current tab, is the best available option: it keeps
-    // the PortalKit dashboard open behind it instead of navigating away.
-    // The blank popup is opened synchronously (before the await) so browsers
-    // don't treat it as a popup and block it. Deliberately no noopener/
-    // noreferrer on THIS call — those force window.open() to return null,
-    // which would leave nothing to navigate once the Stripe URL comes back,
-    // and a second window.open() call after the await gets silently
-    // popup-blocked (browsers allow only one per user gesture). We sever
-    // the opener link ourselves below once we have the reference instead.
-    const popupFeatures = `width=480,height=760,left=${(screen.width - 480) / 2},top=${(screen.height - 760) / 2},resizable=yes,scrollbars=yes`
-    const tab = window.open('', 'stripeBilling', popupFeatures)
-    try {
-      const res = await authFetch('/api/stripe/create-portal', { method: 'post' })
-      if (tab) {
-        tab.opener = null
-        tab.location.href = res.data.url
-      } else {
-        window.open(res.data.url, 'stripeBilling', `noopener,noreferrer,${popupFeatures}`)
-      }
-    } catch {
-      tab?.close()
-    } finally {
-      setBillingLoading(false)
-    }
-  }
 
   const handleSwitchToAnnual = async () => {
     setSwitchingAnnual(true)
@@ -372,6 +342,7 @@ export default function Settings() {
       />
 
       <ImportClientsModal open={showImportModal} onClose={() => setShowImportModal(false)} />
+      <ManageSubscriptionModal open={showManageSubModal} onClose={() => setShowManageSubModal(false)} />
 
       {showOnboarding && stripeConnectInstance && (
         <div style={{
@@ -548,8 +519,8 @@ export default function Settings() {
             </div>
             <div style={{ flexShrink: 0 }}>
               {isActive ? (
-                <button onClick={handleManageBilling} disabled={billingLoading} className="btn btn-ghost btn-sm">
-                  {billingLoading ? 'Loading…' : 'Manage Subscription'}
+                <button onClick={() => setShowManageSubModal(true)} className="btn btn-ghost btn-sm">
+                  Manage Subscription
                 </button>
               ) : (
                 <button

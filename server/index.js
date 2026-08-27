@@ -4080,6 +4080,15 @@ async function processReferralRewards() {
 }
 
 async function runDailyJobs() {
+  // Cron/outreach/email jobs touch real users (reminders, cold outreach,
+  // content posting, referral rewards, ...) and must never run just because
+  // a local dev server happened to boot against the production database.
+  // Guarded here (not just at the call site) so this holds regardless of
+  // how/where runDailyJobs ever gets invoked in the future.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`⏸️  runDailyJobs skipped — NODE_ENV is '${process.env.NODE_ENV || 'undefined'}', not 'production'. Cron/outreach/email jobs only run in production.`)
+    return
+  }
   const now = new Date()
   const hour = now.getUTCHours()
   const day = now.getUTCDay()
@@ -4607,6 +4616,71 @@ app.post('/api/stripe/create-portal', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Portal error:', err)
     res.status(500).json({ error: 'Failed to create portal session' })
+  }
+})
+
+// Live subscription data for the native "Manage Subscription" modal — always
+// read straight from Stripe (stripe.subscriptions.retrieve), never just the
+// DB mirror, so this can't drift from what the customer is actually billed.
+app.get('/api/stripe/subscription', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const subId = req.user.stripe_subscription_id
+    if (!subId || subId === 'manual_activation') {
+      return res.status(404).json({ error: 'No active Stripe subscription found' })
+    }
+
+    const sub = await stripe.subscriptions.retrieve(subId, {
+      expand: ['items.data.price', 'default_payment_method'],
+    })
+    const price = sub.items.data[0]?.price
+
+    let card = null
+    const pm = sub.default_payment_method
+    if (pm && typeof pm === 'object' && pm.card) {
+      card = { brand: pm.card.brand, last4: pm.card.last4, exp_month: pm.card.exp_month, exp_year: pm.card.exp_year }
+    } else {
+      // Subscription has no payment-method override — fall back to the
+      // customer's account-level default.
+      const customer = await stripe.customers.retrieve(sub.customer)
+      const defaultPmId = (typeof customer === 'object' && !customer.deleted) ? customer.invoice_settings?.default_payment_method : null
+      if (defaultPmId) {
+        const pmObj = await stripe.paymentMethods.retrieve(defaultPmId)
+        if (pmObj.card) card = { brand: pmObj.card.brand, last4: pmObj.card.last4, exp_month: pmObj.card.exp_month, exp_year: pmObj.card.exp_year }
+      }
+    }
+
+    res.json({
+      status: sub.status,
+      cancel_at_period_end: sub.cancel_at_period_end,
+      current_period_end: sub.current_period_end,
+      amount: price?.unit_amount ?? null,
+      currency: price?.currency ?? 'usd',
+      interval: price?.recurring?.interval ?? null,
+      card,
+    })
+  } catch (err) {
+    console.error('Get subscription error:', err.message)
+    res.status(500).json({ error: 'Failed to load subscription details' })
+  }
+})
+
+app.post('/api/stripe/cancel-subscription', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const subId = req.user.stripe_subscription_id
+    if (!subId || subId === 'manual_activation') {
+      return res.status(400).json({ error: 'No active Stripe subscription found' })
+    }
+    // Keeps access through the period they've already paid for — the
+    // customer.subscription.deleted webhook flips plan to 'cancelled' once
+    // Stripe actually ends it at period end.
+    const sub = await stripe.subscriptions.update(subId, { cancel_at_period_end: true })
+    console.log(`💳 Subscription ${subId} set to cancel at period end for user ${req.userId}`)
+    res.json({ success: true, cancel_at_period_end: sub.cancel_at_period_end, current_period_end: sub.current_period_end })
+  } catch (err) {
+    console.error('Cancel subscription error:', err.message)
+    res.status(500).json({ error: 'Failed to cancel subscription' })
   }
 })
 
