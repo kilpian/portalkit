@@ -4042,7 +4042,9 @@ async function processReferralRewards() {
       if (stripe && ref.stripe_subscription_id) {
         try {
           const sub = await stripe.subscriptions.retrieve(ref.stripe_subscription_id)
-          const currentPeriodEnd = sub.current_period_end
+          // current_period_end lives on the subscription item on this API
+          // version, not the subscription itself — see /api/stripe/subscription.
+          const currentPeriodEnd = sub.items.data[0]?.current_period_end ?? sub.current_period_end
           await stripe.subscriptions.update(ref.stripe_subscription_id, {
             trial_end: currentPeriodEnd + (30 * 24 * 60 * 60),
           })
@@ -4633,7 +4635,13 @@ app.get('/api/stripe/subscription', requireAuth, async (req, res) => {
     const sub = await stripe.subscriptions.retrieve(subId, {
       expand: ['items.data.price', 'default_payment_method'],
     })
-    const price = sub.items.data[0]?.price
+    const item = sub.items.data[0]
+    const price = item?.price
+    // On this account's pinned Stripe API version (2026-04-22.dahlia and
+    // later), current_period_end lives on the subscription ITEM, not the
+    // subscription object itself — confirmed live via the actual API
+    // response, which has no top-level current_period_end at all.
+    const currentPeriodEnd = item?.current_period_end ?? sub.current_period_end ?? null
 
     let card = null
     const pm = sub.default_payment_method
@@ -4653,7 +4661,7 @@ app.get('/api/stripe/subscription', requireAuth, async (req, res) => {
     res.json({
       status: sub.status,
       cancel_at_period_end: sub.cancel_at_period_end,
-      current_period_end: sub.current_period_end,
+      current_period_end: currentPeriodEnd,
       amount: price?.unit_amount ?? null,
       currency: price?.currency ?? 'usd',
       interval: price?.recurring?.interval ?? null,
@@ -4677,7 +4685,9 @@ app.post('/api/stripe/cancel-subscription', requireAuth, async (req, res) => {
     // Stripe actually ends it at period end.
     const sub = await stripe.subscriptions.update(subId, { cancel_at_period_end: true })
     console.log(`💳 Subscription ${subId} set to cancel at period end for user ${req.userId}`)
-    res.json({ success: true, cancel_at_period_end: sub.cancel_at_period_end, current_period_end: sub.current_period_end })
+    // current_period_end lives on the subscription item on this API version — see /api/stripe/subscription.
+    const currentPeriodEnd = sub.items.data[0]?.current_period_end ?? sub.current_period_end ?? null
+    res.json({ success: true, cancel_at_period_end: sub.cancel_at_period_end, current_period_end: currentPeriodEnd })
   } catch (err) {
     console.error('Cancel subscription error:', err.message)
     res.status(500).json({ error: 'Failed to cancel subscription' })
@@ -4802,7 +4812,12 @@ app.post('/api/stripe/connect/account-session', requireAuth, async (req, res) =>
 
 app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
   try {
-    const { billingCycle = 'monthly' } = req.body
+    // req.body is undefined (not {}) when the caller sends a POST with no
+    // body at all — e.g. the Manage Subscription modal's plain
+    // authFetch(url, { method: 'post' }) call with no data field. Destructuring
+    // straight off req.body threw "Cannot read properties of undefined
+    // (reading 'billingCycle')" in that case, confirmed live.
+    const { billingCycle = 'monthly' } = req.body || {}
     console.log('💳 Creating setup intent for user:', req.user.id, 'cycle:', billingCycle)
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
 
@@ -4833,7 +4848,7 @@ app.post('/api/stripe/create-setup-intent', requireAuth, async (req, res) => {
 app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
-    const { paymentMethodId, immediate, billingCycle = 'monthly' } = req.body
+    const { paymentMethodId, immediate, billingCycle = 'monthly' } = req.body || {}
     if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId required' })
 
     const customerId = req.user.stripe_customer_id
@@ -5195,6 +5210,30 @@ function stringifyCell(v) {
   return String(v)
 }
 
+// Lightweight content-shape check before handing a buffer to the xlsx
+// parser — mirrors the real magic-byte sniffing already used for
+// Gallery/Files uploads (file-type), adapted for these two formats:
+//  - XLSX (and legacy .xls/OLE): both are binary containers with a known
+//    signature (ZIP's 'PK' or OLE's compound-file header), checked directly.
+//  - CSV: plain text has no magic bytes at all, so instead we check that
+//    the first chunk of the file is plausible readable text (no NUL bytes,
+//    overwhelmingly printable ASCII/UTF-8) rather than arbitrary binary
+//    garbage renamed to .csv.
+function looksLikeImportableFile(buffer) {
+  if (!buffer || buffer.length === 0) return false
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B) return true // 'PK' — ZIP/XLSX
+  if (buffer.length >= 4 && buffer[0] === 0xD0 && buffer[1] === 0xCF && buffer[2] === 0x11 && buffer[3] === 0xE0) return true // OLE/legacy .xls
+
+  const sample = buffer.subarray(0, Math.min(buffer.length, 4096))
+  let printable = 0
+  for (let i = 0; i < sample.length; i++) {
+    const byte = sample[i]
+    if (byte === 0) return false
+    if (byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126) || byte >= 0x80) printable++
+  }
+  return printable / sample.length > 0.95
+}
+
 // Parses a handful of common export formats: ISO (YYYY-MM-DD), US slash
 // dates (M/D/YYYY or M/D/YY), and native Excel Date objects (from cellDates).
 // Falls back to Date.parse for things like "January 15, 2026". Returns a
@@ -5230,8 +5269,15 @@ function toIsoDate(y, mo, d) {
   return isNaN(check.getTime()) ? null : `${yy}-${mm}-${dd}`
 }
 
+// sheetRows caps how many rows xlsx will even read off the sheet — a real,
+// concrete bound on worst-case parse cost (unlike a bare setTimeout, which
+// can't preempt xlsx.read()'s synchronous, single-threaded work). 20,000
+// rows is far beyond any real client list but stops a pathological/crafted
+// file from making the parser do unbounded work.
+const IMPORT_MAX_ROWS = 20_000
+
 function parseSpreadsheet(buffer) {
-  const workbook = readSpreadsheet(buffer, { type: 'buffer', cellDates: true })
+  const workbook = readSpreadsheet(buffer, { type: 'buffer', cellDates: true, sheetRows: IMPORT_MAX_ROWS })
   const sheetName = workbook.SheetNames[0]
   if (!sheetName) return { headers: [], dataRows: [] }
   const sheet = workbook.Sheets[sheetName]
@@ -5239,6 +5285,19 @@ function parseSpreadsheet(buffer) {
   const headers = (rows[0] || []).map(h => stringifyCell(h).trim())
   const dataRows = rows.slice(1)
   return { headers, dataRows }
+}
+
+// Wraps the (synchronous) parse in a timeout so the request fails fast with
+// a clear error instead of the client hanging indefinitely. Note this bounds
+// perceived request time for any parse that actually completes — it can't
+// forcibly interrupt xlsx.read() mid-flight, since Node is single-threaded
+// and that call is synchronous. The sheetRows cap above is what actually
+// bounds the parser's worst-case work; this timeout is the second layer.
+function parseSpreadsheetWithTimeout(buffer, timeoutMs = 8000) {
+  return Promise.race([
+    Promise.resolve().then(() => parseSpreadsheet(buffer)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Parsing this file took too long.')), timeoutMs)),
+  ])
 }
 
 // Asks Claude Haiku to map spreadsheet columns to our client fields. Throws
@@ -5293,10 +5352,13 @@ Return ONLY valid JSON in this exact shape, with one entry per header, using the
 
 app.post('/api/import/analyze', requireAuth, importUpload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' })
+  if (!looksLikeImportableFile(req.file.buffer)) {
+    return res.status(400).json({ error: 'This doesn\'t look like a valid CSV or Excel file.' })
+  }
 
   let headers, dataRows
   try {
-    ;({ headers, dataRows } = parseSpreadsheet(req.file.buffer))
+    ;({ headers, dataRows } = await parseSpreadsheetWithTimeout(req.file.buffer))
   } catch (err) {
     console.error('Import analyze parse error:', err.message)
     return res.status(400).json({ error: 'Could not read this file. Please upload a CSV or Excel (.xlsx) file.' })
@@ -5333,6 +5395,9 @@ app.post('/api/import/analyze', requireAuth, importUpload.single('file'), async 
 
 app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' })
+  if (!looksLikeImportableFile(req.file.buffer)) {
+    return res.status(400).json({ error: 'This doesn\'t look like a valid CSV or Excel file.' })
+  }
 
   let mapping
   try {
@@ -5343,7 +5408,7 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
 
   let headers, dataRows
   try {
-    ;({ headers, dataRows } = parseSpreadsheet(req.file.buffer))
+    ;({ headers, dataRows } = await parseSpreadsheetWithTimeout(req.file.buffer))
   } catch (err) {
     console.error('Import confirm parse error:', err.message)
     return res.status(400).json({ error: 'Could not read this file. Please upload a CSV or Excel (.xlsx) file.' })
@@ -8759,7 +8824,7 @@ app.get('/api/admin/audit/orphaned-subscriptions', async (req, res) => {
           currency: item?.price?.currency ?? null,
           interval: item?.price?.recurring?.interval ?? null,
           created: s.created ? new Date(s.created * 1000).toISOString() : null,
-          current_period_end: s.current_period_end ? new Date(s.current_period_end * 1000).toISOString() : null,
+          current_period_end: item?.current_period_end ? new Date(item.current_period_end * 1000).toISOString() : null,
         }
       })
 

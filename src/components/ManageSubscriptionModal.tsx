@@ -122,6 +122,10 @@ export default function ManageSubscriptionModal({ open, onClose }: { open: boole
       const res = await authFetch('/api/stripe/create-setup-intent', { method: 'post' })
       setClientSecret(res.data.clientSecret)
     } catch {
+      // Collapse back to the trigger-button state on failure so the error
+      // and "Loading secure form…" text are never shown at the same time —
+      // showUpdateCard=false hides the loading branch entirely.
+      setShowUpdateCard(false)
       setCardMsg('Could not start card update. Please try again.')
     }
   }
