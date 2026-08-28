@@ -4188,7 +4188,10 @@ async function requireAuth(req, res, next) {
   try {
     const token = authHeader?.replace('Bearer ', '')
     if (!token) {
-      await recordLoginFailure(ip)
+      // No auth route exists here — every call site is a normal API/session
+      // check (Clerk owns credential verification client-side), so this is
+      // never a real login attempt. Recording it toward auto-ban punishes
+      // ordinary traffic (page loads before hydration, expired tokens).
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
@@ -4339,7 +4342,6 @@ async function requireAuth(req, res, next) {
     next()
   } catch (err) {
     console.error('❌ Auth error:', err.message)
-    await recordLoginFailure(ip)
     res.status(401).json({ error: 'Unauthorized' })
   }
 }
@@ -9545,6 +9547,7 @@ app.delete('/api/admin/ip-bans/:ip', async (req, res) => {
   try {
     const ip = decodeURIComponent(req.params.ip)
     await pool.query('UPDATE ip_bans SET is_active=false WHERE ip=$1', [ip])
+    failedLogins.delete(ip) // clear residual in-memory count so it can't silently re-trigger a new ban
     console.log(`✅ Admin unbanned IP: ${ip}`)
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
