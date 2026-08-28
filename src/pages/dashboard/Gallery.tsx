@@ -584,7 +584,14 @@ export default function GalleryPage() {
             {settingsForm.password_protected && (
               <div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input className="input" type="text" placeholder="Gallery password" value={settingsForm.password} onChange={e => setSettingsForm(f => ({ ...f, password: e.target.value }))} style={{ flex: 1 }} />
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder={activeGallery?.password_protected ? 'Leave blank to keep current password' : 'Gallery password'}
+                    value={settingsForm.password}
+                    onChange={e => setSettingsForm(f => ({ ...f, password: e.target.value }))}
+                    style={{ flex: 1 }}
+                  />
                   <button
                     type="button"
                     onClick={() => {
@@ -599,7 +606,11 @@ export default function GalleryPage() {
                     {pwCopied ? '✓ Copied' : 'Copy'}
                   </button>
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Share this password with your client via message.</p>
+                <p style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+                  {activeGallery?.password_protected
+                    ? "For security, we don't display the current password here — enter a new one only if you want to change it. Copy it before saving to share with your client."
+                    : 'Share this password with your client via message.'}
+                </p>
               </div>
             )}
             <button onClick={saveSettings} disabled={settingsSaving} className="btn btn-primary" style={{ marginTop: 8 }}>

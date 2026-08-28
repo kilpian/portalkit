@@ -11,7 +11,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Webhook } from 'svix'
 import multer from 'multer'
 import { fileTypeFromBuffer } from 'file-type'
-import { read as readSpreadsheet, utils as xlsxUtils } from 'xlsx'
+import ExcelJS from 'exceljs'
+import Papa from 'papaparse'
+import bcrypt from 'bcryptjs'
 import fs from 'fs'
 import crypto from 'crypto'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -295,7 +297,7 @@ app.post('/api/stripe/webhook',
                   html: emailTemplate({
                     title: "You're in — let's get your first portal live",
                     preheader: "3 things to do in your first 10 minutes with PortalKit.",
-                    body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 8px;">Hey ${firstName}, welcome to PortalKit! 🎉</h2>
+                    body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 8px;">Hey ${escapeHtml(firstName)}, welcome to PortalKit! 🎉</h2>
 <p style="color:#6B5E4A;line-height:1.7;margin:0 0 20px;font-size:15px;">I'm Chidera, founder of PortalKit. Here are the 3 things that'll make the biggest difference in your first session:</p>
 
 <div style="background:#F9F6F0;border-radius:10px;padding:20px;margin:0 0 20px;">
@@ -427,7 +429,7 @@ app.post('/api/stripe/webhook',
                   html: emailTemplate({
                     title: 'Your payment didn\'t go through',
                     preheader: 'Action required — please update your payment method to keep access.',
-                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your payment didn't go through</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${firstName}, your recent PortalKit payment failed. Don't worry — Stripe will automatically retry the charge, but we recommend updating your card now to avoid any interruption.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can update your payment method, view past invoices, or manage your subscription from the link below.</p><p style="color:#A32D2D;font-weight:600;line-height:1.6;margin:0 0 16px;">⚠️ If payment isn't resolved within 7 days, your account will be paused.</p>`,
+                    body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your payment didn't go through</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(firstName)}, your recent PortalKit payment failed. Don't worry — Stripe will automatically retry the charge, but we recommend updating your card now to avoid any interruption.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can update your payment method, view past invoices, or manage your subscription from the link below.</p><p style="color:#A32D2D;font-weight:600;line-height:1.6;margin:0 0 16px;">⚠️ If payment isn't resolved within 7 days, your account will be paused.</p>`,
                     ctaText: 'Update Payment Method →',
                     ctaUrl: portalUrl,
                     footerNote: 'PortalKit by Kilpian LLC',
@@ -469,7 +471,7 @@ app.post('/api/stripe/webhook',
                 html: emailTemplate({
                   title: 'Subscription Cancelled',
                   preheader: 'Your PortalKit subscription has ended.',
-                  body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Subscription cancelled</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${u.full_name?.split(' ')[0] || 'there'}, your PortalKit subscription has been cancelled. You can resubscribe at any time to regain access to your client portals.</p>`,
+                  body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Subscription cancelled</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(u.full_name?.split(' ')[0]) || 'there'}, your PortalKit subscription has been cancelled. You can resubscribe at any time to regain access to your client portals.</p>`,
                   ctaText: 'Resubscribe →',
                   ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/settings`,
                   footerNote: 'PortalKit by Kilpian LLC',
@@ -684,6 +686,21 @@ function sanitize(str) {
   return String(str).trim().slice(0, 10000)
 }
 
+// HTML-escapes a value for safe interpolation into generated HTML (emails,
+// signed-contract print view). sanitize() only trims/truncates — it was
+// never meant to be an XSS guard, so every user-controlled string (names,
+// titles, notes, messages) must be escaped again at the point it's dropped
+// into markup.
+function escapeHtml(str) {
+  if (str === null || str === undefined) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 const sanitizePrompt = (str) => str?.replace(/<[^>]*>/g, '').slice(0, 2000) || ''
 
 function stripMarkdown(text) {
@@ -706,10 +723,10 @@ function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background:#F5F5F0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>
+  <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(preheader)}</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F5F0;padding:40px 20px;">
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
@@ -719,9 +736,9 @@ function emailTemplate({ title, preheader, body, ctaText, ctaUrl, footerNote }) 
         <tr><td style="background:#FFFFFF;padding:40px;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
           ${body}
         </td></tr>
-        ${ctaText && ctaUrl ? `<tr><td style="background:#FFFFFF;padding:0 40px 32px;text-align:center;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;"><a href="${ctaUrl}" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">${ctaText}</a></td></tr>` : ''}
+        ${ctaText && ctaUrl ? `<tr><td style="background:#FFFFFF;padding:0 40px 32px;text-align:center;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;"><a href="${ctaUrl}" style="display:inline-block;padding:14px 28px;background:#1B4332;color:#FDFAF5;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">${escapeHtml(ctaText)}</a></td></tr>` : ''}
         <tr><td style="background:#F9F6F0;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;border:1px solid #E8E0D0;border-top:none;">
-          <p style="color:#9C8E7A;font-size:13px;margin:0 0 8px;">${footerNote || 'Sent by PortalKit · helping photographers deliver a beautiful client experience'}</p>
+          <p style="color:#9C8E7A;font-size:13px;margin:0 0 8px;">${footerNote ? escapeHtml(footerNote) : 'Sent by PortalKit · helping photographers deliver a beautiful client experience'}</p>
           <p style="margin:0;"><a href="https://getportalkit.com" style="color:#6B5E4A;font-size:13px;text-decoration:none;">getportalkit.com</a></p>
         </td></tr>
       </table>
@@ -768,7 +785,7 @@ async function markInvoicePaidAndNotify(meta, amountCents) {
         html: emailTemplate({
           title: 'Payment Receipt',
           preheader: `Your ${amountStr} payment to ${photographerName} was successful.`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment received ✓</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Thank you — your payment was successful. Here are the details for your records:</p><table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:14px;color:#2D2416;"><tr><td style="padding:6px 0;color:#9C8E7A;">Amount paid</td><td style="padding:6px 0;text-align:right;font-weight:700;">${amountStr}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Paid to</td><td style="padding:6px 0;text-align:right;">${photographerName}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Reference</td><td style="padding:6px 0;text-align:right;">${invoiceRef}</td></tr></table><p style="color:#9C8E7A;font-size:13px;margin:0;">This receipt confirms your payment. No further action is needed.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Payment received ✓</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Thank you — your payment was successful. Here are the details for your records:</p><table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:14px;color:#2D2416;"><tr><td style="padding:6px 0;color:#9C8E7A;">Amount paid</td><td style="padding:6px 0;text-align:right;font-weight:700;">${amountStr}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Paid to</td><td style="padding:6px 0;text-align:right;">${escapeHtml(photographerName)}</td></tr><tr><td style="padding:6px 0;color:#9C8E7A;">Reference</td><td style="padding:6px 0;text-align:right;">${escapeHtml(invoiceRef)}</td></tr></table><p style="color:#9C8E7A;font-size:13px;margin:0;">This receipt confirms your payment. No further action is needed.</p>`,
           ctaText: 'View your portal →',
           ctaUrl: portalUrl,
           footerNote: 'PortalKit by Kilpian LLC',
@@ -791,7 +808,7 @@ async function markInvoicePaidAndNotify(meta, amountCents) {
         html: emailTemplate({
           title: 'Payment Received',
           preheader: `${meta.client_name || 'A client'} paid ${amountStr}.`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Payment received 💰</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${meta.client_name || 'Your client'}</strong> just paid <strong>${amountStr}</strong> on ${invoiceRef}. Funds are on their way to your connected Stripe account.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Payment received 💰</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${escapeHtml(meta.client_name) || 'Your client'}</strong> just paid <strong>${amountStr}</strong> on ${escapeHtml(invoiceRef)}. Funds are on their way to your connected Stripe account.</p>`,
           ctaText: 'View in Dashboard →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/invoices`,
           footerNote: 'PortalKit · payments for photographers',
@@ -1592,7 +1609,7 @@ async function sendEventReminders() {
             html: emailTemplate({
               title: reminder.subject,
               preheader: `Your wedding with ${biz} is coming up!`,
-              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${reminder.subject}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${client.name}! Your wedding day is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your contract, check your invoice status, and send any last-minute messages to ${biz}.</p>`,
+              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${escapeHtml(reminder.subject)}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${escapeHtml(client.name)}! Your wedding day is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your contract, check your invoice status, and send any last-minute messages to ${escapeHtml(biz)}.</p>`,
               ctaText: 'Visit Your Portal →',
               ctaUrl: portalLink,
               footerNote: `Reminder sent on behalf of ${biz} via PortalKit`,
@@ -1650,7 +1667,7 @@ async function sendEventReminders() {
             html: emailTemplate({
               title: subject,
               preheader: `${ev.event_name} with ${biz} is coming up!`,
-              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${subject}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${ev.client_name}! Your upcoming event — <strong>${ev.event_name}</strong> — is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your details and send any last-minute messages to ${biz}.</p>`,
+              body: `<h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1B4332;">${escapeHtml(subject)}</h2><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Hi ${escapeHtml(ev.client_name)}! Your upcoming event — <strong>${escapeHtml(ev.event_name)}</strong> — is on <strong>${eventDate}</strong>.</p><p style="margin:0 0 16px;color:#6B7280;font-size:15px;">Visit your client portal to review your details and send any last-minute messages to ${escapeHtml(biz)}.</p>`,
               ctaText: 'Visit Your Portal →',
               ctaUrl: portalLink,
               footerNote: `Reminder sent on behalf of ${biz} via PortalKit`,
@@ -1702,7 +1719,7 @@ async function sendEventReminders() {
             html: emailTemplate({
               title: 'Please sign your contract',
               preheader: 'Your contract is waiting for your signature',
-              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Reminder: Your contract needs your signature</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${row.client_name}, ${biz} sent you a contract titled "<strong>${row.title}</strong>" that still needs your signature. Please review and sign it at your earliest convenience.</p>`,
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Reminder: Your contract needs your signature</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(row.client_name)}, ${escapeHtml(biz)} sent you a contract titled "<strong>${escapeHtml(row.title)}</strong>" that still needs your signature. Please review and sign it at your earliest convenience.</p>`,
               ctaText: 'Sign Your Contract →',
               ctaUrl: portalLink,
               footerNote: `Sent by ${biz} via PortalKit`,
@@ -1748,7 +1765,7 @@ async function sendEventReminders() {
             html: emailTemplate({
               title: 'Your balance is due soon',
               preheader: 'Your event is 7 days away — please settle your balance',
-              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your balance is due soon</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${row.client_name}, your event with ${biz} is 7 days away. You have an outstanding balance of <strong>${amount}</strong>. Please visit your portal to pay your invoice before the event.</p>`,
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your balance is due soon</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(row.client_name)}, your event with ${escapeHtml(biz)} is 7 days away. You have an outstanding balance of <strong>${amount}</strong>. Please visit your portal to pay your invoice before the event.</p>`,
               ctaText: 'View Your Invoice →',
               ctaUrl: portalLink,
               footerNote: `Sent by ${biz} via PortalKit`,
@@ -1797,7 +1814,7 @@ async function sendTrialExpiryReminders() {
           body: `
             <h2 style="margin:0 0 16px;font-size:22px;
               font-weight:700;color:#1B4332;">
-              Hi ${firstName} — your trial ends ${trialEndDate}
+              Hi ${escapeHtml(firstName)} — your trial ends ${trialEndDate}
             </h2>
             <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
               Your 14-day free trial of PortalKit ends on
@@ -1861,7 +1878,7 @@ async function sendTrialExpiryReminders() {
           body: `
             <h2 style="margin:0 0 16px;font-size:22px;
               font-weight:700;color:#1B4332;">
-              Hi ${firstName} — last reminder
+              Hi ${escapeHtml(firstName)} — last reminder
             </h2>
             <p style="margin:0 0 16px;color:#6B7280;font-size:15px;">
               Your PortalKit trial ends <strong>tomorrow,
@@ -1917,10 +1934,10 @@ async function sendOnboardingSequence() {
         const clientCount = await pool.query('SELECT COUNT(*) as count FROM clients WHERE user_id=$1', [u.id])
         const hasClients = parseInt(clientCount.rows[0].count, 10) > 0
         const body = hasClients
-          ? `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Great start, ${firstName}!</h2>
+          ? `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Great start, ${escapeHtml(firstName)}!</h2>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You've already added your first client — that's the hardest part. Now it's time to send contracts. PortalKit lets you send a professional contract in seconds, and clients sign with a single click from their portal.</p>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Head to your client's portal and click "Send Contract" to get started.</p>`
-          : `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName} — have you added your first client yet?</h2>
+          : `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${escapeHtml(firstName)} — have you added your first client yet?</h2>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Adding a client takes 30 seconds. Enter their name and email, and PortalKit generates a private portal link you can send right now.</p>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your clients don't need to create an account — they just click the link and see everything in one place.</p>`
         await resend.emails.send({
@@ -1967,7 +1984,7 @@ async function sendOnboardingSequence() {
           html: emailTemplate({
             title: 'Your booking page is live',
             preheader: 'Clients can request sessions directly — no back-and-forth.',
-            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName}, your booking page is already live!</h2>
+            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${escapeHtml(firstName)}, your booking page is already live!</h2>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">PortalKit automatically created a public booking page for you at:</p>
 <p style="background:#F0F9F4;border:1px solid #BEE3CA;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:14px;color:#1B4332;margin:0 0 16px;"><a href="${bookingUrl}" style="color:#1B4332;text-decoration:none;">${bookingUrl}</a></p>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>Pro tip:</strong> Add this link to your Instagram bio right now. When someone taps it, they can request a session, pick a time, and you get notified instantly — no email tag.</p>
@@ -2006,7 +2023,7 @@ async function sendOnboardingSequence() {
           html: emailTemplate({
             title: '3 features worth trying before your trial ends',
             preheader: 'Shot lists, timelines, and review requests — your clients will notice.',
-            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${firstName}, 4 days left on your trial</h2>
+            body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${escapeHtml(firstName)}, 4 days left on your trial</h2>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Before your trial ends, here are 3 features that save photographers the most time:</p>
 <div style="background:#F9F6F0;border-radius:10px;padding:16px 20px;margin:0 0 12px;">
   <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#1B4332;">📷 Shot List Builder</p>
@@ -3538,9 +3555,9 @@ function buildColdEmail(contact) {
   const firstName = contact.first_name
     ? contact.first_name.trim() : null
   const greeting = firstName
-    ? `Hi ${firstName}` : 'Hi there'
+    ? `Hi ${escapeHtml(firstName)}` : 'Hi there'
   const biz = contact.business_name
-    ? ` at ${contact.business_name}` : ''
+    ? ` at ${escapeHtml(contact.business_name)}` : ''
 
   const subjects = [
     'a free shot list template for your weddings',
@@ -4078,7 +4095,7 @@ async function processReferralRewards() {
           html: emailTemplate({
             title: "You earned a free month!",
             preheader: "Someone you referred just subscribed to PortalKit.",
-            body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 12px;">You earned a free month, ${refFirstName}! 🎉</h2>
+            body: `<h2 style="font-size:22px;color:#1B4332;margin:0 0 12px;">You earned a free month, ${escapeHtml(refFirstName)}! 🎉</h2>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">A photographer you referred just subscribed to PortalKit. As a thank-you, we've added <strong>30 free days</strong> to your subscription — no charge, no action needed.</p>
 <p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Keep sharing your referral link to earn more free months. You'll get one free month for every photographer who subscribes.</p>
 <p style="color:#9C8E7A;font-size:13px;margin:0;">— Chidera at PortalKit</p>`,
@@ -4408,11 +4425,11 @@ async function deleteAccountHandler(req, res) {
               body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Deletion blocked</h2>
                 <p style="font-size:14px;color:#374151;margin:0 0 12px;">The account was <strong>NOT</strong> deleted. Resolve the Stripe issue manually, then ask the customer to retry.</p>
                 <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
-                  <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${req.user.email}</td></tr>
-                  <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${req.user.business_name || '—'}</td></tr>
-                  <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${req.user.plan || '—'}</td></tr>
-                  <tr><td style="padding:6px 0;font-weight:600;">Stripe subscription ID:</td><td>${req.user.stripe_subscription_id}</td></tr>
-                  <tr><td style="padding:6px 0;font-weight:600;">Stripe error:</td><td>${e.message}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${escapeHtml(req.user.email)}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${escapeHtml(req.user.business_name) || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${escapeHtml(req.user.plan) || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Stripe subscription ID:</td><td>${escapeHtml(req.user.stripe_subscription_id)}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Stripe error:</td><td>${escapeHtml(e.message)}</td></tr>
                 </table>`,
               ctaText: null,
               ctaUrl: null,
@@ -4443,11 +4460,11 @@ async function deleteAccountHandler(req, res) {
           preheader: `A PortalKit account was just deleted`,
           body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Account deleted</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
-              <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${req.user.email}</td></tr>
-              <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${req.user.business_name || '—'}</td></tr>
-              <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${req.user.plan || '—'}</td></tr>
-              <tr><td style="padding:6px 0;font-weight:600;">Reason:</td><td>${reason || '—'}</td></tr>
-              <tr><td style="padding:6px 0;font-weight:600;">Comment:</td><td>${comment || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${escapeHtml(req.user.email)}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${escapeHtml(req.user.business_name) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${escapeHtml(req.user.plan) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Reason:</td><td>${escapeHtml(reason) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Comment:</td><td>${escapeHtml(comment) || '—'}</td></tr>
             </table>`,
           ctaText: null,
           ctaUrl: null,
@@ -5107,7 +5124,7 @@ app.post('/api/clients', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Welcome!',
             preheader: 'Your client portal is ready',
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${sanitize(name)}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You've been added to ${biz}'s client portal.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.welcome_message || 'Looking forward to working with you!'}</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${escapeHtml(sanitize(name))}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You've been added to ${escapeHtml(biz)}'s client portal.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${escapeHtml(ws.welcome_message) || 'Looking forward to working with you!'}</p>`,
             ctaText: 'View Your Portal →',
             ctaUrl: portalLink,
             footerNote: `Sent by ${biz}`,
@@ -5182,7 +5199,7 @@ app.post('/api/clients/:id/send-portal-email', requireAuth, async (req, res) => 
         html: emailTemplate({
           title: 'Your Portal Is Ready',
           preheader: 'View your contract, invoice, and files',
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${sanitize(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client portal is ready. You can view your contract, invoice, and any files I've shared with you here.</p><p style="color:#6B5E4A;line-height:1.6;">Let me know if you have any questions!</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${escapeHtml(sanitize(client.name))}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client portal is ready. You can view your contract, invoice, and any files I've shared with you here.</p><p style="color:#6B5E4A;line-height:1.6;">Let me know if you have any questions!</p>`,
           ctaText: 'View Your Portal →',
           ctaUrl: portalLink,
           footerNote: `Sent by ${biz}`,
@@ -5278,19 +5295,55 @@ function toIsoDate(y, mo, d) {
   return isNaN(check.getTime()) ? null : `${yy}-${mm}-${dd}`
 }
 
-// sheetRows caps how many rows xlsx will even read off the sheet — a real,
-// concrete bound on worst-case parse cost (unlike a bare setTimeout, which
-// can't preempt xlsx.read()'s synchronous, single-threaded work). 20,000
-// rows is far beyond any real client list but stops a pathological/crafted
-// file from making the parser do unbounded work.
+// IMPORT_MAX_ROWS bounds worst-case parse cost from a pathological/crafted
+// file — 20,000 rows is far beyond any real client list. Papa.parse's
+// `preview` option enforces this as a true early-stop for CSV; exceljs has
+// no equivalent (it fully parses the workbook in .load()), so for XLSX this
+// only bounds how many rows we extract afterward, not the parse work itself.
+// The multer fileSize limit (10MB) is the real backstop for XLSX.
 const IMPORT_MAX_ROWS = 20_000
 
-function parseSpreadsheet(buffer) {
-  const workbook = readSpreadsheet(buffer, { type: 'buffer', cellDates: true, sheetRows: IMPORT_MAX_ROWS })
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) return { headers: [], dataRows: [] }
-  const sheet = workbook.Sheets[sheetName]
-  const rows = xlsxUtils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false })
+// exceljs cell values can be primitives, Dates, or rich objects (formulas,
+// rich text, hyperlinks) — normalize to the same primitive shape the old
+// xlsx library returned so stringifyCell/parseFlexibleDate don't need to
+// change.
+function excelCellToPrimitive(v) {
+  if (v === null || v === undefined) return ''
+  if (v instanceof Date) return v
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(rt => rt.text || '').join('')
+    if ('result' in v) return v.result ?? ''
+    if ('text' in v) return v.text
+    return ''
+  }
+  return v
+}
+
+async function parseSpreadsheet(buffer) {
+  const isZip = buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4B // XLSX (and .xlsm/.docx-style) containers
+  const isLegacyOle = buffer.length >= 4 && buffer[0] === 0xD0 && buffer[1] === 0xCF && buffer[2] === 0x11 && buffer[3] === 0xE0
+  if (isLegacyOle) {
+    throw new Error('Legacy .xls files are not supported — please save as .xlsx or .csv and re-upload.')
+  }
+
+  if (isZip) {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer)
+    const sheet = workbook.worksheets[0]
+    if (!sheet) return { headers: [], dataRows: [] }
+    const rows = []
+    sheet.eachRow({ includeEmpty: false }, (row) => {
+      if (rows.length > IMPORT_MAX_ROWS) return
+      rows.push(row.values.slice(1).map(excelCellToPrimitive))
+    })
+    const headers = (rows[0] || []).map(h => stringifyCell(h).trim())
+    const dataRows = rows.slice(1)
+    return { headers, dataRows }
+  }
+
+  const text = buffer.toString('utf-8')
+  const parsed = Papa.parse(text, { skipEmptyLines: true, preview: IMPORT_MAX_ROWS + 1 })
+  const rows = parsed.data
   const headers = (rows[0] || []).map(h => stringifyCell(h).trim())
   const dataRows = rows.slice(1)
   return { headers, dataRows }
@@ -5710,7 +5763,7 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
             html: emailTemplate({
               title: 'Invoice Updated',
               preheader: `Your invoice ${invNum} from ${senderName} has been updated.`,
-              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice updated</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Your invoice ${invNum} from <strong>${senderName}</strong> has been updated.</p><p style="font-size:36px;font-weight:800;color:#1A1208;margin:0 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
+              body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice updated</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Your invoice ${escapeHtml(invNum)} from <strong>${escapeHtml(senderName)}</strong> has been updated.</p><p style="font-size:36px;font-weight:800;color:#1A1208;margin:0 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
               ctaText: 'View details →',
               ctaUrl: portalUrl,
               footerNote: `Sent on behalf of ${senderName} via PortalKit`,
@@ -5772,7 +5825,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Contract Ready to Sign',
             preheader: `${senderName} has sent you a contract to review and sign.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${contract.client_name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${senderName}</strong> has sent you a contract to review and sign:</p><p style="font-size:18px;font-weight:700;color:#1A1208;margin:0 0 16px;">${contract.title}</p><p style="color:#6B5E4A;line-height:1.6;margin:0;">Please open your client portal to read the contract and add your electronic signature. This only takes a minute.</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${escapeHtml(contract.client_name)},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${escapeHtml(senderName)}</strong> has sent you a contract to review and sign:</p><p style="font-size:18px;font-weight:700;color:#1A1208;margin:0 0 16px;">${escapeHtml(contract.title)}</p><p style="color:#6B5E4A;line-height:1.6;margin:0;">Please open your client portal to read the contract and add your electronic signature. This only takes a minute.</p>`,
             ctaText: 'Review & Sign Contract →',
             ctaUrl: portalUrl,
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
@@ -5849,7 +5902,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Invoice',
             preheader: `You have a new invoice for ${amount} from ${senderName}.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice from ${senderName}</h2><p style="font-size:36px;font-weight:800;color:#1A1208;margin:16px 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A;margin:0 0 4px;">Invoice #${invoice.invoice_number}</p>` : ''}${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Invoice from ${escapeHtml(senderName)}</h2><p style="font-size:36px;font-weight:800;color:#1A1208;margin:16px 0 8px;letter-spacing:-0.02em;">${amount}</p>${invoice.invoice_number ? `<p style="color:#6B5E4A;margin:0 0 4px;">Invoice #${escapeHtml(invoice.invoice_number)}</p>` : ''}${invoice.due_date ? `<p style="color:#6B5E4A;margin:0;">Due: ${new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}`,
             ctaText: 'View portal to pay →',
             ctaUrl: portalUrl,
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
@@ -6083,6 +6136,7 @@ app.get('/api/galleries', requireAuth, async (req, res) => {
       if (row.preview_storage_key && r2) {
         row.preview_url = await generateDownloadUrl(row.preview_storage_key).catch(() => row.preview_url)
       }
+      row.password = undefined
       return row
     }))
     res.json(rows)
@@ -6111,7 +6165,7 @@ app.get('/api/galleries/:id', requireAuth, async (req, res) => {
       if (f.storage_key && r2) f.storage_url = await generateDownloadUrl(f.storage_key).catch(() => f.storage_url)
       return f
     }))
-    res.json({ ...gallery, files })
+    res.json({ ...gallery, password: undefined, files })
   } catch (err) {
     console.error('Get gallery error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -6124,12 +6178,13 @@ app.post('/api/galleries', requireAuth, async (req, res) => {
     if (!client_id) return res.status(400).json({ error: 'client_id is required' })
     const clientCheck = await pool.query('SELECT id FROM clients WHERE id=$1 AND user_id=$2', [client_id, req.userId])
     if (!clientCheck.rows.length) return res.status(404).json({ error: 'Client not found' })
+    const passwordHash = password_protected && password ? await bcrypt.hash(password, 10) : null
     const result = await pool.query(
       `INSERT INTO galleries (user_id, client_id, name, description, allow_downloads, allow_favorites, password_protected, password)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [req.userId, client_id, name || 'Wedding Gallery', description || null, allow_downloads, allow_favorites, password_protected, password_protected ? password : null]
+      [req.userId, client_id, name || 'Wedding Gallery', description || null, allow_downloads, allow_favorites, password_protected, passwordHash]
     )
-    res.json(result.rows[0])
+    res.json({ ...result.rows[0], password: undefined })
   } catch (err) {
     console.error('Create gallery error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -6167,7 +6222,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
     if (password_protected !== undefined) { updates.push(`password_protected=$${idx++}`); vals.push(password_protected) }
     if (password !== undefined && password !== null && password !== '') {
       updates.push(`password=$${idx++}`)
-      vals.push(password)
+      vals.push(await bcrypt.hash(password, 10))
     } else if (password_protected === false) {
       updates.push(`password=NULL`)
     }
@@ -6200,7 +6255,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Your photos are ready!',
             preheader: `Your wedding gallery from ${bizName} is ready to view`,
-            body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Hi ${clientFirst}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your wedding photos from <strong>${bizName}</strong> are ready to view and download.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${photoCount} photo${photoCount == 1 ? '' : 's'}</strong> are waiting for you in your private gallery.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can view, favorite, and download your photos directly from your client portal.</p>`,
+            body: `<h2 style="font-size:24px;color:#1A1208;margin:0 0 12px;">Hi ${escapeHtml(clientFirst)}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Your wedding photos from <strong>${escapeHtml(bizName)}</strong> are ready to view and download.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${photoCount} photo${photoCount == 1 ? '' : 's'}</strong> are waiting for you in your private gallery.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You can view, favorite, and download your photos directly from your client portal.</p>`,
             ctaText: 'View Your Gallery →',
             ctaUrl: portalLink,
             footerNote: `Delivered by ${bizName} via PortalKit`,
@@ -6212,7 +6267,7 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
       }
     }
 
-    res.json(result.rows[0])
+    res.json({ ...result.rows[0], password: undefined })
   } catch (err) {
     console.error('Update gallery error:', err)
     res.status(500).json({ error: 'Server error' })
@@ -6294,16 +6349,21 @@ app.get('/api/portals/:token/gallery', async (req, res) => {
 
     if (gallery.password_protected) {
       const provided = (req.headers['x-gallery-password'] || '').trim()
-      const stored = (gallery.password || '').trim()
-      console.log('Gallery auth check:', {
-        gallery_id: gallery.id,
-        password_protected: gallery.password_protected,
-        stored_password: stored ? '[HAS PASSWORD]' : '[NULL/EMPTY]',
-        provided_header: provided ? '[PROVIDED]' : '[NONE]',
-        match: provided === stored,
-      })
-      if (!provided || provided !== stored) {
+      const stored = gallery.password || ''
+      const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(stored)
+      // Galleries created before password hashing was added still have a
+      // plaintext value in this column. Accept a direct match for those (so
+      // existing clients aren't locked out) and transparently upgrade the
+      // stored value to a bcrypt hash on successful entry.
+      const match = !!provided && !!stored && (
+        isBcryptHash ? await bcrypt.compare(provided, stored) : provided === stored
+      )
+      if (!match) {
         return res.status(401).json({ error: 'incorrect_password' })
+      }
+      if (!isBcryptHash) {
+        const upgraded = await bcrypt.hash(provided, 10)
+        pool.query('UPDATE galleries SET password=$1 WHERE id=$2', [upgraded, gallery.id]).catch(() => {})
       }
     }
 
@@ -6395,7 +6455,7 @@ app.post('/api/portals/:token/gallery/download-request', async (req, res) => {
         html: emailTemplate({
           title: 'Gallery Download',
           preheader: `${c.name} has downloaded their gallery`,
-          body: `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${c.name}</strong> just downloaded their gallery from their client portal.</p>`,
+          body: `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${escapeHtml(c.name)}</strong> just downloaded their gallery from their client portal.</p>`,
           ctaText: 'View client →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${c.portal_token}`,
           footerNote: bizName,
@@ -6506,7 +6566,7 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
           html: emailTemplate({
             title: 'Contract Signed',
             preheader: `You signed ${contract.title}. You can view it anytime in your portal.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You signed <strong>${contract.title}</strong>. You can view the signed contract anytime in your portal.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}<br><strong>Reference:</strong> ${hash.slice(-8).toUpperCase()}</div>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">You signed <strong>${escapeHtml(contract.title)}</strong>. You can view the signed contract anytime in your portal.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${escapeHtml(sanitize(signer_name))}<br><strong>Date:</strong> ${signedDate}<br><strong>Reference:</strong> ${hash.slice(-8).toUpperCase()}</div>`,
             ctaText: 'View Your Portal →',
             ctaUrl: portalLink,
             footerNote: `Signed on behalf of ${senderName} via PortalKit`,
@@ -6527,7 +6587,7 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
           html: emailTemplate({
             title: 'Contract Signed',
             preheader: `${contract.client_name} signed ${contract.title}.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${contract.client_name}</strong> signed <strong>${contract.title}</strong> on ${signedDate}.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${sanitize(signer_name)}<br><strong>Date:</strong> ${signedDate}</div>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Contract signed</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${escapeHtml(contract.client_name)}</strong> signed <strong>${escapeHtml(contract.title)}</strong> on ${signedDate}.</p><div style="background:#F9F6F0;border:1px solid #E8E0D0;border-radius:8px;padding:16px;font-size:13px;color:#6B5E4A;line-height:1.8;"><strong>Signer:</strong> ${escapeHtml(sanitize(signer_name))}<br><strong>Date:</strong> ${signedDate}</div>`,
             ctaText: 'View in Dashboard →',
             ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/contracts`,
             footerNote: 'PortalKit · contract management for photographers',
@@ -6638,7 +6698,7 @@ app.post('/api/messages', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: `New message from ${senderName}`,
             preheader: `You have a new message from ${senderName}.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${client.name},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0;">You have a new message from <strong>${senderName}</strong>.</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">Hi ${escapeHtml(client.name)},</h2><p style="color:#6B5E4A;line-height:1.6;margin:0;">You have a new message from <strong>${escapeHtml(senderName)}</strong>.</p>`,
             ctaText: 'View your portal to reply →',
             ctaUrl: portalUrl,
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
@@ -6699,7 +6759,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
           html: emailTemplate({
             title: `New message from ${displaySender}`,
             preheader: `${displaySender} sent you a new message through their portal.`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">New message</h2><p style="color:#6B5E4A;margin:0 0 16px;"><strong>${displaySender}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding:12px 16px;margin:0;background:#F9F6F0;border-radius:0 8px 8px 0;color:#2D2416;line-height:1.6;">${sanitize(content)}</blockquote>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 8px;">New message</h2><p style="color:#6B5E4A;margin:0 0 16px;"><strong>${escapeHtml(displaySender)}</strong> sent a message:</p><blockquote style="border-left:3px solid #C9A84C;padding:12px 16px;margin:0;background:#F9F6F0;border-radius:0 8px 8px 0;color:#2D2416;line-height:1.6;">${escapeHtml(sanitize(content))}</blockquote>`,
             ctaText: 'Reply in dashboard →',
             ctaUrl: dashUrl,
             footerNote: 'PortalKit · your client communication hub',
@@ -7143,10 +7203,10 @@ app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
         const biz = req.user.business_name || req.user.full_name || 'Your photographer'
         const portalLink = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
         const reviewLinks = [
-          ws?.google_review_url && `<a href="${ws.google_review_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#4285F4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">⭐ Google Review</a>`,
-          ws?.wedding_wire_url && `<a href="${ws.wedding_wire_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#AE0C00;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💍 WeddingWire</a>`,
-          ws?.the_knot_url && `<a href="${ws.the_knot_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#FF69B4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💐 The Knot</a>`,
-          ws?.facebook_review_url && `<a href="${ws.facebook_review_url}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#1877F2;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">👍 Facebook</a>`,
+          ws?.google_review_url && `<a href="${escapeHtml(ws.google_review_url)}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#4285F4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">⭐ Google Review</a>`,
+          ws?.wedding_wire_url && `<a href="${escapeHtml(ws.wedding_wire_url)}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#AE0C00;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💍 WeddingWire</a>`,
+          ws?.the_knot_url && `<a href="${escapeHtml(ws.the_knot_url)}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#FF69B4;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">💐 The Knot</a>`,
+          ws?.facebook_review_url && `<a href="${escapeHtml(ws.facebook_review_url)}" style="display:inline-block;margin:4px 6px;padding:8px 16px;background:#1877F2;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;">👍 Facebook</a>`,
         ].filter(Boolean)
         const reviewSection = (ws?.send_review_request_on_delivery !== false && reviewLinks.length)
           ? `<p style="color:#6B5E4A;line-height:1.6;margin:16px 0 8px;">If you loved your experience, I'd be so grateful for a review:</p><div style="margin:8px 0 16px;">${reviewLinks.join('')}</div>`
@@ -7160,7 +7220,7 @@ app.patch('/api/clients/:id/stage', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Thank you!',
             preheader: 'It was a pleasure working with you',
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Thank you, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.thank_you_message || `It was an absolute pleasure working with you. Your photos are ready in your client portal!`}</p>${reviewSection}`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Thank you, ${escapeHtml(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${ws.thank_you_message ? escapeHtml(ws.thank_you_message) : `It was an absolute pleasure working with you. Your photos are ready in your client portal!`}</p>${reviewSection}`,
             ctaText: 'View Your Portal →',
             ctaUrl: portalLink,
             footerNote: `Sent by ${biz}`,
@@ -7260,7 +7320,7 @@ app.post('/api/questionnaires', requireAuth, async (req, res) => {
         html: emailTemplate({
           title: 'Questionnaire ready for you',
           preheader: `${biz} sent you a questionnaire to fill out`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${biz} has sent you a questionnaire: <strong>${sanitize(title)}</strong>. It only takes a few minutes to fill out and helps them prepare for your session.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${escapeHtml(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">${escapeHtml(biz)} has sent you a questionnaire: <strong>${escapeHtml(sanitize(title))}</strong>. It only takes a few minutes to fill out and helps them prepare for your session.</p>`,
           ctaText: 'Fill Out Questionnaire →',
           ctaUrl: portalLink,
           footerNote: `Sent by ${biz} via PortalKit`,
@@ -7326,7 +7386,7 @@ app.post('/api/portals/:token/questionnaires/:id/respond', async (req, res) => {
         html: emailTemplate({
           title: 'Questionnaire completed',
           preheader: 'A client just submitted their questionnaire',
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Questionnaire completed!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${c?.name || 'Your client'}</strong> has filled out their questionnaire: <strong>${qr.title}</strong>.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Log in to view their responses.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Questionnaire completed!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>${escapeHtml(c?.name) || 'Your client'}</strong> has filled out their questionnaire: <strong>${escapeHtml(qr.title)}</strong>.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Log in to view their responses.</p>`,
           ctaText: 'View Responses →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/questionnaires`,
           footerNote: 'Sent by PortalKit',
@@ -7633,7 +7693,7 @@ app.post('/api/book/:username/book', async (req, res) => {
         html: emailTemplate({
           title: 'Booking Confirmed',
           preheader: `Your session with ${biz} is confirmed`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your booking is confirmed! 🎉</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${sanitize(client_name)}, your <strong>${sessionTypeName}</strong> with ${biz} has been confirmed.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>Time:</strong> ${start_time}</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your booking is confirmed! 🎉</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(sanitize(client_name))}, your <strong>${escapeHtml(sessionTypeName)}</strong> with ${escapeHtml(biz)} has been confirmed.</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 16px;"><strong>Time:</strong> ${start_time}</p>`,
           ctaText: null,
           ctaUrl: null,
           footerNote: `Booking confirmed by ${biz} via PortalKit`,
@@ -7648,7 +7708,7 @@ app.post('/api/book/:username/book', async (req, res) => {
         html: emailTemplate({
           title: 'New Booking',
           preheader: `${sanitize(client_name)} just booked a session`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New booking received!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Client:</strong> ${sanitize(client_name)} (${client_email})</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Session:</strong> ${sessionTypeName}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Time:</strong> ${start_time} – ${end_time}</p>${notes ? `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Notes:</strong> ${sanitize(notes)}</p>` : ''}`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New booking received!</h2><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Client:</strong> ${escapeHtml(sanitize(client_name))} (${escapeHtml(client_email)})</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Session:</strong> ${escapeHtml(sessionTypeName)}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Date:</strong> ${dateDisplay}</p><p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Time:</strong> ${start_time} – ${end_time}</p>${notes ? `<p style="color:#6B5E4A;line-height:1.6;margin:0 0 8px;"><strong>Notes:</strong> ${escapeHtml(sanitize(notes))}</p>` : ''}`,
           ctaText: 'View Bookings →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/booking`,
           footerNote: 'Sent by PortalKit',
@@ -8076,12 +8136,12 @@ app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
         html: emailTemplate({
           title: 'New Lead Inquiry',
           preheader: `${name} submitted your lead form`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New inquiry from ${sanitize(name)}</h2>
-            ${email ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Email:</strong> ${email}</p>` : ''}
-            ${phone ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Phone:</strong> ${sanitize(phone)}</p>` : ''}
-            ${event_type ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event type:</strong> ${sanitize(event_type)}</p>` : ''}
-            ${event_date ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event date:</strong> ${event_date}</p>` : ''}
-            ${message ? `<p style="color:#6B5E4A;margin:8px 0 0;"><strong>Message:</strong><br>${sanitize(message)}</p>` : ''}`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">New inquiry from ${escapeHtml(sanitize(name))}</h2>
+            ${email ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Email:</strong> ${escapeHtml(email)}</p>` : ''}
+            ${phone ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Phone:</strong> ${escapeHtml(sanitize(phone))}</p>` : ''}
+            ${event_type ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event type:</strong> ${escapeHtml(sanitize(event_type))}</p>` : ''}
+            ${event_date ? `<p style="color:#6B5E4A;margin:4px 0;"><strong>Event date:</strong> ${escapeHtml(event_date)}</p>` : ''}
+            ${message ? `<p style="color:#6B5E4A;margin:8px 0 0;"><strong>Message:</strong><br>${escapeHtml(sanitize(message))}</p>` : ''}`,
           ctaText: 'View Leads →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/leads`,
           footerNote: 'Sent by PortalKit',
@@ -8254,7 +8314,7 @@ app.post('/api/clients/:id/shot-list/confirm', requireAuth, async (req, res) => 
         html: emailTemplate({
           title: 'Shot List Confirmed!',
           preheader: 'Your shot list has been reviewed and confirmed',
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Shot list confirmed, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your shot list has been reviewed and confirmed. You can view it any time in your portal.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Shot list confirmed, ${escapeHtml(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your shot list has been reviewed and confirmed. You can view it any time in your portal.</p>`,
           ctaText: 'View Your Portal →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`,
           footerNote: `Sent by ${biz}`,
@@ -8299,7 +8359,7 @@ app.post('/api/portals/:token/shot-list', async (req, res) => {
         html: emailTemplate({
           title: 'Shot List Submitted',
           preheader: `${client.name} has submitted their shot list`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${client.name} submitted a shot list</h2><p style="color:#6B5E4A;line-height:1.6;">Log in to review and confirm their shot list.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${escapeHtml(client.name)} submitted a shot list</h2><p style="color:#6B5E4A;line-height:1.6;">Log in to review and confirm their shot list.</p>`,
           ctaText: 'Review Shot List →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/clients`,
           footerNote: 'Sent by PortalKit',
@@ -8416,7 +8476,7 @@ app.post('/api/clients/:id/timeline/send', requireAuth, async (req, res) => {
         html: emailTemplate({
           title: 'Your Timeline is Ready',
           preheader: 'Your day-of timeline has been shared',
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your day-of timeline is ready, ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your photographer has shared a day-of timeline with you. View it in your portal and approve when you're ready.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your day-of timeline is ready, ${escapeHtml(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;">Your photographer has shared a day-of timeline with you. View it in your portal and approve when you're ready.</p>`,
           ctaText: 'View Timeline →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`,
           footerNote: `Sent by ${biz}`,
@@ -8458,7 +8518,7 @@ app.post('/api/portals/:token/timeline/approve', async (req, res) => {
         html: emailTemplate({
           title: 'Timeline Approved',
           preheader: `${client.name} approved their timeline`,
-          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${client.name} approved the timeline!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client has reviewed and approved the day-of timeline.</p>`,
+          body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">${escapeHtml(client.name)} approved the timeline!</h2><p style="color:#6B5E4A;line-height:1.6;">Your client has reviewed and approved the day-of timeline.</p>`,
           ctaText: 'View in Dashboard →',
           ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/clients`,
           footerNote: 'Sent by PortalKit',
@@ -8598,7 +8658,7 @@ app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
           html: emailTemplate({
             title: 'Your Proposal is Ready',
             preheader: `${biz} has sent you a proposal`,
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${client.name}!</h2><p style="color:#6B5E4A;line-height:1.6;">${biz} has sent you a proposal. Review the packages and accept when you're ready.</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Hi ${escapeHtml(client.name)}!</h2><p style="color:#6B5E4A;line-height:1.6;">${escapeHtml(biz)} has sent you a proposal. Review the packages and accept when you're ready.</p>`,
             ctaText: 'View Proposal →',
             ctaUrl: proposalUrl,
             footerNote: `Sent by ${biz}`,
@@ -8668,7 +8728,7 @@ app.post('/api/proposals/:token/accept', async (req, res) => {
           html: emailTemplate({
             title: 'Proposal Accepted!',
             preheader: 'A client accepted your proposal',
-            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your proposal was accepted!</h2><p style="color:#6B5E4A;line-height:1.6;">A client has accepted your proposal "<strong>${proposal.title}</strong>".</p>`,
+            body: `<h2 style="font-size:22px;color:#1A1208;margin:0 0 12px;">Your proposal was accepted!</h2><p style="color:#6B5E4A;line-height:1.6;">A client has accepted your proposal "<strong>${escapeHtml(proposal.title)}</strong>".</p>`,
             ctaText: 'View Proposals →',
             ctaUrl: `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/proposals`,
             footerNote: 'Sent by PortalKit',

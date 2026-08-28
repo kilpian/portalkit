@@ -4,6 +4,7 @@ import axios from 'axios'
 import posthog from 'posthog-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { escapeHtml } from '../lib/escapeHtml'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
@@ -1151,7 +1152,7 @@ export function ClientPortalContent({ token }: { token: string }) {
       : ''
     const photographerName = data?.photographer_business || data?.photographer_name || 'PortalKit'
 
-    const html = `<html><head><title>${c.title}</title>
+    const html = `<html><head><title>${escapeHtml(c.title)}</title>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
     <style>
       body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; color: #333; line-height: 1.6; }
@@ -1165,29 +1166,29 @@ export function ClientPortalContent({ token }: { token: string }) {
       .badge { background: #EAF3DE; color: #1B4332; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; margin-bottom: 16px; }
     </style></head>
     <body>
-      <h1>${c.title}</h1>
+      <h1>${escapeHtml(c.title)}</h1>
       <span class="badge">✓ Electronically Signed</span>
       <div class="meta">
-        <strong>Client:</strong> ${data?.name ?? ''}<br>
-        <strong>Event:</strong> ${data?.event_type || 'Photography Session'} · ${eventDate}<br>
-        <strong>Photographer:</strong> ${photographerName}
+        <strong>Client:</strong> ${escapeHtml(data?.name ?? '')}<br>
+        <strong>Event:</strong> ${escapeHtml(data?.event_type || 'Photography Session')} · ${eventDate}<br>
+        <strong>Photographer:</strong> ${escapeHtml(photographerName)}
       </div>
-      <div class="contract-body">${opts.content ?? ''}</div>
+      <div class="contract-body">${escapeHtml(opts.content ?? '')}</div>
       <div class="signatures">
         <div class="sig-block">
           <p><strong>PHOTOGRAPHER</strong></p>
-          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px;">${data?.photographer_business || photographerName}</div>
-          <div style="font-size: 11px; color: #666;">${data?.photographer_business || photographerName}${data?.photographer_name ? ' · ' + data.photographer_name : ''}</div>
+          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px;">${escapeHtml(data?.photographer_business || photographerName)}</div>
+          <div style="font-size: 11px; color: #666;">${escapeHtml(data?.photographer_business || photographerName)}${data?.photographer_name ? ' · ' + escapeHtml(data.photographer_name) : ''}</div>
           <p style="margin-top:8px;">Date: ${c.photographer_signed_at ? new Date(c.photographer_signed_at).toLocaleDateString() : '________________'}</p>
         </div>
         <div class="sig-block">
           <p><strong>CLIENT</strong></p>
-          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px; min-width: 200px;">${opts.signerName}</div>
-          <div style="font-size: 11px; color: #666;">Electronic signature${opts.signedDate ? ' · ' + opts.signedDate : ''}${opts.hash ? ' · Ref: ' + opts.hash.slice(-8).toUpperCase() : ''}</div>
+          <div style="font-family: 'Dancing Script', cursive; font-size: 28px; color: #1B4332; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px; min-width: 200px;">${escapeHtml(opts.signerName)}</div>
+          <div style="font-size: 11px; color: #666;">Electronic signature${opts.signedDate ? ' · ' + escapeHtml(opts.signedDate) : ''}${opts.hash ? ' · Ref: ' + escapeHtml(opts.hash.slice(-8).toUpperCase()) : ''}</div>
         </div>
       </div>
       <div class="footer">
-        ${opts.hash ? `Reference: ${opts.hash.slice(-8).toUpperCase()} · ` : ''}Signed via PortalKit (ESIGN Act compliant) · ${photographerName}
+        ${opts.hash ? `Reference: ${escapeHtml(opts.hash.slice(-8).toUpperCase())} · ` : ''}Signed via PortalKit (ESIGN Act compliant) · ${escapeHtml(photographerName)}
       </div>
     </body></html>`
 
