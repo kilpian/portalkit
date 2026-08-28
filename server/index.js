@@ -26,7 +26,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 console.log('🔑 Auth version: v2 - email dedup + onboarding flag active')
 
-;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL', 'STRIPE_PUBLISHABLE_KEY'].forEach(v => {
+;['DATABASE_URL', 'CLERK_SECRET_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PRICE_PORTALKIT', 'RESEND_API_KEY', 'ANTHROPIC_API_KEY', 'FRONTEND_URL', 'STRIPE_PUBLISHABLE_KEY', 'ADMIN_SECRET', 'ADMIN_EMAILS'].forEach(v => {
   if (!process.env[v]) console.error(`❌ Missing env var: ${v}`)
   else console.log(`✅ ${v}: set`)
 })
@@ -168,6 +168,15 @@ const PORT = process.env.PORT || 3001
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL environment variable is required')
 if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY environment variable is required')
+if (!process.env.ADMIN_SECRET) throw new Error('ADMIN_SECRET environment variable is required')
+if (!process.env.ADMIN_EMAILS) throw new Error('ADMIN_EMAILS environment variable is required')
+
+function secureCompare(a, b) {
+  const bufA = Buffer.from(String(a ?? ''))
+  const bufB = Buffer.from(String(b ?? ''))
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -1255,9 +1264,15 @@ async function initDb() {
           expires_at TIMESTAMPTZ,
           viewed_at TIMESTAMPTZ,
           accepted_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT NOW()
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          token TEXT UNIQUE DEFAULT gen_random_uuid()::TEXT
         );
       `).catch(() => {})
+
+      // Public proposal links were sequential numeric IDs — enumerable and
+      // guessable. Backfills an unguessable token for pre-existing rows,
+      // matching the portal_token pattern already used for clients/galleries.
+      await pool.query(`ALTER TABLE proposals ADD COLUMN IF NOT EXISTS token TEXT UNIQUE DEFAULT gen_random_uuid()::TEXT`).catch(() => {})
 
       await pool.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_clients_created INTEGER DEFAULT 0
@@ -4250,7 +4265,7 @@ async function requireAuth(req, res, next) {
 
     // Onboarding must come first — a non-onboarded user (including re-signups
     // with plan='expired') must never hit the paywall before completing setup.
-    const ONBOARDING_EXEMPT = ['/api/auth/me', '/api/users/me', '/api/stripe/', '/api/health', '/api/debug/']
+    const ONBOARDING_EXEMPT = ['/api/auth/me', '/api/users/me', '/api/stripe/', '/api/health', '/api/debug/', '/api/admin/']
     if (!req.user.onboarding_completed) {
       if (ONBOARDING_EXEMPT.some(r => req.path.startsWith(r))) {
         return next() // Let stripe/auth routes through so onboarding can proceed
@@ -4261,7 +4276,7 @@ async function requireAuth(req, res, next) {
       })
     }
 
-    const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/stripe/create-setup-intent', '/api/stripe/confirm-setup', '/api/health']
+    const allowedAfterExpiry = ['/api/auth/me', '/api/users/me', '/api/stripe/create-checkout', '/api/stripe/create-portal', '/api/stripe/create-setup-intent', '/api/stripe/confirm-setup', '/api/health', '/api/admin/']
     const isExempt = allowedAfterExpiry.some(p => req.path.startsWith(p))
 
     // Collection reads that return REDACTED placeholder data to expired-trial users.
@@ -4310,6 +4325,21 @@ async function requireAuth(req, res, next) {
     await recordLoginFailure(ip)
     res.status(401).json({ error: 'Unauthorized' })
   }
+}
+
+// Admin routes reachable from the dashboard (Content Engine, Customers) must
+// authorize off the real Clerk session, never a client-shippable secret —
+// a VITE_-prefixed secret ends up readable in the public JS bundle.
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    const adminEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+    const email = req.user?.email?.toLowerCase()
+    if (!email || !adminEmails.includes(email)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    next()
+  })
 }
 
 // ── TEST (public) ─────────────────────────────────────────────
@@ -4539,27 +4569,6 @@ app.get('/api/referrals', requireAuth, async (req, res) => {
 })
 
 // Temporary diagnostic — inspect raw DB row + schema. Remove after onboarding stabilizes.
-app.get('/api/debug/me', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId])
-    if (!result.rows.length) return res.status(404).json({ error: 'User not found' })
-    const row = result.rows[0]
-    res.json({
-      raw_row: row,
-      onboarding_completed: row.onboarding_completed,
-      onboarding_completed_type: typeof row.onboarding_completed,
-      has_onboarding_column: 'onboarding_completed' in row,
-      business_name: row.business_name,
-      business_name_type: typeof row.business_name,
-      schema_columns: Object.keys(row),
-      auth_version: 'v2 - email dedup + onboarding flag active',
-    })
-  } catch (err) {
-    console.error('Debug endpoint error:', err)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
-
 // ── STRIPE ────────────────────────────────────────────────────
 
 app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
@@ -7061,7 +7070,7 @@ app.get('/api/health', async (req, res) => {
   }
 })
 
-app.get('/api/test-email', async (req, res) => {
+app.get('/api/test-email', requireAdmin, async (req, res) => {
   console.log('📧 Resend configured:', !!process.env.RESEND_API_KEY)
   if (!resend) return res.status(503).json({ error: 'Resend not configured — set RESEND_API_KEY', configured: false })
   try {
@@ -7082,7 +7091,7 @@ app.get('/api/test-email', async (req, res) => {
 
 app.post('/api/admin/test-reminders', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) {
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
   try {
@@ -8580,7 +8589,7 @@ app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
       const client = clientRes.rows[0]
       if (client?.email && resend) {
         const biz = req.user.business_name || req.user.full_name || 'Your photographer'
-        const proposalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/proposal/${proposal.id}`
+        const proposalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/proposal/${proposal.token}`
         resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
           reply_to: "hello@getportalkit.com",
@@ -8601,7 +8610,7 @@ app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
-app.get('/api/proposals/:id/public', async (req, res) => {
+app.get('/api/proposals/:token/public', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT p.*, u.full_name as photographer_name, u.business_name as photographer_business,
@@ -8610,30 +8619,42 @@ app.get('/api/proposals/:id/public', async (req, res) => {
        FROM proposals p
        JOIN users u ON u.id = p.user_id
        LEFT JOIN clients c ON c.id = p.client_id
-       WHERE p.id=$1 AND p.client_id IS NOT NULL AND p.status IN ('sent','viewed','accepted')`,
-      [req.params.id]
+       WHERE p.token=$1 AND p.client_id IS NOT NULL AND p.status IN ('sent','viewed','accepted')`,
+      [req.params.token]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
     await pool.query(
-      'UPDATE proposals SET status=CASE WHEN status=\'sent\' THEN \'viewed\' ELSE status END, viewed_at=COALESCE(viewed_at,NOW()) WHERE id=$1',
-      [req.params.id]
+      'UPDATE proposals SET status=CASE WHEN status=\'sent\' THEN \'viewed\' ELSE status END, viewed_at=COALESCE(viewed_at,NOW()) WHERE token=$1',
+      [req.params.token]
     )
     res.json(result.rows[0])
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
-app.post('/api/proposals/:id/accept', async (req, res) => {
+app.post('/api/proposals/:token/accept', async (req, res) => {
   const { selected_package_id } = req.body
   try {
     const proposalRes = await pool.query(
-      "SELECT * FROM proposals WHERE id=$1 AND status IN ('sent','viewed')",
-      [req.params.id]
+      "SELECT * FROM proposals WHERE token=$1 AND status IN ('sent','viewed')",
+      [req.params.token]
     )
     if (!proposalRes.rows.length) return res.status(404).json({ error: 'Proposal not found or already processed' })
     const proposal = proposalRes.rows[0]
+
+    // selected_package_id comes straight from the public form — verify it's
+    // actually one of this proposal's own packages before trusting it, or a
+    // client could accept with a package (and price) that was never offered.
+    let validSelectedId = null
+    if (selected_package_id != null) {
+      const packages = Array.isArray(proposal.packages) ? proposal.packages : []
+      const match = packages.find(pkg => Number(pkg.id) === Number(selected_package_id))
+      if (!match) return res.status(400).json({ error: 'Invalid package selection' })
+      validSelectedId = match.id
+    }
+
     await pool.query(
       "UPDATE proposals SET status='accepted', accepted_at=NOW(), selected_package_id=$1 WHERE id=$2",
-      [selected_package_id || null, proposal.id]
+      [validSelectedId, proposal.id]
     )
     if (proposal.user_id) {
       const photographerRes = await pool.query('SELECT email, full_name, business_name FROM users WHERE id=$1', [proposal.user_id])
@@ -8661,7 +8682,7 @@ app.post('/api/proposals/:id/accept', async (req, res) => {
 
 app.post('/api/admin/activate-account', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) return res.status(401).json({ error: 'Unauthorized' })
   const { email } = req.body
   const result = await pool.query(
     `UPDATE users SET onboarding_completed=true, plan='active', stripe_subscription_id='manual_activation' WHERE email=$1 RETURNING id, email, plan`,
@@ -8673,7 +8694,7 @@ app.post('/api/admin/activate-account', async (req, res) => {
 
 app.post('/api/admin/reset-account', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) {
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
   const { email } = req.body
@@ -8703,7 +8724,7 @@ app.post('/api/admin/reset-account', async (req, res) => {
 
 app.get('/api/admin/affiliates', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) return res.status(401).json({ error: 'Unauthorized' })
   try {
     const result = await pool.query('SELECT * FROM affiliates ORDER BY created_at DESC')
     const conversions = await pool.query('SELECT affiliate_id, COUNT(*) as count, SUM(commission_cents) as total FROM affiliate_conversions GROUP BY affiliate_id')
@@ -8720,7 +8741,7 @@ app.get('/api/admin/affiliates', async (req, res) => {
 
 app.post('/api/admin/affiliates', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) return res.status(401).json({ error: 'Unauthorized' })
   const { name, email, affiliate_code, commission_percent } = req.body
   if (!name || !email || !affiliate_code) return res.status(400).json({ error: 'name, email, and affiliate_code are required' })
   try {
@@ -8737,7 +8758,7 @@ app.post('/api/admin/affiliates', async (req, res) => {
 
 app.patch('/api/admin/affiliates/:id', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) return res.status(401).json({ error: 'Unauthorized' })
   const { status } = req.body
   try {
     const result = await pool.query('UPDATE affiliates SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
@@ -8753,7 +8774,7 @@ app.patch('/api/admin/affiliates/:id', async (req, res) => {
 // and approves/denies by hand (e.g. by updating status directly).
 app.get('/api/admin/referrals/flagged', async (req, res) => {
   const secret = req.headers['x-admin-secret']
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' })
+  if (!secureCompare(secret, process.env.ADMIN_SECRET)) return res.status(401).json({ error: 'Unauthorized' })
   try {
     const result = await pool.query(
       `SELECT r.id, r.status, r.flag_reason, r.flagged_at, r.payment_succeeded_at, r.card_fingerprint,
@@ -8772,13 +8793,7 @@ app.get('/api/admin/referrals/flagged', async (req, res) => {
 
 function checkAdminSecret(req, res) {
   const provided = req.headers['x-admin-secret']
-  const match = provided === process.env.ADMIN_SECRET
-  console.log('Admin auth check:', {
-    route: req.method + ' ' + req.path,
-    provided: provided ? provided.slice(0, 4) + '...' : '[missing]',
-    expected: process.env.ADMIN_SECRET ? '[SET]' : '[NOT SET]',
-    match
-  })
+  const match = secureCompare(provided, process.env.ADMIN_SECRET)
   if (!match) { res.status(401).json({ error: 'Unauthorized' }); return false }
   return true
 }
@@ -8840,8 +8855,7 @@ app.get('/api/admin/audit/orphaned-subscriptions', async (req, res) => {
   }
 })
 
-app.post('/api/admin/generate-content', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/generate-content', requireAdmin, async (req, res) => {
   try {
     await generateAndScheduleWeeklyContent()
     res.json({ success: true })
@@ -8964,8 +8978,7 @@ app.get('/api/blog/:slug', async (req, res) => {
 })
 
 // Admin: generate a blog post with Claude Haiku and store it in the DB
-app.post('/api/admin/blog/generate', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/blog/generate', requireAdmin, async (req, res) => {
   if (!anthropic) return res.status(500).json({ error: 'Anthropic not configured' })
   const { topic } = req.body || {}
   try {
@@ -9031,24 +9044,21 @@ app.post('/api/admin/generate-reddit-content', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-app.post('/api/admin/reddit-content', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/reddit-content', requireAdmin, async (req, res) => {
   try {
     await monitorRedditAndGenerateContent()
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-app.get('/api/admin/generated-content', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.get('/api/admin/generated-content', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM generated_content ORDER BY created_at DESC LIMIT 50')
     res.json(result.rows)
   } catch { res.json([]) }
 })
 
-app.patch('/api/admin/generated-content/:id', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.patch('/api/admin/generated-content/:id', requireAdmin, async (req, res) => {
   try {
     const { status } = req.body
     const result = await pool.query('UPDATE generated_content SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])
@@ -9056,8 +9066,7 @@ app.patch('/api/admin/generated-content/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-app.get('/api/admin/tool-leads', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.get('/api/admin/tool-leads', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM tool_leads ORDER BY created_at DESC LIMIT 100')
     res.json(result.rows)
@@ -9066,9 +9075,7 @@ app.get('/api/admin/tool-leads', async (req, res) => {
 
 // GET /api/admin/customers — groups all users by lifecycle status (real data only)
 let _customersDiagnosticLogged = false
-app.get('/api/admin/customers', async (req, res) => {
-  console.log('🧾 /api/admin/customers hit', req.headers['x-admin-secret'] ? 'secret=present' : 'secret=MISSING')
-  if (!checkAdminSecret(req, res)) return
+app.get('/api/admin/customers', requireAdmin, async (req, res) => {
   try {
     if (!_customersDiagnosticLogged) {
       _customersDiagnosticLogged = true
@@ -9141,8 +9148,7 @@ app.get('/api/admin/customers', async (req, res) => {
 
 // ── ADMIN: COLD OUTREACH ──────────────────────────────────────
 
-app.post('/api/admin/cold-contacts/import', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/cold-contacts/import', requireAdmin, async (req, res) => {
   try {
     const { contacts } = req.body
     if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -9200,8 +9206,7 @@ app.post('/api/admin/cold-contacts/import', async (req, res) => {
   }
 })
 
-app.get('/api/admin/cold-contacts/stats', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.get('/api/admin/cold-contacts/stats', requireAdmin, async (req, res) => {
   try {
     const [stats, total, queuedToday, sentToday, recentSends, replies] = await Promise.all([
       pool.query(`
@@ -9263,8 +9268,7 @@ app.post('/api/admin/cold-suppression', async (req, res) => {
   }
 })
 
-app.post('/api/admin/cold-send-test', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/cold-send-test', requireAdmin, async (req, res) => {
   if (!BREVO_API_KEY || !COLD_EMAIL_FROM) {
     return res.status(400).json({
       error: 'BREVO_API_KEY or COLD_EMAIL_FROM not set in Railway'
@@ -9290,8 +9294,7 @@ app.post('/api/admin/cold-send-test', async (req, res) => {
 })
 
 // POST /api/admin/find-emails — web discovery + website scrape for photographer emails
-app.post('/api/admin/find-emails', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/find-emails', requireAdmin, async (req, res) => {
   const { city, state = 'USA' } = req.body
   if (!city) return res.status(400).json({ error: 'city required' })
 
@@ -9312,8 +9315,7 @@ async function generateVideoInternal({ script, title = 'Auto video', postId = nu
 }
 
 // POST /api/admin/generate-video — queue a video for a specific post
-app.post('/api/admin/generate-video', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/generate-video', requireAdmin, async (req, res) => {
   const { post_id, script, title } = req.body
   if (!script) return res.status(400).json({ error: 'script required' })
   res.json({ queued: true })
@@ -9323,8 +9325,7 @@ app.post('/api/admin/generate-video', async (req, res) => {
 })
 
 // POST /api/admin/generate-explainer-video — animated canvas explainer (no Pexels, gradient bg)
-app.post('/api/admin/generate-explainer-video', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/generate-explainer-video', requireAdmin, async (req, res) => {
   const { post_id, script, title } = req.body
   if (!script) return res.status(400).json({ error: 'script required' })
   res.json({ queued: true })
@@ -9334,8 +9335,7 @@ app.post('/api/admin/generate-explainer-video', async (req, res) => {
 })
 
 // POST /api/admin/generate-tour-video — website screenshot tour with narration
-app.post('/api/admin/generate-tour-video', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/generate-tour-video', requireAdmin, async (req, res) => {
   const { post_id, title } = req.body
   res.json({ queued: true })
   generateTourVideo(title || 'Product Tour', post_id || null).catch(e =>
@@ -9350,8 +9350,7 @@ app.post('/api/admin/generate-manim-video', (req, res) => {
 })
 
 // GET /api/admin/generated-videos — list all videos
-app.get('/api/admin/generated-videos', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.get('/api/admin/generated-videos', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, post_id, title, script, captions, status, r2_url, error, video_type, created_at, completed_at
@@ -9363,8 +9362,7 @@ app.get('/api/admin/generated-videos', async (req, res) => {
   }
 })
 
-app.post('/api/admin/generate-captions', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.post('/api/admin/generate-captions', requireAdmin, async (req, res) => {
   const { script, videoId } = req.body
   console.log('📝 Caption request — videoId:', videoId, 'script length:', script?.length || 0)
   if (!script) {
@@ -9431,8 +9429,7 @@ Return ONLY a JSON object, no markdown, no explanation:
   }
 })
 
-app.delete('/api/admin/generated-videos/:id', async (req, res) => {
-  if (!checkAdminSecret(req, res)) return
+app.delete('/api/admin/generated-videos/:id', requireAdmin, async (req, res) => {
   try {
     const record = await pool.query('SELECT r2_url FROM generated_videos WHERE id=$1', [req.params.id])
     const r2Url = record.rows[0]?.r2_url
@@ -9553,6 +9550,13 @@ const PHOTO_CITIES = [
 let cityIndex = 0
 
 async function autoFindEmails() {
+  // Same class of bug as runDailyJobs: this hits real outreach infra
+  // (cold_contacts, live email discovery) and must never fire just because
+  // a local dev server booted against the production database.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`⏸️  autoFindEmails skipped — NODE_ENV is '${process.env.NODE_ENV || 'undefined'}', not 'production'.`)
+    return
+  }
   try {
     const result = await pool.query(
       `SELECT COUNT(*) FROM cold_contacts WHERE sent_at IS NULL`
@@ -9634,6 +9638,13 @@ async function getTrendingAngles() {
 }
 
 async function autoDailyVideo() {
+  // Same class of bug as runDailyJobs: this burns real Anthropic/R2/TTS
+  // quota and must never fire just because a local dev server booted
+  // against the production database.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`⏸️  autoDailyVideo skipped — NODE_ENV is '${process.env.NODE_ENV || 'undefined'}', not 'production'.`)
+    return
+  }
   try {
     console.log('🎬 Auto daily video generation starting...')
     if (!anthropic) { console.log('🎬 Anthropic not configured, skipping'); return }

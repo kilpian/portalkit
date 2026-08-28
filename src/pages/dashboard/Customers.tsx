@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
-const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
+import { useApi } from '../../lib/api'
 
 interface Customer {
   id: number
@@ -111,6 +109,7 @@ function Section({ title, accent, customers, hint, hintLabel }: { title: string;
 
 export default function Customers() {
   const { user } = usePortalAuth()
+  const { authFetch } = useApi()
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -121,18 +120,14 @@ export default function Customers() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/admin/customers`, {
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
-      if (!res.ok) throw new Error(`Server returned ${res.status}`)
-      const json = await res.json()
-      setData(json)
+      const res = await authFetch('/api/admin/customers')
+      setData(res.data)
     } catch (err: any) {
-      setError(err.message || 'Failed to load')
+      setError(err?.response?.data?.error || err.message || 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [authFetch])
 
   useEffect(() => { if (isAdmin) fetchData() }, [isAdmin, fetchData])
 

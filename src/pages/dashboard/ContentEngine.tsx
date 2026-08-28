@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePortalAuth } from '../../context/AuthContext'
+import { useApi } from '../../lib/api'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
-const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || ''
+const errMsg = (err: any, fallback: string) => err?.response?.data?.error || fallback
 
 type ToastType = 'success' | 'error'
 interface Toast { id: number; msg: string; type: ToastType }
@@ -10,6 +10,7 @@ interface Toast { id: number; msg: string; type: ToastType }
 export default function ContentEngine() {
   // ALL hooks first — no exceptions
   const { user } = usePortalAuth()
+  const { authFetch } = useApi()
   const [posts, setPosts] = useState<any[]>([])
   const [leads, setLeads] = useState<any[]>([])
   const [videos, setVideos] = useState<any[]>([])
@@ -63,70 +64,54 @@ export default function ContentEngine() {
     setBlogGenerating(true)
     setBlogResult(null)
     try {
-      const res = await fetch(`${API_URL}/api/admin/blog/generate`, {
+      const res = await authFetch('/api/admin/blog/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-        body: JSON.stringify({ topic: blogTopic.trim() || undefined }),
+        data: { topic: blogTopic.trim() || undefined },
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Generation failed')
-      setBlogResult({ title: data.title, url: data.url })
+      setBlogResult({ title: res.data.title, url: res.data.url })
       setBlogTopic('')
       showToast('Blog post generated', 'success')
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to generate blog post', 'error')
+      showToast(errMsg(err, 'Failed to generate blog post'), 'error')
     } finally {
       setBlogGenerating(false)
     }
-  }, [blogTopic, showToast])
+  }, [blogTopic, showToast, authFetch])
 
   const fetchPosts = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/api/admin/generated-content`, {
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
-      const data = await res.json()
-      setPosts(Array.isArray(data) ? data : [])
+      const res = await authFetch('/api/admin/generated-content')
+      setPosts(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
       console.error('Fetch posts error:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [authFetch])
 
   const fetchLeads = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/tool-leads`, {
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
-      const data = await res.json()
-      setLeads(Array.isArray(data) ? data : [])
+      const res = await authFetch('/api/admin/tool-leads')
+      setLeads(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
       console.error('Fetch leads error:', err)
     }
-  }, [])
+  }, [authFetch])
 
   const fetchOutreachStats = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${API_URL}/api/admin/cold-contacts/stats`,
-        { headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET } }
-      )
-      const data = await res.json()
-      setOutreachStats(data)
+      const res = await authFetch('/api/admin/cold-contacts/stats')
+      setOutreachStats(res.data)
     } catch {}
-  }, [])
+  }, [authFetch])
 
   const fetchVideos = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/generated-videos`, {
-        headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET }
-      })
-      const data = await res.json()
-      setVideos(Array.isArray(data) ? data : [])
+      const res = await authFetch('/api/admin/generated-videos')
+      setVideos(Array.isArray(res.data) ? res.data : [])
     } catch {}
-  }, [])
+  }, [authFetch])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -150,18 +135,14 @@ export default function ContentEngine() {
     setGenerating(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/admin/generate-content`, {
-        method: 'POST',
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
-      const data = await res.json()
-      if (data.success) {
+      const res = await authFetch('/api/admin/generate-content', { method: 'POST' })
+      if (res.data.success) {
         await fetchPosts()
       } else {
-        setError(data.error || 'Generation failed')
+        setError(res.data.error || 'Generation failed')
       }
-    } catch {
-      setError('Failed to connect. Is Railway running?')
+    } catch (err) {
+      setError(errMsg(err, 'Failed to connect. Is Railway running?'))
     } finally {
       setGenerating(false)
     }
@@ -171,18 +152,14 @@ export default function ContentEngine() {
     setGenerating(true)
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/admin/reddit-content`, {
-        method: 'POST',
-        headers: { 'x-admin-secret': ADMIN_SECRET }
-      })
-      const data = await res.json()
-      if (data.success) {
+      const res = await authFetch('/api/admin/reddit-content', { method: 'POST' })
+      if (res.data.success) {
         await fetchPosts()
       } else {
-        setError(data.error || 'Reddit generation failed')
+        setError(res.data.error || 'Reddit generation failed')
       }
-    } catch {
-      setError('Failed to connect.')
+    } catch (err) {
+      setError(errMsg(err, 'Failed to connect.'))
     } finally {
       setGenerating(false)
     }
@@ -190,10 +167,9 @@ export default function ContentEngine() {
 
   const markStatus = async (id: number, status: 'posted' | 'skipped') => {
     try {
-      await fetch(`${API_URL}/api/admin/generated-content/${id}`, {
+      await authFetch(`/api/admin/generated-content/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-        body: JSON.stringify({ status }),
+        data: { status },
       })
       setPosts(prev => prev.map(p => p.id === id ? { ...p, status } : p))
     } catch {}
@@ -217,19 +193,11 @@ export default function ContentEngine() {
     })
 
     try {
-      const res = await fetch(
-        `${API_URL}/api/admin/cold-contacts/import`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
-          },
-          body: JSON.stringify({ contacts })
-        }
-      )
-      const data = await res.json()
-      setImportResult(data)
+      const res = await authFetch('/api/admin/cold-contacts/import', {
+        method: 'POST',
+        data: { contacts },
+      })
+      setImportResult(res.data)
       setImportText('')
       fetchOutreachStats()
     } catch {
@@ -244,23 +212,18 @@ export default function ContentEngine() {
     setSearching(true)
     setSearchResult(null)
     try {
-      const res = await fetch(`${API_URL}/api/admin/find-emails`, {
+      const res = await authFetch('/api/admin/find-emails', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
-        },
-        body: JSON.stringify({ city: searchCity, state: searchState || 'USA' })
+        data: { city: searchCity, state: searchState || 'USA' },
       })
-      const data = await res.json()
-      if (data.error) {
-        showToast(data.error, 'error')
+      if (res.data.error) {
+        showToast(res.data.error, 'error')
       } else {
-        setSearchResult(data)
+        setSearchResult(res.data)
         fetchOutreachStats()
       }
-    } catch {
-      showToast('Failed to connect', 'error')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to connect'), 'error')
     } finally {
       setSearching(false)
     }
@@ -270,25 +233,17 @@ export default function ContentEngine() {
     if (!testingEmail) return
     setTestSending(true)
     try {
-      const res = await fetch(
-        `${API_URL}/api/admin/cold-send-test`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
-          },
-          body: JSON.stringify({ email: testingEmail })
-        }
-      )
-      const data = await res.json()
-      if (data.success) {
+      const res = await authFetch('/api/admin/cold-send-test', {
+        method: 'POST',
+        data: { email: testingEmail },
+      })
+      if (res.data.success) {
         showToast('Test email sent! Check your inbox.')
       } else {
-        showToast(data.error || 'Failed to send test', 'error')
+        showToast(res.data.error || 'Failed to send test', 'error')
       }
-    } catch {
-      showToast('Failed to connect', 'error')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to connect'), 'error')
     } finally {
       setTestSending(false)
     }
@@ -296,10 +251,7 @@ export default function ContentEngine() {
 
   const handleDeleteVideo = async (id: number) => {
     try {
-      await fetch(`${API_URL}/api/admin/generated-videos/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET }
-      })
+      await authFetch(`/api/admin/generated-videos/${id}`, { method: 'DELETE' })
       setVideos(prev => prev.filter((v: any) => v.id !== id))
       showToast('Video deleted')
     } catch {
@@ -320,27 +272,22 @@ export default function ContentEngine() {
     setCaptionVideoId(video.id)
     try {
       console.log('Sending caption request, script length:', video.script?.length, 'id:', video.id)
-      const res = await fetch(`${API_URL}/api/admin/generate-captions`, {
+      const res = await authFetch('/api/admin/generate-captions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
-        },
-        body: JSON.stringify({ script: video.script, videoId: video.id })
+        data: { script: video.script, videoId: video.id },
       })
-      const data = await res.json()
-      console.log('Caption response:', data)
-      if (data.captions) {
-        setCaptionsCache(c => ({ ...c, [video.id]: data.captions }))
+      console.log('Caption response:', res.data)
+      if (res.data.captions) {
+        setCaptionsCache(c => ({ ...c, [video.id]: res.data.captions }))
         setCaptionVideoId(video.id)
       } else {
-        console.error('No captions in response:', data)
-        showToast(data.error || 'Caption generation failed', 'error')
+        console.error('No captions in response:', res.data)
+        showToast(res.data.error || 'Caption generation failed', 'error')
         setCaptionVideoId(null)
       }
     } catch (err) {
       console.error('Caption fetch error:', err)
-      showToast('Caption generation failed', 'error')
+      showToast(errMsg(err, 'Caption generation failed'), 'error')
       setCaptionVideoId(null)
     } finally {
       setGeneratingCaptions(false)
@@ -355,30 +302,23 @@ export default function ContentEngine() {
       type === 'tour' ? '/api/admin/generate-tour-video' :
       '/api/admin/generate-video'
     try {
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      const res = await authFetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET
-        },
-        body: JSON.stringify(
-          type === 'tour'
-            ? { title: videoTitle || undefined }
-            : { script: videoScript, title: videoTitle || undefined }
-        )
+        data: type === 'tour'
+          ? { title: videoTitle || undefined }
+          : { script: videoScript, title: videoTitle || undefined },
       })
-      const data = await res.json()
-      if (data.queued) {
+      if (res.data.queued) {
         const label = type === 'explainer' ? 'Explainer' : type === 'tour' ? 'Product tour' : 'Video'
         showToast(`${label} queued! Rendering in background.`)
         setVideoScript('')
         setVideoTitle('')
         setTimeout(fetchVideos, 2000)
       } else {
-        showToast(data.error || 'Failed to queue video', 'error')
+        showToast(res.data.error || 'Failed to queue video', 'error')
       }
-    } catch {
-      showToast('Failed to connect', 'error')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to connect'), 'error')
     } finally {
       setVideoGenerating(false)
     }

@@ -45,7 +45,7 @@ export default function App() {
           <Route path="/book/:username" element={<BookingPage />} />
           <Route path="/inquire/:username" element={<InquiryPage />} />
           <Route path="/pay/:linkId" element={<PaymentLinkPage />} />
-          <Route path="/proposal/:id" element={<ProposalPage />} />
+          <Route path="/proposal/:token" element={<ProposalPage />} />
 
           {/* Protected dashboard */}
           <Route

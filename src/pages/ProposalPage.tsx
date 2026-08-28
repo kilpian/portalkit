@@ -33,7 +33,7 @@ function formatCents(cents: number) {
 }
 
 export default function ProposalPage() {
-  const { id } = useParams<{ id: string }>()
+  const { token } = useParams<{ token: string }>()
   const [proposal, setProposal] = useState<ProposalData | null>(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
@@ -41,17 +41,17 @@ export default function ProposalPage() {
   const [accepted, setAccepted] = useState(false)
 
   useEffect(() => {
-    if (!id) return
-    axios.get<ProposalData>(`${API_URL}/api/proposals/${id}/public`)
+    if (!token) return
+    axios.get<ProposalData>(`${API_URL}/api/proposals/${token}/public`)
       .then(r => setProposal(r.data))
       .catch(() => setError('Proposal not found or no longer available.'))
-  }, [id])
+  }, [token])
 
   const handleAccept = async () => {
-    if (!proposal || !id) return
+    if (!proposal || !token) return
     setAccepting(true)
     try {
-      await axios.post(`${API_URL}/api/proposals/${id}/accept`, { selected_package_id: selected })
+      await axios.post(`${API_URL}/api/proposals/${token}/accept`, { selected_package_id: selected })
       setAccepted(true)
       setProposal(prev => prev ? { ...prev, status: 'accepted' } : prev)
     } catch {

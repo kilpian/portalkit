@@ -162,8 +162,8 @@ export default function Proposals() {
     setDeleteProposalId(null)
   }
 
-  const copyLink = (id: number) => {
-    navigator.clipboard.writeText(`${window.location.origin}/proposal/${id}`).then(() => {
+  const copyLink = (id: number, token: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/proposal/${token}`).then(() => {
       setCopied(id); setTimeout(() => setCopied(null), 2000)
     })
   }
@@ -457,7 +457,7 @@ export default function Proposals() {
                         </button>
                       )}
                       {p.status !== 'draft' && (
-                        <button onClick={() => copyLink(p.id)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: copied === p.id ? '#059669' : 'transparent', color: copied === p.id ? '#fff' : '#374151', cursor: 'pointer', fontWeight: 500 }}>
+                        <button onClick={() => copyLink(p.id, p.token)} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: copied === p.id ? '#059669' : 'transparent', color: copied === p.id ? '#fff' : '#374151', cursor: 'pointer', fontWeight: 500 }}>
                           {copied === p.id ? '✓ Copied' : 'Copy Link'}
                         </button>
                       )}

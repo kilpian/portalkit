@@ -260,6 +260,7 @@ export interface Proposal {
   viewed_at: string | null
   accepted_at: string | null
   created_at: string
+  token: string
 }
 
 export interface CreateClientPayload {
