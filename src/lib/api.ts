@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
@@ -423,7 +423,10 @@ export function usePolling(callback: () => void, intervalMs = 30000) {
 export function useApi() {
   const { getToken } = useAuth()
 
-  const authFetch = async (url: string, options: Record<string, unknown> = {}) => {
+  // Memoized — an unstable authFetch identity on every render was re-firing
+  // every useEffect/useCallback across the app that lists it as a dependency
+  // (e.g. Customers.tsx's fetchData), causing repeated/duplicate API calls.
+  const authFetch = useCallback(async (url: string, options: Record<string, unknown> = {}) => {
     const token = await getToken()
     try {
       return await axios({
@@ -453,7 +456,7 @@ export function useApi() {
       }
       throw error
     }
-  }
+  }, [getToken])
 
   return { authFetch }
 }
