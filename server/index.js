@@ -4351,7 +4351,7 @@ function requireAdmin(req, res, next) {
   requireAuth(req, res, () => {
     const adminEmails = (process.env.ADMIN_EMAILS || '')
       .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
-    const email = req.user?.email?.toLowerCase()
+    const email = req.user?.email?.trim().toLowerCase()
     if (!email || !adminEmails.includes(email)) {
       return res.status(403).json({ error: 'Forbidden' })
     }

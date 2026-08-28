@@ -210,7 +210,7 @@ function UserAvatar({ imageUrl, initials, size = 32 }: { imageUrl?: string; init
 export default function DashboardLayout() {
   // FIX 3: use Clerk's useUser() directly for reliable, immediate user data
   const { user: clerkUser } = useUser()
-  const { user: portalUser, signOut, refreshUser } = usePortalAuth()
+  const { user: portalUser, userLoaded, signOut, refreshUser } = usePortalAuth()
   const { authFetch } = useApi()
   const navigate = useNavigate()
   const location = useLocation()
@@ -317,7 +317,7 @@ export default function DashboardLayout() {
           onClick={() => setMobileOpen(false)}
           icon={SETTINGS_ICON}
         />
-        {portalUser?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase() && (
+        {userLoaded && portalUser?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase() && (
           <>
             <NavItem
               to="/dashboard/content"

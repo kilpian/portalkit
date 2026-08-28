@@ -131,6 +131,13 @@ export default function Customers() {
 
   useEffect(() => { if (isAdmin) fetchData() }, [isAdmin, fetchData])
 
+  // user is null until the async /api/auth/me fetch resolves — check that
+  // before isAdmin, or this briefly renders "Admin access required" for the
+  // real admin on every cold load, matching ContentEngine.tsx's guard order.
+  if (!user) {
+    return <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+  }
+
   if (!isAdmin) {
     return <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Admin access required.</div>
   }

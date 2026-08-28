@@ -8,6 +8,7 @@ interface PortalAuthContextType {
   user: PortalUser | null
   isLoggedIn: boolean
   isLoaded: boolean
+  userLoaded: boolean
   signOut: () => void
   setUser: (user: PortalUser) => void
   refreshUser: () => Promise<void>
@@ -20,6 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { signOut: clerkSignOut } = useClerk()
   const { getToken } = useClerkAuth()
   const [portalUser, setPortalUser] = useState<PortalUser | null>(null)
+  // Distinguishes "still fetching /api/auth/me" from "fetched, and there's
+  // genuinely no user" — without this, admin-gated UI (nav items, dashboard
+  // pages) can't tell those two states apart and briefly renders as if the
+  // real admin were logged out, until the fetch resolves.
+  const [userLoaded, setUserLoaded] = useState(false)
 
   const fetchUser = useCallback(async (retries = 3) => {
     try {
@@ -30,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json()
       if (data.id) {
         setPortalUser(data)
+        setUserLoaded(true)
         posthog.identify(data.id.toString(), {
           email: data.email,
           name: data.full_name,
@@ -54,15 +61,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else if (retries > 0) {
         setTimeout(() => fetchUser(retries - 1), 1000)
+      } else {
+        setUserLoaded(true)
       }
     } catch (err) {
       if (retries > 0) setTimeout(() => fetchUser(retries - 1), 1000)
+      else setUserLoaded(true)
     }
   }, [getToken])
 
   useEffect(() => {
     if (!clerkLoaded) return
-    if (!clerkUser) { setPortalUser(null); return }
+    if (!clerkUser) { setPortalUser(null); setUserLoaded(true); return }
     fetchUser()
   }, [clerkUser, clerkLoaded, fetchUser])
 
@@ -84,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: portalUser,
       isLoggedIn: !!clerkUser,
       isLoaded: clerkLoaded,
+      userLoaded,
       signOut,
       setUser: updateUser,
       refreshUser,
