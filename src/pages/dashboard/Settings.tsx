@@ -489,7 +489,7 @@ export default function Settings() {
                     Billing: <strong style={{ color: 'var(--text-primary)' }}>{user?.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}</strong>
                     {' · '}{user?.billing_cycle === 'annual' ? '$348/year' : '$39/month'}
                   </p>
-                  {user?.billing_cycle !== 'annual' && (
+                  {user?.billing_cycle !== 'annual' && !!user?.stripe_subscription_id && user.stripe_subscription_id !== 'manual_activation' && (
                     <button
                       onClick={() => setShowSwitchAnnualModal(true)}
                       disabled={switchingAnnual}
