@@ -243,7 +243,7 @@ app.post('/api/stripe/webhook',
           const { userId } = session.metadata || {}
           if (userId) {
             await pool.query(
-              'UPDATE users SET plan=$1, stripe_subscription_id=$2 WHERE id=$3',
+              'UPDATE users SET plan=$1, stripe_subscription_id=$2, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE id=$3',
               ['active', session.subscription, userId]
             )
             console.log(`User ${userId} subscribed`)
@@ -256,14 +256,14 @@ app.post('/api/stripe/webhook',
           let rowsUpdated = 0
           if (subUserId) {
             const r = await pool.query(
-              'UPDATE users SET plan=$1, stripe_subscription_id=$2, stripe_customer_id=$4 WHERE id=$3',
+              'UPDATE users SET plan=$1, stripe_subscription_id=$2, stripe_customer_id=$4, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE id=$3',
               ['active', sub.id, subUserId, sub.customer]
             )
             rowsUpdated = r.rowCount ?? 0
           }
           if (!rowsUpdated) {
             await pool.query(
-              'UPDATE users SET plan=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3',
+              'UPDATE users SET plan=$1, stripe_subscription_id=$2, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE stripe_customer_id=$3',
               ['active', sub.id, sub.customer]
             )
           }
@@ -273,7 +273,7 @@ app.post('/api/stripe/webhook',
           const inv = event.data.object
           console.log('💳 Webhook: invoice.payment_succeeded for customer:', inv.customer, 'amount_paid:', inv.amount_paid, 'billing_reason:', inv.billing_reason)
           await pool.query(
-            'UPDATE users SET plan=$1 WHERE stripe_customer_id=$2',
+            'UPDATE users SET plan=$1, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE stripe_customer_id=$2',
             ['active', inv.customer]
           ).catch(() => {})
 
@@ -487,7 +487,7 @@ app.post('/api/stripe/webhook',
           const sub = event.data.object
           if (sub.status === 'active') {
             await pool.query(
-              'UPDATE users SET plan=$1 WHERE stripe_subscription_id=$2',
+              'UPDATE users SET plan=$1, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE stripe_subscription_id=$2',
               ['active', sub.id]
             )
           }
@@ -1577,6 +1577,34 @@ async function initDb() {
           subscription_status = 'active',
           plan = 'pro'
         WHERE email = 'derauzoma@gmail.com'
+      `).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS product_feedback (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          sentiment TEXT NOT NULL CHECK (sentiment IN ('loving_it','its_okay','having_issues')),
+          feedback_text TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_feedback_user_id ON product_feedback(user_id);
+      `).catch(() => {})
+
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feedback_prompt_last_shown_at TIMESTAMPTZ`).catch(() => {})
+
+      // plan_activated_at marks the earliest moment a user had a real, paid
+      // (non-trial, non-manual_activation) subscription — set via COALESCE at
+      // every Stripe webhook/route that transitions plan to 'active', so it
+      // never gets overwritten by a later resubscribe. Backfilled once here
+      // from created_at for accounts that were already active before this
+      // column existed, so they aren't permanently excluded from feedback.
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_activated_at TIMESTAMPTZ`).catch(() => {})
+      await pool.query(`
+        UPDATE users SET plan_activated_at = created_at
+        WHERE plan_activated_at IS NULL
+          AND plan = 'active'
+          AND stripe_subscription_id IS NOT NULL
+          AND stripe_subscription_id NOT IN ('', 'manual_activation')
       `).catch(() => {})
 
       console.log('✅ Database ready')
@@ -4581,6 +4609,86 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
 
 // ── REFERRALS ─────────────────────────────────────────────────
 
+// ── PRODUCT FEEDBACK ──────────────────────────────────────────
+
+app.get('/api/feedback/should-show', requireAuth, async (req, res) => {
+  try {
+    if (req.user.plan !== 'active') return res.json({ shouldShow: false })
+
+    const activatedAt = req.user.plan_activated_at
+    const fourteenDaysPassed = !!activatedAt && (Date.now() - new Date(activatedAt).getTime()) >= 14 * 24 * 60 * 60 * 1000
+    if (!fourteenDaysPassed) return res.json({ shouldShow: false })
+
+    const lastShown = req.user.feedback_prompt_last_shown_at
+    const cooldownOk = !lastShown || (Date.now() - new Date(lastShown).getTime()) > 30 * 24 * 60 * 60 * 1000
+    if (!cooldownOk) return res.json({ shouldShow: false })
+
+    const existing = await pool.query('SELECT 1 FROM product_feedback WHERE user_id=$1', [req.userId])
+    if (existing.rows.length) return res.json({ shouldShow: false })
+
+    const hasClient = await pool.query('SELECT 1 FROM clients WHERE user_id=$1 LIMIT 1', [req.userId])
+    if (!hasClient.rows.length) return res.json({ shouldShow: false })
+
+    res.json({ shouldShow: true })
+  } catch (err) {
+    console.error('Feedback should-show error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/feedback', requireAuth, async (req, res) => {
+  const { sentiment, feedback_text } = req.body || {}
+  if (!['loving_it', 'its_okay', 'having_issues'].includes(sentiment)) {
+    return res.status(400).json({ error: 'Invalid sentiment' })
+  }
+  try {
+    await pool.query(
+      'INSERT INTO product_feedback (user_id, sentiment, feedback_text) VALUES ($1,$2,$3)',
+      [req.userId, sentiment, sanitize(feedback_text) || null]
+    )
+
+    if ((sentiment === 'its_okay' || sentiment === 'having_issues') && resend) {
+      const sentimentLabel = sentiment === 'its_okay' ? "It's okay" : 'Having issues'
+      resend.emails.send({
+        from: 'PortalKit <hello@mail.getportalkit.com>',
+        reply_to: 'hello@getportalkit.com',
+        to: 'derauzoma@gmail.com',
+        subject: `Product feedback: ${sentimentLabel} — ${req.user.business_name || req.user.full_name || req.user.email}`,
+        html: emailTemplate({
+          title: 'New product feedback',
+          preheader: `${req.user.email} rated PortalKit: ${sentimentLabel}`,
+          body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Product feedback received</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+              <tr><td style="padding:6px 0;font-weight:600;">Name:</td><td>${escapeHtml(req.user.full_name) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${escapeHtml(req.user.business_name) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${escapeHtml(req.user.email)}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;">Sentiment:</td><td>${sentimentLabel}</td></tr>
+              <tr><td style="padding:6px 0;font-weight:600;vertical-align:top;">Feedback:</td><td>${escapeHtml(feedback_text) || '—'}</td></tr>
+            </table>`,
+          ctaText: null,
+          ctaUrl: null,
+          footerNote: 'PortalKit Internal Notification',
+        }),
+      }).catch(err => console.error('Feedback notification email failed:', err))
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Submit feedback error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/feedback/dismiss', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET feedback_prompt_last_shown_at=NOW() WHERE id=$1', [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Dismiss feedback error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 app.get('/api/referrals', requireAuth, async (req, res) => {
   try {
     const user = await pool.query('SELECT referral_code FROM users WHERE id=$1', [req.userId])
@@ -4921,7 +5029,7 @@ app.post('/api/stripe/confirm-setup', requireAuth, async (req, res) => {
         await stripe.subscriptions.update(existingSub, {
           default_payment_method: paymentMethodId,
         })
-        await pool.query("UPDATE users SET plan='active', billing_cycle=$1 WHERE id=$2", [billingCycle, req.user.id])
+        await pool.query("UPDATE users SET plan='active', billing_cycle=$1, plan_activated_at=COALESCE(plan_activated_at, NOW()) WHERE id=$2", [billingCycle, req.user.id])
         console.log(`💳 Subscription reactivated for user ${req.user.id}: ${existingSub}`)
         return res.json({ success: true, subscription: existingSub })
       }

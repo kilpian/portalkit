@@ -5,6 +5,7 @@ import { usePortalAuth } from '../../context/AuthContext'
 import { useApi, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
+import FeedbackCard from '../../components/FeedbackCard'
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -250,6 +251,8 @@ export default function Dashboard() {
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap' }}>Add session type →</span>
         </Link>
       )}
+
+      <FeedbackCard />
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
