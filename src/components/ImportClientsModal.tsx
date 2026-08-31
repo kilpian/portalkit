@@ -36,7 +36,7 @@ const TARGET_FIELDS: { value: string; label: string }[] = [
 
 type Step = 'upload' | 'review' | 'summary'
 
-export default function ImportClientsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function ImportClientsModal({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported?: () => void }) {
   const { authFetch } = useApi()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -126,6 +126,7 @@ export default function ImportClientsModal({ open, onClose }: { open: boolean; o
       })
       setSummary(res.data)
       setStep('summary')
+      onImported?.()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
       setError(msg || 'Import failed. Please try again.')

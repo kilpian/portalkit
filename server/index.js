@@ -1292,6 +1292,19 @@ async function initDb() {
       await pool.query(`ALTER TABLE proposals ADD COLUMN IF NOT EXISTS token TEXT UNIQUE DEFAULT gen_random_uuid()::TEXT`).catch(() => {})
 
       await pool.query(`
+        CREATE TABLE IF NOT EXISTS import_history (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          filename TEXT NOT NULL,
+          r2_key TEXT,
+          imported_count INTEGER NOT NULL DEFAULT 0,
+          skipped_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_import_history_user_id ON import_history(user_id);
+      `).catch(() => {})
+
+      await pool.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_clients_created INTEGER DEFAULT 0
       `).catch(() => {})
 
@@ -5539,7 +5552,66 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
     }
   }
 
+  // Store the original file so the photographer can re-download exactly what
+  // they uploaded later — same PutObjectCommand/R2_BUCKET/generateDownloadUrl
+  // utility Gallery/Files already use, just under an imports/ prefix.
+  let importR2Key = null
+  if (r2) {
+    try {
+      importR2Key = `imports/${req.userId}/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const isZip = req.file.buffer.length >= 2 && req.file.buffer[0] === 0x50 && req.file.buffer[1] === 0x4B
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: importR2Key,
+        Body: req.file.buffer,
+        ContentType: isZip ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
+        ContentDisposition: `attachment; filename="${req.file.originalname}"`,
+      }))
+    } catch (err) {
+      console.error('Import file R2 upload failed:', err.message)
+      importR2Key = null
+    }
+  }
+
+  await pool.query(
+    `INSERT INTO import_history (user_id, filename, r2_key, imported_count, skipped_count)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [req.userId, req.file.originalname, importR2Key, imported, skipped.length]
+  ).catch(err => console.error('Import history insert failed:', err.message))
+
   res.json({ imported, skipped, skippedCount: skipped.length, total: dataRows.length })
+})
+
+app.get('/api/import/history', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, filename, imported_count, skipped_count, created_at
+       FROM import_history WHERE user_id=$1 ORDER BY created_at DESC`,
+      [req.userId]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get import history error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/import/history/:id/download', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT r2_key, filename FROM import_history WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.userId]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Import not found' })
+    const { r2_key, filename } = result.rows[0]
+    if (!r2_key) return res.status(404).json({ error: 'Original file is not available for this import' })
+    const url = await generateDownloadUrl(r2_key)
+    if (!url) return res.status(503).json({ error: 'File storage not configured' })
+    res.json({ url, filename })
+  } catch (err) {
+    console.error('Import download error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 // ── CLIENT EVENTS ─────────────────────────────────────────────

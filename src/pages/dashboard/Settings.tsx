@@ -11,6 +11,14 @@ import ConfirmModal from '../../components/ConfirmModal'
 import ImportClientsModal from '../../components/ImportClientsModal'
 import ManageSubscriptionModal from '../../components/ManageSubscriptionModal'
 
+interface ImportHistoryItem {
+  id: number
+  filename: string
+  imported_count: number
+  skipped_count: number
+  created_at: string
+}
+
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -50,6 +58,8 @@ export default function Settings() {
 
   // Data import
   const [showImportModal, setShowImportModal] = useState(false)
+  const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([])
+  const [importHistoryErr, setImportHistoryErr] = useState('')
 
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
@@ -136,6 +146,28 @@ export default function Settings() {
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const fetchImportHistory = () => {
+    authFetch('/api/import/history', { method: 'get' })
+      .then(res => setImportHistory(res.data))
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    fetchImportHistory()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleDownloadImport = async (id: number) => {
+    setImportHistoryErr('')
+    try {
+      const res = await authFetch(`/api/import/history/${id}/download`, { method: 'get' })
+      window.open(res.data.url, '_blank')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setImportHistoryErr(msg || 'Failed to download file.')
+    }
+  }
 
   // Keep form in sync with user data once it loads
   useEffect(() => {
@@ -341,7 +373,7 @@ export default function Settings() {
         onCancel={() => setShowDisconnectModal(false)}
       />
 
-      <ImportClientsModal open={showImportModal} onClose={() => setShowImportModal(false)} />
+      <ImportClientsModal open={showImportModal} onClose={() => setShowImportModal(false)} onImported={fetchImportHistory} />
       <ManageSubscriptionModal open={showManageSubModal} onClose={() => setShowManageSubModal(false)} />
 
       {showOnboarding && stripeConnectInstance && (
@@ -651,6 +683,39 @@ export default function Settings() {
               Import Your Data →
             </button>
           </div>
+        </SectionCard>
+
+        {/* ── Import History ───────────────────────────────────── */}
+        <SectionCard title="Import History">
+          {importHistoryErr && <p style={{ fontSize: 13, color: '#DC2626', marginBottom: 12 }}>{importHistoryErr}</p>}
+          {importHistory.length === 0 ? (
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No imports yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {importHistory.map((h, i) => (
+                <div
+                  key={h.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                    padding: '12px 0', borderBottom: i < importHistory.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                      {h.filename}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {' · '}{h.imported_count} imported, {h.skipped_count} skipped
+                    </p>
+                  </div>
+                  <button onClick={() => handleDownloadImport(h.id)} className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
 
         {/* ── Security ─────────────────────────────────────────── */}
