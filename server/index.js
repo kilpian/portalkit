@@ -1304,6 +1304,13 @@ async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_import_history_user_id ON import_history(user_id);
       `).catch(() => {})
 
+      // Traces each imported client back to its batch, so an import can later
+      // be deleted along with the clients it created. ON DELETE SET NULL (not
+      // CASCADE) — deleting just the history log must not silently delete
+      // real client data; that's a separate, explicit choice in the route.
+      await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS import_history_id INTEGER REFERENCES import_history(id) ON DELETE SET NULL`).catch(() => {})
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_clients_import_history_id ON clients(import_history_id)`).catch(() => {})
+
       await pool.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_clients_created INTEGER DEFAULT 0
       `).catch(() => {})
@@ -5509,6 +5516,35 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
     return stringifyCell(row[idx]).trim()
   }
 
+  // Store the original file so the photographer can re-download exactly what
+  // they uploaded later — same PutObjectCommand/R2_BUCKET/generateDownloadUrl
+  // utility Gallery/Files already use, just under an imports/ prefix.
+  let importR2Key = null
+  if (r2) {
+    try {
+      importR2Key = `imports/${req.userId}/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const isZip = req.file.buffer.length >= 2 && req.file.buffer[0] === 0x50 && req.file.buffer[1] === 0x4B
+      await r2.send(new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: importR2Key,
+        Body: req.file.buffer,
+        ContentType: isZip ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
+        ContentDisposition: `attachment; filename="${req.file.originalname}"`,
+      }))
+    } catch (err) {
+      console.error('Import file R2 upload failed:', err.message)
+      importR2Key = null
+    }
+  }
+
+  // Created up front (counts filled in after the loop) so each client row
+  // below can reference its batch via import_history_id.
+  const historyRow = await pool.query(
+    `INSERT INTO import_history (user_id, filename, r2_key) VALUES ($1,$2,$3) RETURNING id`,
+    [req.userId, req.file.originalname, importR2Key]
+  )
+  const importHistoryId = historyRow.rows[0].id
+
   let imported = 0
   const skipped = []
 
@@ -5542,9 +5578,9 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
     try {
       const portalToken = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
       await pool.query(
-        `INSERT INTO clients (user_id, name, email, phone, event_date, notes, secondary_name, portal_token)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [req.userId, sanitize(name), email, sanitize(phone), eventDate, sanitize(notes), sanitize(secondaryName), portalToken]
+        `INSERT INTO clients (user_id, name, email, phone, event_date, notes, secondary_name, portal_token, import_history_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [req.userId, sanitize(name), email, sanitize(phone), eventDate, sanitize(notes), sanitize(secondaryName), portalToken, importHistoryId]
       )
       imported++
     } catch (err) {
@@ -5552,32 +5588,10 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
     }
   }
 
-  // Store the original file so the photographer can re-download exactly what
-  // they uploaded later — same PutObjectCommand/R2_BUCKET/generateDownloadUrl
-  // utility Gallery/Files already use, just under an imports/ prefix.
-  let importR2Key = null
-  if (r2) {
-    try {
-      importR2Key = `imports/${req.userId}/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-      const isZip = req.file.buffer.length >= 2 && req.file.buffer[0] === 0x50 && req.file.buffer[1] === 0x4B
-      await r2.send(new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: importR2Key,
-        Body: req.file.buffer,
-        ContentType: isZip ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
-        ContentDisposition: `attachment; filename="${req.file.originalname}"`,
-      }))
-    } catch (err) {
-      console.error('Import file R2 upload failed:', err.message)
-      importR2Key = null
-    }
-  }
-
   await pool.query(
-    `INSERT INTO import_history (user_id, filename, r2_key, imported_count, skipped_count)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [req.userId, req.file.originalname, importR2Key, imported, skipped.length]
-  ).catch(err => console.error('Import history insert failed:', err.message))
+    `UPDATE import_history SET imported_count=$1, skipped_count=$2 WHERE id=$3`,
+    [imported, skipped.length, importHistoryId]
+  ).catch(err => console.error('Import history update failed:', err.message))
 
   res.json({ imported, skipped, skippedCount: skipped.length, total: dataRows.length })
 })
@@ -5610,6 +5624,48 @@ app.get('/api/import/history/:id/download', requireAuth, async (req, res) => {
     res.json({ url, filename })
   } catch (err) {
     console.error('Import download error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Two-step delete: if clients are still linked to this import, the first
+// call (no ?deleteClients param) returns a confirmation prompt instead of
+// deleting anything. The frontend re-calls with ?deleteClients=true/false
+// once the photographer picks "log only" vs "log + clients".
+app.delete('/api/import/history/:id', requireAuth, async (req, res) => {
+  try {
+    const importCheck = await pool.query(
+      'SELECT id FROM import_history WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.userId]
+    )
+    if (!importCheck.rows.length) return res.status(404).json({ error: 'Import not found' })
+
+    const linkedClients = await pool.query(
+      'SELECT id FROM clients WHERE import_history_id=$1 AND user_id=$2',
+      [req.params.id, req.userId]
+    )
+    const clientCount = linkedClients.rows.length
+    const deleteClients = req.query.deleteClients
+
+    if (clientCount > 0 && deleteClients === undefined) {
+      return res.json({ requiresConfirmation: true, clientCount })
+    }
+
+    if (deleteClients === 'true' && clientCount > 0) {
+      const clientIds = linkedClients.rows.map(r => r.id)
+      // galleries cascade-delete automatically via their own FK; contracts/
+      // invoices are ON DELETE SET NULL (so a normal client delete leaves
+      // them orphaned) — removed explicitly here so "remove those clients"
+      // actually clears their contracts/invoices too, not just the client row.
+      await pool.query('DELETE FROM contracts WHERE client_id = ANY($1::int[])', [clientIds])
+      await pool.query('DELETE FROM invoices WHERE client_id = ANY($1::int[])', [clientIds])
+      await pool.query('DELETE FROM clients WHERE import_history_id=$1 AND user_id=$2', [req.params.id, req.userId])
+    }
+
+    await pool.query('DELETE FROM import_history WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true, clientsDeleted: deleteClients === 'true' ? clientCount : 0 })
+  } catch (err) {
+    console.error('Delete import history error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

@@ -60,6 +60,8 @@ export default function Settings() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([])
   const [importHistoryErr, setImportHistoryErr] = useState('')
+  const [deletingImportId, setDeletingImportId] = useState<number | null>(null)
+  const [importDeleteConfirm, setImportDeleteConfirm] = useState<{ id: number; clientCount: number } | null>(null)
 
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
@@ -166,6 +168,40 @@ export default function Settings() {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
       setImportHistoryErr(msg || 'Failed to download file.')
+    }
+  }
+
+  const handleDeleteImportClick = async (id: number) => {
+    setImportHistoryErr('')
+    setDeletingImportId(id)
+    try {
+      const res = await authFetch(`/api/import/history/${id}`, { method: 'delete' })
+      if (res.data.requiresConfirmation) {
+        setImportDeleteConfirm({ id, clientCount: res.data.clientCount })
+      } else {
+        setImportHistory(prev => prev.filter(h => h.id !== id))
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setImportHistoryErr(msg || 'Failed to delete import.')
+    } finally {
+      setDeletingImportId(null)
+    }
+  }
+
+  const handleResolveImportDelete = async (deleteClients: boolean) => {
+    if (!importDeleteConfirm) return
+    const { id } = importDeleteConfirm
+    setDeletingImportId(id)
+    try {
+      await authFetch(`/api/import/history/${id}?deleteClients=${deleteClients}`, { method: 'delete' })
+      setImportHistory(prev => prev.filter(h => h.id !== id))
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setImportHistoryErr(msg || 'Failed to delete import.')
+    } finally {
+      setDeletingImportId(null)
+      setImportDeleteConfirm(null)
     }
   }
 
@@ -692,28 +728,72 @@ export default function Settings() {
             <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No imports yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {importHistory.map((h, i) => (
-                <div
-                  key={h.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                    padding: '12px 0', borderBottom: i < importHistory.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
-                      {h.filename}
-                    </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {' · '}{h.imported_count} imported, {h.skipped_count} skipped
-                    </p>
+              {importHistory.map((h, i) => {
+                const isConfirming = importDeleteConfirm?.id === h.id
+                const isDeleting = deletingImportId === h.id
+                return (
+                  <div
+                    key={h.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                      padding: '12px 0', borderBottom: i < importHistory.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                        {h.filename}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {' · '}{h.imported_count} imported, {h.skipped_count} skipped
+                      </p>
+                    </div>
+
+                    {isConfirming ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: '#B45309' }}>
+                          This import created {importDeleteConfirm.clientCount} client{importDeleteConfirm.clientCount === 1 ? '' : 's'}. Delete the log only, or also remove {importDeleteConfirm.clientCount === 1 ? 'that client' : 'those clients'}?
+                        </span>
+                        <button
+                          onClick={() => handleResolveImportDelete(false)}
+                          disabled={isDeleting}
+                          style={{ fontSize: 12, padding: '5px 10px', background: 'white', border: '1px solid #D1D5DB', borderRadius: 6, color: '#374151', fontWeight: 600, cursor: isDeleting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          Log only
+                        </button>
+                        <button
+                          onClick={() => handleResolveImportDelete(true)}
+                          disabled={isDeleting}
+                          style={{ fontSize: 12, padding: '5px 10px', background: '#DC2626', border: 'none', borderRadius: 6, color: 'white', fontWeight: 600, cursor: isDeleting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          Delete log + clients
+                        </button>
+                        <button
+                          onClick={() => setImportDeleteConfirm(null)}
+                          disabled={isDeleting}
+                          style={{ fontSize: 12, padding: '5px 10px', background: 'transparent', border: 'none', color: '#6B7280', fontWeight: 600, cursor: isDeleting ? 'not-allowed' : 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <button onClick={() => handleDownloadImport(h.id)} className="btn btn-ghost btn-sm">
+                          Download
+                        </button>
+                        <button
+                          onClick={() => handleDeleteImportClick(h.id)}
+                          disabled={isDeleting}
+                          style={{ fontSize: 12, padding: '6px 12px', border: '1px solid #FCA5A5', borderRadius: 6, background: 'white', color: '#A32D2D', cursor: isDeleting ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: isDeleting ? 0.6 : 1 }}
+                        >
+                          {isDeleting ? '...' : 'Delete'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => handleDownloadImport(h.id)} className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
-                    Download
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </SectionCard>
