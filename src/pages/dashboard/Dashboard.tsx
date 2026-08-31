@@ -68,6 +68,10 @@ export default function Dashboard() {
   const paymentStatus = searchParams.get('payment')
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
+  const isAdmin = user?.email?.toLowerCase() === import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase()
+  const [showFeedbackPreview, setShowFeedbackPreview] = useState(false)
+  const [feedbackPreviewKey, setFeedbackPreviewKey] = useState(0)
+
   const days = trialDaysLeft(user)
 
   const firstName = clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0] || ''
@@ -363,6 +367,18 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <div style={{ marginTop: 24, textAlign: 'center' }}>
+          <button
+            onClick={() => { setShowFeedbackPreview(true); setFeedbackPreviewKey(k => k + 1) }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', textDecoration: 'underline' }}
+          >
+            Preview feedback prompt
+          </button>
+          {showFeedbackPreview && <FeedbackCard preview key={feedbackPreviewKey} />}
+        </div>
+      )}
       </div>
     </>
   )

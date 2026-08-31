@@ -12,15 +12,20 @@ const SENTIMENT_OPTIONS: { value: Sentiment; label: string }[] = [
   { value: 'having_issues', label: 'Having issues' },
 ]
 
-export default function FeedbackCard() {
+export default function FeedbackCard({ preview = false }: { preview?: boolean }) {
   const { authFetch } = useApi()
-  const [status, setStatus] = useState<'loading' | 'hidden' | 'ask' | 'thanks'>('loading')
+  // Preview mode (admin-only "see what this looks like" trigger) skips the
+  // real eligibility fetch entirely and starts straight on the ask step —
+  // it must never call should-show, since that has no bearing on what's
+  // being previewed and this render shouldn't touch real gating state.
+  const [status, setStatus] = useState<'loading' | 'hidden' | 'ask' | 'thanks'>(preview ? 'ask' : 'loading')
   const [sentiment, setSentiment] = useState<Sentiment | null>(null)
   const [feedbackText, setFeedbackText] = useState('')
   const [sendingFeedback, setSendingFeedback] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
 
   useEffect(() => {
+    if (preview) return
     authFetch('/api/feedback/should-show', { method: 'get' })
       .then(res => setStatus(res.data.shouldShow ? 'ask' : 'hidden'))
       .catch(() => setStatus('hidden'))
@@ -29,17 +34,30 @@ export default function FeedbackCard() {
 
   const handleDismiss = () => {
     setStatus('hidden')
+    if (preview) {
+      console.log('[PREVIEW] would have dismissed the feedback prompt')
+      return
+    }
     authFetch('/api/feedback/dismiss', { method: 'post' }).catch(() => {})
   }
 
   const handleSelectSentiment = (value: Sentiment) => {
     setSentiment(value)
     setStatus('thanks')
+    if (preview) {
+      console.log(`[PREVIEW] would have submitted: { sentiment: '${value}' }`)
+      return
+    }
     authFetch('/api/feedback', { method: 'post', data: { sentiment: value } }).catch(() => {})
   }
 
   const handleSendFeedback = async () => {
     if (!sentiment || !feedbackText.trim()) return
+    if (preview) {
+      console.log(`[PREVIEW] would have submitted: { sentiment: '${sentiment}', feedback_text: '${feedbackText.trim()}' }`)
+      setFeedbackSent(true)
+      return
+    }
     setSendingFeedback(true)
     try {
       await authFetch('/api/feedback', { method: 'post', data: { sentiment, feedback_text: feedbackText.trim() } })
