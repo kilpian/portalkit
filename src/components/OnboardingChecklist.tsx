@@ -20,7 +20,7 @@ const STEP_DEFS: { key: keyof ChecklistSteps; label: string; to: string; actionL
   { key: 'send_contract', label: 'Send a contract', to: '/dashboard/contracts', actionLabel: 'Go to Contracts' },
   { key: 'booking_page', label: 'Set up your booking page', to: '/dashboard/booking', actionLabel: 'Go to Booking' },
   { key: 'stripe_connect', label: 'Connect Stripe to get paid', to: '/dashboard/settings', actionLabel: 'Go to Settings' },
-  { key: 'branding', label: 'Customize your portal branding', to: '/dashboard/settings', actionLabel: 'Go to Settings' },
+  { key: 'branding', label: 'Upload your logo', to: '/dashboard/settings#branding', actionLabel: 'Go to Settings' },
 ]
 
 export default function OnboardingChecklist() {

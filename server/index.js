@@ -5248,7 +5248,7 @@ app.get('/api/onboarding/checklist-status', requireAuth, async (req, res) => {
         send_contract: contractExists.rows.length > 0,
         booking_page: sessionTypeExists.rows.length > 0,
         stripe_connect: !!req.user.stripe_connect_id,
-        branding: !!(req.user.business_name?.trim() || req.user.logo_url?.trim()),
+        branding: !!req.user.logo_url?.trim(),
       },
     })
   } catch (err) {

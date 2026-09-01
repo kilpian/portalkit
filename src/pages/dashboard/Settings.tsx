@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import { useClerk } from '@clerk/clerk-react'
 import { loadConnectAndInitialize } from '@stripe/connect-js'
 import type { StripeConnectInstance } from '@stripe/connect-js'
@@ -19,9 +19,9 @@ interface ImportHistoryItem {
   created_at: string
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+    <div id={id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{title}</h2>
       </div>
@@ -35,6 +35,7 @@ export default function Settings() {
   const { openUserProfile } = useClerk()
   const { authFetch } = useApi()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
 
   // Profile
   const [fullName, setFullName] = useState(user?.full_name ?? '')
@@ -116,6 +117,14 @@ export default function Settings() {
       setProfileMsg('Subscription activated! Welcome to PortalKit.')
     }
   }, [searchParams])
+
+  // Scroll to a section (e.g. #branding, linked from the onboarding checklist)
+  // once its content has rendered.
+  useEffect(() => {
+    if (!location.hash) return
+    const el = document.getElementById(location.hash.slice(1))
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [location.hash])
 
   // Fetch Connect status on mount and handle return from Stripe onboarding
   useEffect(() => {
@@ -520,7 +529,7 @@ export default function Settings() {
         </SectionCard>
 
         {/* ── Branding ─────────────────────────────────────────── */}
-        <SectionCard title="Branding">
+        <SectionCard title="Branding" id="branding">
           <form onSubmit={handleBrandingSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {brandingErr && <div className="alert alert-error">{brandingErr}</div>}
             {brandingMsg && <div className="alert alert-success">{brandingMsg}</div>}
