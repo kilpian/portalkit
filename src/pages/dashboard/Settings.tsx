@@ -55,6 +55,8 @@ export default function Settings() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [switchingAnnual, setSwitchingAnnual] = useState(false)
   const [switchMsg, setSwitchMsg] = useState('')
+  const [switchingMonthly, setSwitchingMonthly] = useState(false)
+  const [switchMonthlyMsg, setSwitchMonthlyMsg] = useState('')
 
   // Data import
   const [showImportModal, setShowImportModal] = useState(false)
@@ -73,6 +75,7 @@ export default function Settings() {
 
   // Confirm modals
   const [showSwitchAnnualModal, setShowSwitchAnnualModal] = useState(false)
+  const [showSwitchMonthlyModal, setShowSwitchMonthlyModal] = useState(false)
   const [showDisconnectModal, setShowDisconnectModal] = useState(false)
 
   // Stripe Connect
@@ -274,6 +277,21 @@ export default function Settings() {
     }
   }
 
+  const handleSwitchToMonthly = async () => {
+    setSwitchingMonthly(true)
+    setSwitchMonthlyMsg('')
+    try {
+      await authFetch('/api/stripe/switch-to-monthly', { method: 'post' })
+      if (user) setUser({ ...user, billing_cycle: 'monthly' })
+      setSwitchMonthlyMsg('You\'re switched to monthly billing — this takes effect at the end of your current annual period.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setSwitchMonthlyMsg('Could not switch: ' + (msg || 'Please try again'))
+    } finally {
+      setSwitchingMonthly(false)
+    }
+  }
+
   const refreshConnectStatus = (notify = false) => {
     authFetch('/api/stripe/connect/status', { method: 'get' })
       .then(res => {
@@ -398,6 +416,14 @@ export default function Settings() {
         confirmLabel="Switch to Annual"
         onConfirm={() => { setShowSwitchAnnualModal(false); handleSwitchToAnnual() }}
         onCancel={() => setShowSwitchAnnualModal(false)}
+      />
+      <ConfirmModal
+        open={showSwitchMonthlyModal}
+        title="Switch to monthly billing?"
+        message="You'll keep your annual pricing and full access through the end of your current paid period. After that, billing switches to monthly at the standard $39/mo rate."
+        confirmLabel="Switch to Monthly"
+        onConfirm={() => { setShowSwitchMonthlyModal(false); handleSwitchToMonthly() }}
+        onCancel={() => setShowSwitchMonthlyModal(false)}
       />
       <ConfirmModal
         open={showDisconnectModal}
@@ -573,6 +599,23 @@ export default function Settings() {
                   )}
                   {switchMsg && (
                     <p style={{ fontSize: 13, color: 'var(--color-green)', marginTop: 8 }}>{switchMsg}</p>
+                  )}
+                  {user?.billing_cycle === 'annual' && !!user?.stripe_subscription_id && user.stripe_subscription_id !== 'manual_activation' && (
+                    <button
+                      onClick={() => setShowSwitchMonthlyModal(true)}
+                      disabled={switchingMonthly}
+                      style={{
+                        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                        color: '#1B4332', background: 'transparent', border: '1.5px solid #1B4332',
+                        cursor: switchingMonthly ? 'not-allowed' : 'pointer', opacity: switchingMonthly ? 0.6 : 1,
+                      }}
+                    >
+                      {switchingMonthly ? 'Switching…' : 'Switch to Monthly →'}
+                    </button>
+                  )}
+                  {switchMonthlyMsg && (
+                    <p style={{ fontSize: 13, color: 'var(--color-green)', marginTop: 8 }}>{switchMonthlyMsg}</p>
                   )}
                 </>
               ) : (

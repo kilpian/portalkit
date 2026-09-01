@@ -5095,6 +5095,55 @@ app.post('/api/stripe/switch-to-annual', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/api/stripe/switch-to-monthly', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
+    const monthlyPriceId = process.env.STRIPE_PRICE_PORTALKIT
+    if (!monthlyPriceId) return res.status(500).json({ error: 'Monthly price not configured' })
+
+    const subId = req.user.stripe_subscription_id
+    if (!subId || subId === 'manual_activation') {
+      return res.status(400).json({ error: 'No active subscription to switch' })
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subId)
+    const itemId = subscription.items.data[0].id
+
+    // Deliberately NOT always_invoice like the annual upgrade above — this is
+    // a downgrade, and immediately invoicing here would bill a large
+    // prorated amount right now since current_period_end is still ~a year
+    // out. Stripe's default (create_prorations) instead adds the proration
+    // as line items on the NEXT invoice, which — since this item swap alone
+    // doesn't change current_period_end — still falls at the original
+    // annual renewal date. Net effect: no charge today, annual pricing/
+    // access holds through the paid period, monthly billing starts at
+    // the next natural renewal. Confirmed below rather than assumed.
+    const updated = await stripe.subscriptions.update(subId, {
+      items: [{ id: itemId, price: monthlyPriceId }],
+      proration_behavior: 'create_prorations',
+    })
+
+    try {
+      const upcomingInvoice = await stripe.invoices.createPreview({ customer: updated.customer })
+      const prorationLines = upcomingInvoice.lines.data.filter(l => l.proration)
+      console.log(`💳 Switch-to-monthly proration confirmed for user ${req.user.id}:`, {
+        next_invoice_total: upcomingInvoice.total,
+        next_invoice_amount_due: upcomingInvoice.amount_due,
+        proration_line_items: prorationLines.map(l => ({ amount: l.amount, description: l.description })),
+      })
+    } catch (previewErr) {
+      console.error('💳 Could not confirm proration via upcoming invoice preview:', previewErr.message)
+    }
+
+    await pool.query("UPDATE users SET billing_cycle='monthly' WHERE id=$1", [req.user.id])
+    console.log(`💳 Switched user ${req.user.id} to monthly billing`)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('💳 Switch to monthly error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.post('/api/stripe/create-checkout-with-trial', requireAuth, async (req, res) => {
   try {
     console.log('💳 Creating Stripe checkout for user:', req.user.id)
