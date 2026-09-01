@@ -8296,6 +8296,40 @@ Return ONLY plain text. No markdown. No pound signs. No asterisks. No hashtags. 
   }
 })
 
+app.options('/api/contact', publicCors)
+app.post('/api/contact', publicCors, async (req, res) => {
+  const ip = getClientIp(req)
+  if (!checkFreeToolLimit(ip)) return res.status(429).json({ error: 'Too many requests. Please try again in an hour.' })
+  try {
+    const { name, email, message } = req.body || {}
+    if (!name?.trim() || !email?.trim() || !message?.trim()) {
+      return res.status(400).json({ error: 'Name, email, and message are all required.' })
+    }
+    if (!email.includes('@')) return res.status(400).json({ error: 'Please enter a valid email address.' })
+    if (!resend) return res.status(503).json({ error: 'Email service not configured' })
+
+    await resend.emails.send({
+      from: 'PortalKit <hello@mail.getportalkit.com>',
+      reply_to: email.trim(),
+      to: 'hello@getportalkit.com',
+      subject: `Contact form: ${sanitize(name)}`,
+      html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+        <div style="padding:24px;">
+          <h2 style="font-size:18px;margin:0 0 16px;color:#1B4332;">New contact form submission</h2>
+          <p style="font-size:14px;margin:4px 0;"><strong>Name:</strong> ${escapeHtml(sanitize(name))}</p>
+          <p style="font-size:14px;margin:4px 0;"><strong>Email:</strong> ${escapeHtml(email.trim())}</p>
+          <p style="font-size:14px;margin:12px 0 4px;"><strong>Message:</strong></p>
+          <p style="font-size:14px;white-space:pre-wrap;color:#374151;">${escapeHtml(sanitize(message))}</p>
+        </div>
+      </div>`,
+    })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Contact form error:', err)
+    res.status(500).json({ error: 'Could not send your message. Please try again.' })
+  }
+})
+
 app.get('/api/lead-form', requireAuth, async (req, res) => {
   try {
     let result = await pool.query('SELECT * FROM lead_forms WHERE user_id=$1', [req.userId])

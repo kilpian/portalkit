@@ -425,6 +425,8 @@
     .footer__links { display: flex; flex-direction: column; gap: 11px; }
     .footer__links a { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.55); transition: color 0.2s; }
     .footer__links a:hover { color: var(--cream); }
+    .footer__links button { font-family: var(--fb); font-size: 14px; color: rgba(253,250,245,0.55); transition: color 0.2s; background: none; border: none; padding: 0; margin: 0; cursor: pointer; text-align: left; }
+    .footer__links button:hover { color: var(--cream); }
     .footer__bottom { margin-top: 44px; padding-top: 24px; border-top: 1px solid rgba(253,250,245,0.1); display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; }
     .footer__copy { font-family: var(--fb); font-size: 12px; color: rgba(253,250,245,0.45); }
     .footer__social { display: flex; gap: 16px; }
@@ -449,6 +451,28 @@
     #exitForm .btn-gold { height: 44px; padding: 0 20px; }
     #exitSuccess { display: none; font-family: var(--fb); font-size: 14px; font-weight: 600; color: var(--green); margin-top: 10px; }
     #exitSuccess.show { display: block; }
+
+    /* ── Contact modal — same card chrome as the exit popup, ───────
+       centered with a backdrop since this one is user-triggered
+       rather than a passive corner nudge. */
+    #contactOverlay { display: none; position: fixed; inset: 0; background: rgba(13,43,30,0.45); z-index: 9998; }
+    #contactOverlay.open { display: block; }
+    #contactModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 32px)); background: #FFFFFF; border-radius: 16px; box-shadow: 0 16px 48px rgba(13,43,30,0.22); padding: 26px; z-index: 9999; border: 1px solid var(--border); }
+    #contactModal.open { display: block; }
+    #contactModal .exit__close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink-soft); line-height: 1; width: 44px; height: 44px; }
+    #contactModal h3 { font-family: var(--fd); font-weight: 700; font-size: 18px; color: var(--green); line-height: 1.3; margin: 8px 0; }
+    #contactModal .exit__sub { font-family: var(--fb); font-size: 14px; color: var(--ink-soft); margin-bottom: 16px; line-height: 1.55; }
+    #contactForm { display: flex; flex-direction: column; gap: 10px; }
+    #contactForm.hidden { display: none; }
+    #contactName, #contactEmail, #contactMessage { width: 100%; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--fb); font-size: 15px; outline: none; background: var(--cream); box-sizing: border-box; }
+    #contactName, #contactEmail { height: 44px; }
+    #contactMessage { height: 96px; padding-top: 12px; padding-bottom: 12px; resize: vertical; font-family: var(--fb); }
+    #contactName:focus, #contactEmail:focus, #contactMessage:focus { border-color: var(--gold); }
+    #contactForm .btn-gold { height: 44px; padding: 0 20px; }
+    #contactError { display: none; font-family: var(--fb); font-size: 13px; font-weight: 600; color: #B3261E; margin-top: 4px; }
+    #contactError.show { display: block; }
+    #contactSuccess { display: none; font-family: var(--fb); font-size: 14px; font-weight: 600; color: var(--green); margin-top: 10px; }
+    #contactSuccess.show { display: block; }
 
     /* ── Tablet ──────────────────────────────────── */
     @media (min-width: 640px) {
@@ -1069,7 +1093,7 @@
           <li><a href="/privacy">Privacy Policy</a></li>
           <li><a href="/terms">Terms of Service</a></li>
           <li><a href="/accessibility">Accessibility</a></li>
-          <li><a href="mailto:hello@getportalkit.com">Contact Us</a></li>
+          <li><button onclick="openContactModal()">Contact Us</button></li>
           <li><a href="/signin">Sign in</a></li>
         </ul>
       </div>
@@ -1111,6 +1135,22 @@
     <button type="submit" class="btn btn-gold">Send it</button>
   </form>
   <p id="exitSuccess">✓ Check your inbox — it's on its way.</p>
+</div>
+
+<!-- Contact modal -->
+<div id="contactOverlay" onclick="closeContactModal()"></div>
+<div id="contactModal" role="dialog" aria-modal="true" aria-labelledby="contactTitle">
+  <button class="exit__close" onclick="closeContactModal()" aria-label="Close">✕</button>
+  <h3 id="contactTitle">Get in touch</h3>
+  <p class="exit__sub">Questions, feedback, or just want to say hi? Send us a message and we'll get back to you.</p>
+  <form id="contactForm" onsubmit="submitContactForm(event)">
+    <input type="text" id="contactName" placeholder="Your name" required aria-label="Name">
+    <input type="email" id="contactEmail" placeholder="you@studio.com" required aria-label="Email address">
+    <textarea id="contactMessage" placeholder="How can we help?" required aria-label="Message"></textarea>
+    <p id="contactError"></p>
+    <button type="submit" class="btn btn-gold">Send message</button>
+  </form>
+  <p id="contactSuccess">✓ Thanks, we'll get back to you soon.</p>
 </div>
 
 <script>
@@ -1379,6 +1419,67 @@
     document.getElementById('exitForm').classList.add('hidden');
     document.getElementById('exitSuccess').classList.add('show');
     setTimeout(dismissExitPopup, 2500);
+  }
+
+  function openContactModal() {
+    document.getElementById('contactForm').classList.remove('hidden');
+    document.getElementById('contactSuccess').classList.remove('show');
+    document.getElementById('contactError').classList.remove('show');
+    var submitBtn = document.querySelector('#contactForm button[type="submit"]');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send message';
+    document.getElementById('contactOverlay').classList.add('open');
+    document.getElementById('contactModal').classList.add('open');
+  }
+  function closeContactModal() {
+    document.getElementById('contactOverlay').classList.remove('open');
+    document.getElementById('contactModal').classList.remove('open');
+  }
+  function submitContactForm(e) {
+    e.preventDefault();
+    var errorEl = document.getElementById('contactError');
+    errorEl.classList.remove('show');
+    errorEl.textContent = '';
+
+    var name = document.getElementById('contactName').value.trim();
+    var email = document.getElementById('contactEmail').value.trim();
+    var message = document.getElementById('contactMessage').value.trim();
+    if (!name || !email || !message) {
+      errorEl.textContent = 'Please fill in all fields.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    var submitBtn = document.querySelector('#contactForm button[type="submit"]');
+    submitBtn.disabled = true;
+    var originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Sending…';
+
+    fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, email: email, message: message })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (!result.ok) {
+          errorEl.textContent = (result.data && result.data.error) || 'Something went wrong. Please try again.';
+          errorEl.classList.add('show');
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+          return;
+        }
+        document.getElementById('contactForm').classList.add('hidden');
+        document.getElementById('contactSuccess').classList.add('show');
+      })
+      .catch(function () {
+        errorEl.textContent = 'Something went wrong. Please try again.';
+        errorEl.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      });
   }
 </script>
 
