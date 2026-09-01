@@ -6,6 +6,7 @@ import { useApi, type DashboardStats, type Client } from '../../lib/api'
 import { trialDaysLeft } from '../../lib/plan'
 import UpgradeModal from '../../components/UpgradeModal'
 import FeedbackCard from '../../components/FeedbackCard'
+import OnboardingChecklist from '../../components/OnboardingChecklist'
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -238,6 +239,8 @@ export default function Dashboard() {
           Here's what's happening with your portals today.
         </p>
       </div>
+
+      <OnboardingChecklist />
 
       {!loading && stats?.session_type_count === 0 && (
         <Link

@@ -1607,6 +1607,8 @@ async function initDb() {
           AND stripe_subscription_id NOT IN ('', 'manual_activation')
       `).catch(() => {})
 
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_checklist_dismissed BOOLEAN DEFAULT false`).catch(() => {})
+
       console.log('✅ Database ready')
       return
     } catch (err) {
@@ -5228,6 +5230,39 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     })
   } catch (err) {
     console.error('Dashboard stats error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/onboarding/checklist-status', requireAuth, async (req, res) => {
+  try {
+    const [clientCount, contractExists, sessionTypeExists] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM clients WHERE user_id=$1', [req.userId]),
+      pool.query("SELECT 1 FROM contracts WHERE user_id=$1 AND status IN ('sent','signed','fully_signed') LIMIT 1", [req.userId]),
+      pool.query('SELECT 1 FROM session_types WHERE user_id=$1 AND active=TRUE LIMIT 1', [req.userId]),
+    ])
+    res.json({
+      dismissed: !!req.user.onboarding_checklist_dismissed,
+      steps: {
+        first_client: parseInt(clientCount.rows[0].count, 10) > 0,
+        send_contract: contractExists.rows.length > 0,
+        booking_page: sessionTypeExists.rows.length > 0,
+        stripe_connect: !!req.user.stripe_connect_id,
+        branding: !!(req.user.business_name?.trim() || req.user.logo_url?.trim()),
+      },
+    })
+  } catch (err) {
+    console.error('Checklist status error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/onboarding/checklist-dismiss', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET onboarding_checklist_dismissed=true WHERE id=$1', [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Checklist dismiss error:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
