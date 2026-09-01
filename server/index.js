@@ -701,6 +701,16 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;')
 }
 
+// Fire-and-forget: callers never await this, so a slow/failed notification
+// insert can't add latency or an error path to the request that triggered it.
+function createNotification(userId, type, title, link) {
+  if (!userId) return
+  pool.query(
+    'INSERT INTO notifications (user_id, type, title, link) VALUES ($1,$2,$3,$4)',
+    [userId, type, sanitize(title), link || null]
+  ).catch(err => console.error('createNotification failed:', err.message))
+}
+
 const sanitizePrompt = (str) => str?.replace(/<[^>]*>/g, '').slice(0, 2000) || ''
 
 function stripMarkdown(text) {
@@ -768,6 +778,13 @@ async function markInvoicePaidAndNotify(meta, amountCents) {
     return { updated: false }
   }
   console.log(`💳 Connect payment processed: invoice ${invoiceId} marked paid (${amountStr})`)
+
+  createNotification(
+    result.rows[0].user_id,
+    'invoice_paid',
+    `${meta.client_name || 'A client'} paid their invoice (${amountStr})`,
+    '/dashboard/invoices'
+  )
 
   const photographerName = meta.photographer_name || 'Your photographer'
   const invoiceRef = meta.invoice_number ? `Invoice #${meta.invoice_number}` : 'Photography services'
@@ -1608,6 +1625,20 @@ async function initDb() {
       `).catch(() => {})
 
       await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_checklist_dismissed BOOLEAN DEFAULT false`).catch(() => {})
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          link TEXT,
+          read BOOLEAN DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read);
+      `).catch(() => {})
 
       console.log('✅ Database ready')
       return
@@ -5267,6 +5298,54 @@ app.post('/api/onboarding/checklist-dismiss', requireAuth, async (req, res) => {
   }
 })
 
+// ── NOTIFICATIONS ─────────────────────────────────────────────
+
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',
+      [req.userId]
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Get notifications error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.get('/api/notifications/unread-count', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND read=false',
+      [req.userId]
+    )
+    res.json({ count: parseInt(result.rows[0].count, 10) })
+  } catch (err) {
+    console.error('Unread count error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE notifications SET read=true WHERE id=$1 AND user_id=$2', [req.params.id, req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Mark notification read error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/notifications/mark-all-read', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE notifications SET read=true WHERE user_id=$1 AND read=false', [req.userId])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Mark all read error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // ── CLIENTS ───────────────────────────────────────────────────
 
 app.get('/api/clients', requireAuth, async (req, res) => {
@@ -5784,6 +5863,14 @@ app.post('/api/import/confirm', requireAuth, importUpload.single('file'), async 
     `UPDATE import_history SET imported_count=$1, skipped_count=$2 WHERE id=$3`,
     [imported, skipped.length, importHistoryId]
   ).catch(err => console.error('Import history update failed:', err.message))
+
+  // One notification for the whole batch, not per-row.
+  createNotification(
+    req.userId,
+    'import_completed',
+    `Imported ${imported} client${imported === 1 ? '' : 's'} from ${req.file.originalname}`,
+    '/dashboard/settings#import-history'
+  )
 
   res.json({ imported, skipped, skippedCount: skipped.length, total: dataRows.length })
 })
@@ -6872,6 +6959,18 @@ app.post('/api/portals/:token/contracts/:contractId/sign', async (req, res) => {
       [newStatus, sanitize(signer_name), signerIp, hash, contract.id]
     )
     const signedContract = updated.rows[0]
+
+    // Matches the trigger condition of the photographer-facing email just
+    // below (client completed their signature), rather than being gated to
+    // literally newStatus === 'fully_signed' — many contracts never collect
+    // a separate photographer signature at all, so gating strictly on that
+    // enum value would mean this notification almost never fires in practice.
+    createNotification(
+      contract.user_id,
+      'contract_signed',
+      `${contract.client_name} signed their contract`,
+      '/dashboard/contracts'
+    )
 
     const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
     const signedDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -8003,6 +8102,17 @@ app.post('/api/book/:username/book', async (req, res) => {
 
     console.log('Booking created:', { booking_id: booking.rows[0].id, client_id: clientId, client_created: clientCreated })
 
+    // Only a genuinely new client from the public booking page — an existing
+    // client rebooking, or clients added manually/via import, don't need this.
+    if (clientCreated) {
+      createNotification(
+        photographer.id,
+        'new_booking',
+        `New booking from ${sanitize(client_name)}`,
+        '/dashboard/clients'
+      )
+    }
+
     const biz = photographer.business_name || photographer.full_name || 'Your photographer'
     const dateDisplay = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
@@ -9051,7 +9161,9 @@ app.post('/api/proposals/:token/accept', async (req, res) => {
   const { selected_package_id } = req.body
   try {
     const proposalRes = await pool.query(
-      "SELECT * FROM proposals WHERE token=$1 AND status IN ('sent','viewed')",
+      `SELECT p.*, c.name as client_name FROM proposals p
+       LEFT JOIN clients c ON c.id = p.client_id
+       WHERE p.token=$1 AND p.status IN ('sent','viewed')`,
       [req.params.token]
     )
     if (!proposalRes.rows.length) return res.status(404).json({ error: 'Proposal not found or already processed' })
@@ -9071,6 +9183,12 @@ app.post('/api/proposals/:token/accept', async (req, res) => {
     await pool.query(
       "UPDATE proposals SET status='accepted', accepted_at=NOW(), selected_package_id=$1 WHERE id=$2",
       [validSelectedId, proposal.id]
+    )
+    createNotification(
+      proposal.user_id,
+      'proposal_accepted',
+      `${proposal.client_name || 'A client'} accepted your proposal`,
+      '/dashboard/proposals'
     )
     if (proposal.user_id) {
       const photographerRes = await pool.query('SELECT email, full_name, business_name FROM users WHERE id=$1', [proposal.user_id])

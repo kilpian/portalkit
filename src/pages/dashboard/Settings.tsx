@@ -774,7 +774,7 @@ export default function Settings() {
         </SectionCard>
 
         {/* ── Import History ───────────────────────────────────── */}
-        <SectionCard title="Import History">
+        <SectionCard title="Import History" id="import-history">
           {importHistoryErr && <p style={{ fontSize: 13, color: '#DC2626', marginBottom: 12 }}>{importHistoryErr}</p>}
           {importHistory.length === 0 ? (
             <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No imports yet.</p>

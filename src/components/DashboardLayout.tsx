@@ -5,6 +5,7 @@ import { usePortalAuth } from '../context/AuthContext'
 import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'
 import Onboarding from '../pages/dashboard/Onboarding'
+import NotificationBell from './NotificationBell'
 
 const ICON_DASHBOARD = (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -376,6 +377,7 @@ export default function DashboardLayout() {
       }}>
         {isCollapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <NotificationBell collapsed />
             <div title={displayName}>
               <UserAvatar imageUrl={avatarUrl} initials={initials} size={32} />
             </div>
@@ -399,16 +401,19 @@ export default function DashboardLayout() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <UserAvatar imageUrl={avatarUrl} initials={initials} size={34} />
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#FDFAF5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 1 }}>
-                  {displayName}
-                </p>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {displaySub}
-                </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <UserAvatar imageUrl={avatarUrl} initials={initials} size={34} />
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#FDFAF5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 1 }}>
+                    {displayName}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {displaySub}
+                  </p>
+                </div>
               </div>
+              <NotificationBell />
             </div>
 
             {/* Plan badge */}
