@@ -23,7 +23,7 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function NotificationBell({ collapsed }: { collapsed?: boolean }) {
+export default function NotificationBell({ collapsed, onboardingDone }: { collapsed?: boolean; onboardingDone: boolean }) {
   const { authFetch } = useApi()
   const navigate = useNavigate()
   const [unreadCount, setUnreadCount] = useState(0)
@@ -38,22 +38,30 @@ export default function NotificationBell({ collapsed }: { collapsed?: boolean })
       .catch(() => {})
   }
 
+  // Matches the guard already used for the messages unread-count fetch in
+  // DashboardLayout: /api/notifications/* isn't onboarding-exempt server-side,
+  // so calling it before onboarding is confirmed complete gets a 403
+  // 'onboarding_required' — which authFetch's interceptor turns into a hard
+  // window.location.href reload. Since this component also renders in the
+  // background (blurred) sidebar while the onboarding modal is blocking,
+  // firing unconditionally caused an infinite reload loop for new signups.
   useEffect(() => {
+    if (!onboardingDone) return
     fetchUnreadCount()
     const interval = setInterval(fetchUnreadCount, 60_000)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onboardingDone])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !onboardingDone) return
     setLoading(true)
     authFetch('/api/notifications', { method: 'get' })
       .then(res => setNotifications(res.data))
       .catch(() => {})
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, onboardingDone])
 
   useEffect(() => {
     if (!open) return

@@ -377,7 +377,7 @@ export default function DashboardLayout() {
       }}>
         {isCollapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-            <NotificationBell collapsed />
+            <NotificationBell collapsed onboardingDone={onboardingDone} />
             <div title={displayName}>
               <UserAvatar imageUrl={avatarUrl} initials={initials} size={32} />
             </div>
@@ -413,7 +413,7 @@ export default function DashboardLayout() {
                   </p>
                 </div>
               </div>
-              <NotificationBell />
+              <NotificationBell onboardingDone={onboardingDone} />
             </div>
 
             {/* Plan badge */}
