@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi, usePolling, type Client, type CreateClientPayload } from '../../lib/api'
 import { usePortalAuth } from '../../context/AuthContext'
 import { ClientPortalContent } from '../ClientPortal'
@@ -128,6 +129,7 @@ export default function Clients() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [toast, setToast] = useState('')
+  const [checklistToast, setChecklistToast] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
   const [sendModal, setSendModal] = useState<Client | null>(null)
@@ -291,11 +293,30 @@ export default function Clients() {
         setEditingClient(updated)
         showToast(`${updated.name}'s info saved.`)
       } else {
+        const isFirstClient = !loading && clients.length === 0
         const res = await authFetch('/api/clients', { method: 'post', data: payload })
         const created: Client = res.data
         setClients(prev => [created, ...prev])
         closeInfo()
-        showToast(`${created.name}'s portal created!`)
+
+        // Only their very first client completes the onboarding checklist's
+        // "Create your first client" step — surface that here since they
+        // might not be back on the Dashboard to see it land there. Falls
+        // back to the normal toast if the checklist is already dismissed
+        // (or the status check fails) so creating a client never goes
+        // without any confirmation at all.
+        if (isFirstClient) {
+          authFetch('/api/onboarding/checklist-status', { method: 'get' })
+            .then(statusRes => {
+              if (statusRes.data.dismissed) { showToast(`${created.name}'s portal created!`); return }
+              const completedCount = Object.values(statusRes.data.steps as Record<string, boolean>).filter(Boolean).length
+              setChecklistToast(`Nice! First client added — ${completedCount} of 5 done`)
+              setTimeout(() => setChecklistToast(''), 6000)
+            })
+            .catch(() => showToast(`${created.name}'s portal created!`))
+        } else {
+          showToast(`${created.name}'s portal created!`)
+        }
       }
     } catch (err: unknown) {
       const ae = err as { response?: { data?: { error?: string } } }
@@ -968,6 +989,20 @@ export default function Clients() {
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: 'var(--green)', color: '#FDFAF5', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.18)', animation: 'fadeInUp 0.2s ease' }}>
           {toast}
+        </div>
+      )}
+
+      {/* Onboarding checklist completion toast */}
+      {checklistToast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: 'var(--green)', color: '#FDFAF5', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.18)', animation: 'fadeInUp 0.2s ease', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span>{checklistToast}</span>
+          <Link
+            to="/dashboard"
+            onClick={() => setChecklistToast('')}
+            style={{ color: '#C9A84C', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            View Dashboard →
+          </Link>
         </div>
       )}
 
