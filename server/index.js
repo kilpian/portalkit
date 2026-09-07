@@ -4917,26 +4917,6 @@ async function getOrCreateConnectAccountId(user) {
   return account.id
 }
 
-app.post('/api/stripe/connect/onboard', requireAuth, async (req, res) => {
-  try {
-    if (!stripe) return res.status(503).json({ error: 'Payments not configured' })
-    const connectId = await getOrCreateConnectAccountId(req.user)
-
-    const frontendUrl = process.env.FRONTEND_URL || 'https://getportalkit.com'
-    const accountLink = await stripe.accountLinks.create({
-      account: connectId,
-      refresh_url: `${frontendUrl}/dashboard/settings?stripe_connect=refresh`,
-      return_url: `${frontendUrl}/dashboard/settings?stripe_connect=complete`,
-      type: 'account_onboarding',
-    })
-
-    res.json({ url: accountLink.url })
-  } catch (err) {
-    console.error('Stripe Connect onboard error:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
 app.get('/api/stripe/connect/status', requireAuth, async (req, res) => {
   try {
     if (!stripe) return res.json({ connected: false, enabled: false })

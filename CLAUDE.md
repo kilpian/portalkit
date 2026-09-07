@@ -149,7 +149,6 @@
 | GET /api/referrals | 3083 |
 | POST /api/stripe/create-checkout | 3133 |
 | POST /api/stripe/create-portal | 3174 |
-| POST /api/stripe/connect/onboard | 3194 |
 | GET /api/stripe/connect/status | 3232 |
 | POST /api/stripe/connect/disconnect | 3261 |
 | POST /api/stripe/create-checkout-with-trial | 3434 |
