@@ -95,9 +95,9 @@ function SkeletonCard() {
   )
 }
 
-function SectionCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({ id, title, icon, children }: { id?: string; title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+    <div id={id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
         <span style={{ color: 'var(--gold)' }}>{icon}</span>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{title}</h2>
@@ -1416,7 +1416,7 @@ export function ClientPortalContent({ token }: { token: string }) {
           </SectionCard>
 
           {/* Invoices */}
-          <SectionCard title="Invoices" icon={
+          <SectionCard id="invoices" title="Invoices" icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="1" y="4" width="22" height="16" rx="2"/>
               <line x1="1" y1="10" x2="23" y2="10"/>

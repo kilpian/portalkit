@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../lib/api'
 
@@ -31,6 +31,8 @@ export default function NotificationBell({ collapsed, onboardingDone }: { collap
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [panelPos, setPanelPos] = useState<{ left: number; bottom: number } | null>(null)
 
   const fetchUnreadCount = () => {
     authFetch('/api/notifications/unread-count', { method: 'get' })
@@ -72,6 +74,28 @@ export default function NotificationBell({ collapsed, onboardingDone }: { collap
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  // The sidebar has overflow:hidden and is narrower than this panel, so an
+  // absolutely-positioned panel gets clipped by the sidebar's own edge.
+  // Fixed-position it against the viewport instead, anchored to the bell's
+  // actual on-screen position, and re-clamp on resize/collapse toggle since
+  // the button moves when the sidebar width changes.
+  useLayoutEffect(() => {
+    if (!open) return
+    const PANEL_WIDTH = 340
+    const MARGIN = 8
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setPanelPos({
+        left: Math.max(MARGIN, Math.min(rect.left, window.innerWidth - PANEL_WIDTH - MARGIN)),
+        bottom: window.innerHeight - rect.top + MARGIN,
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [open, collapsed])
+
   const markAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     setUnreadCount(0)
@@ -93,6 +117,7 @@ export default function NotificationBell({ collapsed, onboardingDone }: { collap
   return (
     <div ref={wrapperRef} style={{ position: 'relative', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-start' }}>
       <button
+        ref={buttonRef}
         onClick={() => setOpen(v => !v)}
         aria-label="Notifications"
         title="Notifications"
@@ -115,11 +140,11 @@ export default function NotificationBell({ collapsed, onboardingDone }: { collap
         )}
       </button>
 
-      {open && (
+      {open && panelPos && (
         <div
           className="card"
           style={{
-            position: 'absolute', bottom: '100%', left: 0, marginBottom: 8,
+            position: 'fixed', left: panelPos.left, bottom: panelPos.bottom,
             width: 340, maxWidth: '85vw', maxHeight: 420, overflowY: 'auto',
             background: '#fff', zIndex: 500, padding: 0,
           }}
