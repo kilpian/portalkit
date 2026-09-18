@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { SignUp } from '@clerk/clerk-react'
+import { SignUp } from "@clerk/react"
 
 export default function SignUpPage() {
   useEffect(() => {
@@ -45,10 +45,10 @@ export default function SignUpPage() {
             variables: {
               colorPrimary: '#1B4332',
               colorBackground: '#FDFAF5',
-              colorInputBackground: '#FFFFFF',
-              colorInputText: '#374151',
-              colorText: '#374151',
-              colorTextSecondary: '#6B7280',
+              colorInput: '#FFFFFF',
+              colorInputForeground: '#374151',
+              colorForeground: '#374151',
+              colorMutedForeground: '#6B7280',
               colorNeutral: '#1B4332',
               fontFamily: 'Inter, sans-serif',
               borderRadius: '8px',
@@ -90,5 +90,5 @@ export default function SignUpPage() {
         </p>
       </footer>
     </div>
-  )
+  );
 }

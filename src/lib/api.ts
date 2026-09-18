@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useEffect, useCallback } from 'react'
-import { useAuth } from '@clerk/clerk-react'
+import { useAuth } from "@clerk/react"
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
@@ -427,8 +427,8 @@ export function useApi() {
   // every useEffect/useCallback across the app that lists it as a dependency
   // (e.g. Customers.tsx's fetchData), causing repeated/duplicate API calls.
   const authFetch = useCallback(async (url: string, options: Record<string, unknown> = {}) => {
-    const token = await getToken()
     try {
+      const token = await getToken()
       return await axios({
         ...options,
         url: `${API_BASE}${url}`,

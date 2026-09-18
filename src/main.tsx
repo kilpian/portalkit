@@ -1,7 +1,7 @@
 import { StrictMode, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ClerkProvider } from '@clerk/clerk-react'
+import { ClerkProvider } from "@clerk/react"
 import posthog from 'posthog-js'
 import './index.css'
 import App from './App.tsx'

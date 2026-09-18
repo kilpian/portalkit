@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
-import { useClerk } from '@clerk/clerk-react'
+import { useClerk } from "@clerk/react"
 import { loadConnectAndInitialize } from '@stripe/connect-js'
 import type { StripeConnectInstance } from '@stripe/connect-js'
 import { usePortalAuth } from '../../context/AuthContext'

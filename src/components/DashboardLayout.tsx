@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { useUser } from '@clerk/clerk-react'
+import { useUser } from "@clerk/react"
 import { usePortalAuth } from '../context/AuthContext'
 import { useApi } from '../lib/api'
 import { trialDaysLeft } from '../lib/plan'

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import posthog from 'posthog-js'
-import { useClerk } from '@clerk/clerk-react'
+import { useClerk } from "@clerk/react"
 import { usePortalAuth } from '../../context/AuthContext'
 import { useApi } from '../../lib/api'
 
