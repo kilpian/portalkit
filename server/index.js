@@ -4526,7 +4526,47 @@ async function deleteAccountHandler(req, res) {
       }
     }
 
-    // Only reaches here if Stripe cancellation succeeded or there was no subscription.
+    // Delete the Clerk identity BEFORE touching Postgres. If this fails, the
+    // deletion must not proceed — otherwise the user keeps a working Clerk
+    // login with no account row behind it (can sign in to a dead account),
+    // which is exactly the broken state this ordering exists to prevent.
+    if (clerk && req.user.clerk_id) {
+      try {
+        await clerk.users.deleteUser(req.user.clerk_id)
+      } catch (e) {
+        console.error('🚨 CRITICAL: Clerk user delete failed during account deletion:', e.message)
+        if (resend) {
+          resend.emails.send({
+            from: 'PortalKit <hello@mail.getportalkit.com>',
+            reply_to: 'hello@getportalkit.com',
+            to: 'hello@getportalkit.com',
+            subject: `🚨 CRITICAL: Clerk delete failed during account deletion — ${req.user.email}`,
+            html: emailTemplate({
+              title: 'Account deletion blocked — Clerk identity delete failed',
+              preheader: 'A customer tried to delete their account but removing their Clerk identity failed.',
+              body: `<h2 style="font-size:20px;color:#1A1208;margin:0 0 12px;">Deletion blocked</h2>
+                <p style="font-size:14px;color:#374151;margin:0 0 12px;">The account was <strong>NOT</strong> deleted. Resolve the Clerk issue manually, then ask the customer to retry.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+                  <tr><td style="padding:6px 0;font-weight:600;">Email:</td><td>${escapeHtml(req.user.email)}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Business:</td><td>${escapeHtml(req.user.business_name) || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Plan:</td><td>${escapeHtml(req.user.plan) || '—'}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Clerk ID:</td><td>${escapeHtml(req.user.clerk_id)}</td></tr>
+                  <tr><td style="padding:6px 0;font-weight:600;">Clerk error:</td><td>${escapeHtml(e.message)}</td></tr>
+                </table>`,
+              ctaText: null,
+              ctaUrl: null,
+              footerNote: 'PortalKit Internal Notification',
+            }),
+          }).catch(err => console.error('Admin alert email failed:', err))
+        }
+        return res.status(500).json({
+          error: 'We could not remove your login. Your account has NOT been deleted. Please contact support so we can resolve this manually.'
+        })
+      }
+    }
+
+    // Only reaches here if Stripe cancellation and Clerk identity deletion
+    // both succeeded (or there was nothing to cancel/delete).
     await pool.query(
       'INSERT INTO cancellations (user_id, email, business_name, plan, reason, comment) VALUES ($1,$2,$3,$4,$5,$6)',
       [req.user.id, req.user.email, req.user.business_name, req.user.plan, reason || null, comment || null]
