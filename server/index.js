@@ -8285,9 +8285,12 @@ async function generateAndSendAllTemplates(email, fromTool) {
 
 app.options('/api/tools/capture-lead', publicCors)
 app.post('/api/tools/capture-lead', publicCors, async (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown'
+  if (!checkFreeToolLimit(ip)) return res.status(429).json({ error: 'Too many requests. Please try again in an hour.' })
   try {
     const { email, tool, source } = req.body
     if (!email || !email.includes('@')) return res.json({ success: false })
+    const normalizedEmail = email.toLowerCase().trim()
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tool_leads (
         id SERIAL PRIMARY KEY,
@@ -8297,11 +8300,17 @@ app.post('/api/tools/capture-lead', publicCors, async (req, res) => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `).catch(() => {})
+    // No unique constraint on email — ON CONFLICT DO NOTHING below never
+    // actually triggers, so this SELECT is the only real dedup: without it,
+    // resubmitting the same email fires 4 fresh Anthropic calls every time.
+    const existing = await pool.query('SELECT 1 FROM tool_leads WHERE email=$1 LIMIT 1', [normalizedEmail])
     await pool.query(
       'INSERT INTO tool_leads (email, tool, source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
-      [email.toLowerCase().trim(), tool || null, source || null]
+      [normalizedEmail, tool || null, source || null]
     )
-    generateAndSendAllTemplates(email.toLowerCase().trim(), tool || 'free-tool').catch(() => {})
+    if (existing.rows.length === 0) {
+      generateAndSendAllTemplates(normalizedEmail, tool || 'free-tool').catch(() => {})
+    }
     res.json({ success: true })
   } catch (err) {
     console.error('Lead capture error:', err)

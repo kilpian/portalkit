@@ -111,6 +111,13 @@ export default function Settings() {
   // Uses the same resolved-status helper the rest of the app uses (lib/plan.ts),
   // instead of a local re-implementation of the "is this plan active" check.
   const isActive = isSubscribed(user ?? null)
+  // NOT the same thing as `!isActive` — our webhook sets plan='active' the
+  // moment a Stripe subscription is created, trial or not (confirmed live:
+  // an account can have plan='active' while Stripe's subscription status is
+  // still 'trialing'). trial_ends_at is the field that actually tracks
+  // whether Stripe will charge today, so it's what the switch-plan modals
+  // below need — same field already driving the "X days left" copy above.
+  const isTrialing = days > 0
 
   useEffect(() => {
     if (searchParams.get('upgraded') === 'true') {
@@ -421,7 +428,10 @@ export default function Settings() {
       <ConfirmModal
         open={showSwitchAnnualModal}
         title="Switch to annual billing?"
-        message="You'll be charged the prorated annual amount today and save $120/year going forward."
+        message={isTrialing
+          ? "You'll switch to Annual billing. Since you're still in your free trial, nothing is charged today — your first charge of $348 happens when your trial ends."
+          : "You'll be charged the prorated annual amount today and save $120/year going forward."
+        }
         confirmLabel="Switch to Annual"
         onConfirm={() => { setShowSwitchAnnualModal(false); handleSwitchToAnnual() }}
         onCancel={() => setShowSwitchAnnualModal(false)}
@@ -429,7 +439,10 @@ export default function Settings() {
       <ConfirmModal
         open={showSwitchMonthlyModal}
         title="Switch to monthly billing?"
-        message="You'll keep your annual pricing and full access through the end of your current paid period. After that, billing switches to monthly at the standard $39/mo rate."
+        message={isTrialing
+          ? "You'll switch to Monthly billing. Since you're still in your free trial, nothing is charged today — your first charge of $39 happens when your trial ends."
+          : "You'll keep your annual pricing and full access through the end of your current paid period. After that, billing switches to monthly at the standard $39/mo rate."
+        }
         confirmLabel="Switch to Monthly"
         onConfirm={() => { setShowSwitchMonthlyModal(false); handleSwitchToMonthly() }}
         onCancel={() => setShowSwitchMonthlyModal(false)}
