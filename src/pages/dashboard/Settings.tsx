@@ -66,6 +66,10 @@ export default function Settings() {
   const [deletingImportId, setDeletingImportId] = useState<number | null>(null)
   const [importDeleteConfirm, setImportDeleteConfirm] = useState<{ id: number; clientCount: number } | null>(null)
 
+  // Data export
+  const [exporting, setExporting] = useState(false)
+  const [exportErr, setExportErr] = useState('')
+
   // Delete / exit survey
   const [deleteModal, setDeleteModal] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
@@ -401,6 +405,26 @@ export default function Settings() {
       // silent
     } finally {
       setConnectLoading(false)
+    }
+  }
+
+  const handleExportData = async () => {
+    setExporting(true)
+    setExportErr('')
+    try {
+      const res = await authFetch('/api/export/data', { method: 'get', responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/zip' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `portalkit-data-export-${new Date().toISOString().slice(0, 10)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      setExportErr('Could not generate your export. Please try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -876,6 +900,24 @@ export default function Settings() {
               className="btn btn-ghost btn-sm"
             >
               Manage Security →
+            </button>
+          </div>
+        </SectionCard>
+
+        {/* ── Data Export ──────────────────────────────────────── */}
+        <SectionCard title="Your Data">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Export My Data</p>
+              <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Download a ZIP with your clients, contracts, proposals, invoices, questionnaires, and booking session types as CSV files, plus download links for your gallery files.</p>
+              {exportErr && <p style={{ fontSize: 13, color: '#DC2626', marginTop: 6 }}>{exportErr}</p>}
+            </div>
+            <button
+              onClick={handleExportData}
+              disabled={exporting}
+              style={{ fontSize: 13, fontWeight: 700, padding: '8px 16px', borderRadius: 8, cursor: exporting ? 'not-allowed' : 'pointer', color: '#1B4332', background: 'transparent', border: '1.5px solid #1B4332', flexShrink: 0, opacity: exporting ? 0.6 : 1 }}
+            >
+              {exporting ? 'Preparing…' : 'Export My Data'}
             </button>
           </div>
         </SectionCard>

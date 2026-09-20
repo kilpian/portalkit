@@ -13,6 +13,7 @@ import multer from 'multer'
 import { fileTypeFromBuffer } from 'file-type'
 import ExcelJS from 'exceljs'
 import Papa from 'papaparse'
+import archiver from 'archiver'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
 import crypto from 'crypto'
@@ -4613,6 +4614,142 @@ async function deleteAccountHandler(req, res) {
 app.delete('/api/users/me', requireAuth, deleteAccountHandler)
 // Alias requested for GDPR deletion; same handler.
 app.delete('/api/user/account', requireAuth, deleteAccountHandler)
+
+// GDPR data portability export. Checked real account sizes in production
+// before choosing sync-vs-background: max per-user rows right now are
+// single digits across every table here (largest is 8 proposals). All DB
+// work + CSV/signed-URL generation happens BEFORE any response header is
+// set, so a failure mid-way still returns a clean JSON 500 instead of a
+// half-sent ZIP. Revisit as async-with-email if real accounts grow large.
+app.get('/api/export/data', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id
+
+    const [clientsRes, contractsRes, proposalsRes, invoicesRes, questionnairesRes, sessionTypesRes, filesRes] = await Promise.all([
+      pool.query('SELECT * FROM clients WHERE user_id=$1 ORDER BY created_at', [userId]),
+      pool.query('SELECT ct.*, cl.name AS client_name FROM contracts ct LEFT JOIN clients cl ON cl.id=ct.client_id WHERE ct.user_id=$1 ORDER BY ct.created_at', [userId]),
+      pool.query('SELECT p.*, cl.name AS client_name FROM proposals p LEFT JOIN clients cl ON cl.id=p.client_id WHERE p.user_id=$1 ORDER BY p.created_at', [userId]),
+      pool.query('SELECT i.*, cl.name AS client_name FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id WHERE i.user_id=$1 ORDER BY i.created_at', [userId]),
+      pool.query('SELECT qr.*, cl.name AS client_name FROM questionnaire_responses qr LEFT JOIN clients cl ON cl.id=qr.client_id WHERE qr.user_id=$1 ORDER BY qr.created_at', [userId]),
+      pool.query('SELECT * FROM session_types WHERE user_id=$1 ORDER BY id', [userId]),
+      pool.query('SELECT f.*, cl.name AS client_name FROM files f LEFT JOIN clients cl ON cl.id=f.client_id WHERE f.user_id=$1 ORDER BY f.created_at', [userId]),
+    ])
+
+    const fmtDate = d => d ? new Date(d).toISOString().slice(0, 10) : ''
+    const fmtDateTime = d => d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : ''
+    const fmtMoney = cents => typeof cents === 'number' ? `$${(cents / 100).toFixed(2)}` : ''
+
+    const clientsCsv = Papa.unparse(clientsRes.rows.map(c => ({
+      'Name': c.name,
+      'Email': c.email || '',
+      'Phone': c.phone || '',
+      'Event Date': fmtDate(c.event_date),
+      'Event Type': c.event_type || '',
+      'Pipeline Stage': c.stage || '',
+      'Secondary Contact Name': c.secondary_name || '',
+      'Secondary Contact Email': c.secondary_email || '',
+      'Secondary Contact Phone': c.secondary_phone || '',
+      'Notes': c.notes || '',
+      'Client Since': fmtDateTime(c.created_at),
+    })))
+
+    const contractsCsv = Papa.unparse(contractsRes.rows.map(c => ({
+      'Client Name': c.client_name || '',
+      'Title': c.title,
+      'Status': c.status || '',
+      'Content': c.content || '',
+      'Signed By': c.signed_by_name || '',
+      'Signed At': fmtDateTime(c.signed_at),
+      'Signed From IP Address': c.signed_by_ip || '',
+      'Photographer Countersigned At': fmtDateTime(c.photographer_signed_at),
+      'Created At': fmtDateTime(c.created_at),
+    })))
+
+    const proposalsCsv = Papa.unparse(proposalsRes.rows.map(p => ({
+      'Client Name': p.client_name || '',
+      'Title': p.title,
+      'Message': p.message || '',
+      'Status': p.status || '',
+      'Packages': JSON.stringify(p.packages || []),
+      'Expires At': fmtDateTime(p.expires_at),
+      'Viewed At': fmtDateTime(p.viewed_at),
+      'Accepted At': fmtDateTime(p.accepted_at),
+      'Created At': fmtDateTime(p.created_at),
+    })))
+
+    const invoicesCsv = Papa.unparse(invoicesRes.rows.map(i => ({
+      'Client Name': i.client_name || '',
+      'Invoice Number': i.invoice_number || '',
+      'Amount': fmtMoney(i.amount_cents),
+      'Status': i.status || '',
+      'Due Date': fmtDate(i.due_date),
+      'Paid At': fmtDateTime(i.paid_at),
+      'Notes': i.notes || '',
+      'Created At': fmtDateTime(i.created_at),
+    })))
+
+    // questions/responses are a per-response snapshot: questions is
+    // [{id, label, ...}], responses is {[questionId]: answer} — same shape
+    // the dashboard's response viewer reads (Questionnaires.tsx).
+    const questionnairesCsv = Papa.unparse(questionnairesRes.rows.map(q => {
+      const questions = Array.isArray(q.questions) ? q.questions : []
+      const responses = (q.responses && typeof q.responses === 'object') ? q.responses : {}
+      const qa = questions
+        .map(item => `${item.label || 'Question'}: ${responses[item.id] ?? '(no answer)'}`)
+        .join('\n')
+      return {
+        'Client Name': q.client_name || '',
+        'Questionnaire Title': q.title,
+        'Status': q.status || '',
+        'Sent At': fmtDateTime(q.sent_at),
+        'Completed At': fmtDateTime(q.completed_at),
+        'Questions & Answers': qa,
+      }
+    }))
+
+    const sessionTypesCsv = Papa.unparse(sessionTypesRes.rows.map(s => ({
+      'Name': s.name,
+      'Duration (minutes)': s.duration_minutes,
+      'Price': fmtMoney(s.price_cents),
+      'Description': s.description || '',
+      'Active': s.active ? 'Yes' : 'No',
+    })))
+
+    // Gallery files: filenames + a signed download link per file, same
+    // 1hr-expiry pattern generateDownloadUrl already uses for portal
+    // downloads — no binaries embedded, keeps this fast and simple.
+    const filesWithUrls = await Promise.all(filesRes.rows.map(async f => ({
+      'File Name': f.original_name,
+      'Client Name': f.client_name || '',
+      'Uploaded': fmtDateTime(f.created_at),
+      'Download Link (expires in 1 hour)': (await generateDownloadUrl(f.storage_key)) || '',
+    })))
+    const filesCsv = Papa.unparse(filesWithUrls)
+
+    const dateStamp = new Date().toISOString().slice(0, 10)
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="portalkit-data-export-${dateStamp}.zip"`)
+
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    archive.on('error', err => {
+      console.error('Data export archive error:', err)
+      if (!res.headersSent) res.status(500).end()
+    })
+    archive.pipe(res)
+    archive.append(clientsCsv, { name: 'clients.csv' })
+    archive.append(contractsCsv, { name: 'contracts.csv' })
+    archive.append(proposalsCsv, { name: 'proposals.csv' })
+    archive.append(invoicesCsv, { name: 'invoices.csv' })
+    archive.append(questionnairesCsv, { name: 'questionnaires.csv' })
+    archive.append(sessionTypesCsv, { name: 'booking-session-types.csv' })
+    archive.append(filesCsv, { name: 'gallery-files.csv' })
+    await archive.finalize()
+    console.log(`📦 Data export generated for user ${userId}`)
+  } catch (err) {
+    console.error('Data export error:', err)
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate export' })
+  }
+})
 
 // ── AUTH ──────────────────────────────────────────────────────
 
