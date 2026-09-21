@@ -4153,6 +4153,13 @@ async function processReferralRewards() {
 
       await pool.query(`UPDATE referrals SET status='converted', reward_given_at=NOW() WHERE id=$1`, [ref.id])
 
+      createNotification(
+        ref.referrer_user_id,
+        'referral_reward_granted',
+        'Your referral earned you 30 days free.',
+        '/dashboard/settings'
+      )
+
       if (stripe && ref.stripe_subscription_id) {
         try {
           const sub = await stripe.subscriptions.retrieve(ref.stripe_subscription_id)
