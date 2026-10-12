@@ -3698,6 +3698,10 @@ function buildColdEmail(contact) {
 }
 
 async function sendColdOutreach() {
+  if (process.env.COLD_OUTREACH_ENABLED !== 'true') {
+    console.log('Cold outreach skipped: COLD_OUTREACH_ENABLED is not true')
+    return
+  }
   if (!BREVO_API_KEY || !COLD_EMAIL_FROM) {
     console.log('Cold email disabled: COLD_EMAIL_FROM not set')
     return
@@ -10261,6 +10265,10 @@ const PHOTO_CITIES = [
 let cityIndex = 0
 
 async function autoFindEmails() {
+  if (process.env.COLD_OUTREACH_ENABLED !== 'true') {
+    console.log('autoFindEmails skipped: COLD_OUTREACH_ENABLED is not true')
+    return
+  }
   // Same class of bug as runDailyJobs: this hits real outreach infra
   // (cold_contacts, live email discovery) and must never fire just because
   // a local dev server booted against the production database.
