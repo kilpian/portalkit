@@ -153,6 +153,7 @@ export interface LeadSubmission {
 }
 
 export interface PaymentLink {
+  public_token: string
   id: number
   user_id: number
   title: string

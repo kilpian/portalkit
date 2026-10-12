@@ -628,6 +628,8 @@ const FAIL_WINDOW_MS = 15 * 60 * 1000
 const FAIL_LIMIT = 10
 const AUTO_BAN_HOURS = 24
 
+const newPaymentLinkToken = () => crypto.randomBytes(16).toString('hex')
+
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for']
   return (forwarded ? forwarded.split(',')[0].trim() : null) || req.socket?.remoteAddress || 'unknown'
@@ -1216,6 +1218,18 @@ async function initDb() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `).catch(() => {})
+
+      // Unguessable public identifier for /pay/:token (sequential ids were enumerable),
+      // and one transaction row per PaymentIntent so /confirm can count each only once.
+      await pool.query(`ALTER TABLE payment_links ADD COLUMN IF NOT EXISTS public_token TEXT`).catch(e => console.error('payment_links.public_token:', e.message))
+      try {
+        const missing = await pool.query('SELECT id FROM payment_links WHERE public_token IS NULL')
+        for (const row of missing.rows) {
+          await pool.query('UPDATE payment_links SET public_token=$1 WHERE id=$2', [newPaymentLinkToken(), row.id])
+        }
+      } catch (e) { console.error('payment_links token backfill:', e.message) }
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS payment_links_public_token_idx ON payment_links(public_token)`).catch(e => console.error(e.message))
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS payment_link_tx_pi_idx ON payment_link_transactions(stripe_payment_intent_id)`).catch(e => console.error(e.message))
 
       // ── Feature: Shot Lists ───────────────────────────────────
       await pool.query(`
@@ -8812,8 +8826,8 @@ app.post('/api/payment-links', requireAuth, async (req, res) => {
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
   try {
     const result = await pool.query(
-      'INSERT INTO payment_links (user_id, title, description, amount_cents, allow_custom_amount, min_amount_cents, link_type) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [req.userId, sanitize(title), sanitize(description) || null, amount_cents || null, allow_custom_amount || false, min_amount_cents || 100, link_type || 'fixed']
+      'INSERT INTO payment_links (user_id, title, description, amount_cents, allow_custom_amount, min_amount_cents, link_type, public_token) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [req.userId, sanitize(title), sanitize(description) || null, amount_cents || null, allow_custom_amount || false, min_amount_cents || 100, link_type || 'fixed', newPaymentLinkToken()]
     )
     res.status(201).json(result.rows[0])
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
@@ -8838,44 +8852,70 @@ app.delete('/api/payment-links/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
-app.options('/api/pay/:linkId', publicCors)
-app.get('/api/pay/:linkId', publicCors, async (req, res) => {
+// Public payment endpoints are keyed by the unguessable public_token, never the numeric id.
+// Limits: per IP across all links, and per link across all IPs.
+const payRateMessage = { error: 'Too many payment attempts. Please try again later.' }
+const payIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 20, message: payRateMessage,
+  standardHeaders: true, legacyHeaders: false, keyGenerator: getClientIp, validate: false,
+})
+const payLinkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, limit: 100, message: payRateMessage,
+  standardHeaders: true, legacyHeaders: false, keyGenerator: req => `paylink:${req.params.token}`,
+})
+
+const PAY_LINK_SELECT = `SELECT pl.*, u.stripe_connect_enabled, u.stripe_connect_id
+  FROM payment_links pl JOIN users u ON u.id = pl.user_id`
+
+app.options('/api/pay/:token', publicCors)
+app.get('/api/pay/:token', publicCors, payIpLimiter, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT pl.*, u.full_name, u.business_name, u.logo_url, u.brand_color, u.stripe_connect_enabled, u.stripe_connect_account_id
+      `SELECT pl.title, pl.description, pl.amount_cents, pl.allow_custom_amount, pl.min_amount_cents, pl.link_type,
+              u.full_name, u.business_name, u.logo_url, u.brand_color,
+              (u.stripe_connect_enabled = TRUE AND u.stripe_connect_id IS NOT NULL) AS stripe_connect_enabled
        FROM payment_links pl JOIN users u ON u.id = pl.user_id
-       WHERE pl.id=$1 AND pl.active=true`, [req.params.linkId]
+       WHERE pl.public_token=$1 AND pl.active=true`, [req.params.token]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Payment link not found' })
     res.json(result.rows[0])
   } catch (err) { res.status(500).json({ error: 'Server error' }) }
 })
 
-app.options('/api/pay/:linkId/charge', publicCors)
-app.post('/api/pay/:linkId/charge', publicCors, async (req, res) => {
-  const { amount_cents, payer_name, payer_email } = req.body
-  if (!amount_cents || amount_cents < 50) return res.status(400).json({ error: 'Invalid amount' })
+app.options('/api/pay/:token/charge', publicCors)
+app.post('/api/pay/:token/charge', publicCors, payIpLimiter, payLinkLimiter, async (req, res) => {
+  const { amount_cents, payer_name, payer_email } = req.body || {}
   try {
-    const linkRes = await pool.query(
-      `SELECT pl.*, u.stripe_connect_enabled, u.stripe_connect_account_id
-       FROM payment_links pl JOIN users u ON u.id = pl.user_id
-       WHERE pl.id=$1 AND pl.active=true`, [req.params.linkId]
-    )
+    const linkRes = await pool.query(`${PAY_LINK_SELECT} WHERE pl.public_token=$1 AND pl.active=true`, [req.params.token])
     if (!linkRes.rows.length) return res.status(404).json({ error: 'Not found' })
     const link = linkRes.rows[0]
-    if (!link.stripe_connect_enabled || !link.stripe_connect_account_id || !stripe) {
+    if (!link.stripe_connect_enabled || !link.stripe_connect_id || !stripe) {
       return res.status(400).json({ error: 'Payments not configured' })
     }
+    // Fixed links: the database amount is authoritative and the client's amount is ignored.
+    // Tip/custom links: the client chooses, subject to min_amount_cents (and Stripe's 50c floor / max).
+    let amount
+    if (link.link_type === 'fixed') {
+      amount = link.amount_cents
+      if (!Number.isInteger(amount) || amount < 50) return res.status(400).json({ error: 'Payment link has no valid amount' })
+    } else {
+      amount = amount_cents
+      const min = Math.max(50, link.min_amount_cents || 0)
+      if (!Number.isInteger(amount) || amount < min) {
+        return res.status(400).json({ error: `Amount must be at least ${(min / 100).toFixed(2)} USD` })
+      }
+      if (amount > 99999999) return res.status(400).json({ error: 'Amount too large' })
+    }
     const pi = await stripe.paymentIntents.create({
-      amount: amount_cents,
+      amount,
       currency: 'usd',
       automatic_payment_methods: { enabled: true },
-      transfer_data: { destination: link.stripe_connect_account_id },
-      metadata: { payment_link_id: link.id, payer_name: payer_name || '', payer_email: payer_email || '' },
+      transfer_data: { destination: link.stripe_connect_id },
+      metadata: { payment_link_id: String(link.id), payer_name: String(payer_name || '').slice(0, 200), payer_email: String(payer_email || '').slice(0, 200) },
     })
     await pool.query(
       'INSERT INTO payment_link_transactions (payment_link_id, payer_name, payer_email, amount_cents, stripe_payment_intent_id) VALUES ($1,$2,$3,$4,$5)',
-      [link.id, sanitize(payer_name) || null, payer_email || null, amount_cents, pi.id]
+      [link.id, sanitize(payer_name) || null, payer_email || null, amount, pi.id]
     )
     res.json({ client_secret: pi.client_secret, publishable_key: process.env.STRIPE_PUBLISHABLE_KEY })
   } catch (err) {
@@ -8884,23 +8924,43 @@ app.post('/api/pay/:linkId/charge', publicCors, async (req, res) => {
   }
 })
 
-app.options('/api/pay/:linkId/confirm', publicCors)
-app.post('/api/pay/:linkId/confirm', publicCors, async (req, res) => {
-  const { payment_intent_id } = req.body
+app.options('/api/pay/:token/confirm', publicCors)
+app.post('/api/pay/:token/confirm', publicCors, payIpLimiter, payLinkLimiter, async (req, res) => {
+  const { payment_intent_id } = req.body || {}
+  if (typeof payment_intent_id !== 'string' || !payment_intent_id.startsWith('pi_') || !stripe) {
+    return res.status(400).json({ error: 'Invalid payment' })
+  }
   try {
+    const linkRes = await pool.query('SELECT id FROM payment_links WHERE public_token=$1', [req.params.token])
+    if (!linkRes.rows.length) return res.status(404).json({ error: 'Not found' })
+    const linkId = linkRes.rows[0].id
     const txRes = await pool.query(
-      'UPDATE payment_link_transactions SET status=$1 WHERE stripe_payment_intent_id=$2 RETURNING *',
-      ['succeeded', payment_intent_id]
+      'SELECT id, amount_cents FROM payment_link_transactions WHERE stripe_payment_intent_id=$1 AND payment_link_id=$2',
+      [payment_intent_id, linkId]
     )
-    if (txRes.rows.length) {
-      const tx = txRes.rows[0]
-      await pool.query(
-        'UPDATE payment_links SET total_collected_cents = total_collected_cents + $1, transaction_count = transaction_count + 1 WHERE id=$2',
-        [tx.amount_cents, tx.payment_link_id]
-      )
+    if (!txRes.rows.length) return res.status(404).json({ error: 'Payment not found' })
+    // Trust Stripe, not the client: the PaymentIntent must have succeeded and belong to this link.
+    const pi = await stripe.paymentIntents.retrieve(payment_intent_id)
+    if (pi.metadata?.payment_link_id !== String(linkId) || pi.amount !== txRes.rows[0].amount_cents) {
+      return res.status(400).json({ error: 'Payment does not match this link' })
     }
+    if (pi.status !== 'succeeded') return res.status(409).json({ error: 'Payment has not succeeded', status: pi.status })
+    // Count once per PaymentIntent: only the call that flips pending -> succeeded bumps the totals.
+    await pool.query(
+      `WITH t AS (
+         UPDATE payment_link_transactions SET status='succeeded'
+         WHERE id=$1 AND status <> 'succeeded' RETURNING payment_link_id, amount_cents
+       )
+       UPDATE payment_links pl
+       SET total_collected_cents = pl.total_collected_cents + t.amount_cents, transaction_count = pl.transaction_count + 1
+       FROM t WHERE pl.id = t.payment_link_id`,
+      [txRes.rows[0].id]
+    )
     res.json({ success: true })
-  } catch (err) { res.status(500).json({ error: 'Server error' }) }
+  } catch (err) {
+    console.error('Payment link confirm error:', err.message)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 // ── SHOT LISTS ────────────────────────────────────────────────

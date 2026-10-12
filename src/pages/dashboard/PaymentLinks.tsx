@@ -50,7 +50,7 @@ export default function PaymentLinks() {
   }
 
   const copyLink = (l: PaymentLink) => {
-    navigator.clipboard.writeText(`${window.location.origin}/pay/${l.id}`).then(() => {
+    navigator.clipboard.writeText(`${window.location.origin}/pay/${l.public_token}`).then(() => {
       setCopied(l.id); setTimeout(() => setCopied(null), 2000)
     })
   }

@@ -7,7 +7,6 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 const API_URL = import.meta.env.VITE_API_URL || 'https://portalkit-production.up.railway.app'
 
 interface PaymentLinkData {
-  id: number
   title: string
   description: string | null
   amount_cents: number | null
@@ -27,7 +26,7 @@ function formatCents(cents: number) {
 
 const TIP_PRESETS = [1000, 2500, 5000, 10000]
 
-function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnType<typeof loadStripe> }) {
+function PaymentForm({ link, token }: { link: PaymentLinkData; token: string; stripePromise: ReturnType<typeof loadStripe> }) {
   const stripe = useStripe()
   const elements = useElements()
   const [amount, setAmount] = useState<number>(link.amount_cents || link.min_amount_cents || 100)
@@ -58,7 +57,7 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
     setProcessing(true)
     setError('')
     try {
-      const chargeRes = await axios.post(`${API_URL}/api/pay/${link.id}/charge`, {
+      const chargeRes = await axios.post(`${API_URL}/api/pay/${token}/charge`, {
         amount_cents: finalAmount, payer_name: payerName, payer_email: payerEmail,
       })
       const { client_secret } = chargeRes.data
@@ -70,7 +69,7 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
       if (confirmError) {
         setError(confirmError.message || 'Payment failed')
       } else {
-        await axios.post(`${API_URL}/api/pay/${link.id}/confirm`, { payment_intent_id: client_secret.split('_secret_')[0] })
+        await axios.post(`${API_URL}/api/pay/${token}/confirm`, { payment_intent_id: client_secret.split('_secret_')[0] })
         setPaid(true)
       }
     } catch {
@@ -124,14 +123,14 @@ function PaymentForm({ link }: { link: PaymentLinkData; stripePromise: ReturnTyp
 }
 
 export default function PaymentLinkPage() {
-  const { linkId } = useParams<{ linkId: string }>()
+  const { token } = useParams<{ token: string }>()
   const [link, setLink] = useState<PaymentLinkData | null>(null)
   const [error, setError] = useState('')
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null)
 
   useEffect(() => {
-    if (!linkId) return
-    axios.get<PaymentLinkData>(`${API_URL}/api/pay/${linkId}`)
+    if (!token) return
+    axios.get<PaymentLinkData>(`${API_URL}/api/pay/${token}`)
       .then(r => {
         setLink(r.data)
         if (r.data.stripe_connect_enabled && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
@@ -139,7 +138,7 @@ export default function PaymentLinkPage() {
         }
       })
       .catch(() => setError('Payment link not found or is no longer active.'))
-  }, [linkId])
+  }, [token])
 
   if (error) {
     return (
@@ -185,7 +184,7 @@ export default function PaymentLinkPage() {
             </div>
           ) : stripePromise ? (
             <Elements stripe={stripePromise}>
-              <PaymentForm link={link} stripePromise={stripePromise} />
+              <PaymentForm link={link} token={token!} stripePromise={stripePromise} />
             </Elements>
           ) : (
             <p style={{ fontSize: 13, color: '#9CA3AF' }}>Loading payment form...</p>
