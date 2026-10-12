@@ -224,7 +224,8 @@ app.post('/api/stripe/webhook',
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
     } catch (err) {
-      if (process.env.STRIPE_WEBHOOK_SECRET_CLI) {
+      // The Stripe CLI secret is for local dev only; never accept it in production.
+      if (process.env.STRIPE_WEBHOOK_SECRET_CLI && process.env.NODE_ENV !== 'production') {
         try {
           event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET_CLI)
         } catch (err2) {
@@ -238,6 +239,17 @@ app.post('/api/stripe/webhook',
     }
 
     try {
+      // Dedupe on event id: record the event before processing. A duplicate is skipped only if
+      // the first delivery finished (processed_at set); if it threw, the row stays unprocessed
+      // so Stripe's retry reprocesses it.
+      const firstSeen = await pool.query(
+        'INSERT INTO stripe_events (id, type) VALUES ($1,$2) ON CONFLICT (id) DO NOTHING RETURNING id',
+        [event.id, event.type]
+      )
+      if (!firstSeen.rows.length) {
+        const prior = await pool.query('SELECT processed_at FROM stripe_events WHERE id=$1', [event.id])
+        if (prior.rows[0]?.processed_at) return res.json({ received: true, duplicate: true })
+      }
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object
@@ -331,19 +343,24 @@ app.post('/api/stripe/webhook',
                   const aff = affRow.rows[0]
                   const amountCents = inv.amount_paid || 0
                   const commissionCents = Math.round(amountCents * aff.commission_percent / 100)
-                  await pool.query(
-                    `INSERT INTO affiliate_conversions (affiliate_id, user_id, amount_cents, commission_cents)
-                     VALUES ($1, $2, $3, $4)`,
-                    [aff.id, u.id, amountCents, commissionCents]
+                  // Idempotent on the Stripe event id: the unique stripe_event_id makes a replay
+                  // insert nothing, and the earnings bump only runs for a row that was inserted.
+                  const conv = await pool.query(
+                    `WITH ins AS (
+                       INSERT INTO affiliate_conversions (affiliate_id, user_id, amount_cents, commission_cents, stripe_event_id)
+                       VALUES ($1, $2, $3, $4, $5)
+                       ON CONFLICT (stripe_event_id) DO NOTHING
+                       RETURNING affiliate_id, commission_cents
+                     )
+                     UPDATE affiliates a SET total_earned_cents = a.total_earned_cents + ins.commission_cents
+                     FROM ins WHERE a.id = ins.affiliate_id`,
+                    [aff.id, u.id, amountCents, commissionCents, event.id]
                   )
-                  await pool.query(
-                    'UPDATE affiliates SET total_earned_cents=total_earned_cents+$1 WHERE id=$2',
-                    [commissionCents, aff.id]
-                  )
-                  console.log(`💸 Affiliate commission: ${commissionCents}¢ for affiliate ${aff.id}`)
+                  if (conv.rowCount) console.log(`💸 Affiliate commission: ${commissionCents}¢ for affiliate ${aff.id}`)
                 }
               } catch (affErr) {
                 console.error('Affiliate commission error:', affErr.message)
+                throw affErr // let Stripe retry; the event-id key makes the retry safe
               }
             }
           }
@@ -539,8 +556,10 @@ app.post('/api/stripe/webhook',
           break
         }
       }
+      await pool.query('UPDATE stripe_events SET processed_at=NOW() WHERE id=$1', [event.id])
     } catch (err) {
       console.error('Webhook handler error:', err)
+      return res.status(500).send('Webhook handler error') // non-2xx so Stripe retries
     }
     res.json({ received: true })
   }
@@ -1446,6 +1465,16 @@ async function initDb() {
         CHECK (status IN ('pending','signed_up','awaiting_reward','converted','forfeited','flagged'))
       `).catch(() => {})
 
+      // Stripe webhook idempotency: one row per event id
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS stripe_events (
+          id TEXT PRIMARY KEY,
+          type TEXT,
+          received_at TIMESTAMPTZ DEFAULT NOW(),
+          processed_at TIMESTAMPTZ
+        );
+      `).catch(e => console.error('stripe_events table:', e.message))
+
       // ── Feature: Affiliate System ─────────────────────────────
       await pool.query(`
         CREATE TABLE IF NOT EXISTS affiliates (
@@ -1472,6 +1501,8 @@ async function initDb() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `).catch(() => {})
+      await pool.query(`ALTER TABLE affiliate_conversions ADD COLUMN IF NOT EXISTS stripe_event_id TEXT`).catch(e => console.error(e.message))
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS affiliate_conversions_event_idx ON affiliate_conversions(stripe_event_id)`).catch(e => console.error(e.message))
 
       // Backfill referral codes for existing users without one
       await pool.query(`
@@ -4831,9 +4862,12 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
     try {
       const aff = await pool.query("SELECT id FROM affiliates WHERE affiliate_code=$1 AND status='active'", [affiliate_code.trim()])
       if (aff.rows.length > 0) {
-        await pool.query('UPDATE users SET affiliate_id=$1 WHERE id=$2 AND affiliate_id IS NULL', [aff.rows[0].id, req.user.id])
-        await pool.query('UPDATE affiliates SET total_referrals=total_referrals+1 WHERE id=$1', [aff.rows[0].id])
-        console.log(`🤝 Affiliate tracked: user ${req.user.id} from affiliate ${affiliate_code}`)
+        const attributed = await pool.query('UPDATE users SET affiliate_id=$1 WHERE id=$2 AND affiliate_id IS NULL', [aff.rows[0].id, req.user.id])
+        // Only count a referral the first time this user is attributed; repeat calls are no-ops.
+        if (attributed.rowCount) {
+          await pool.query('UPDATE affiliates SET total_referrals=total_referrals+1 WHERE id=$1', [aff.rows[0].id])
+          console.log(`🤝 Affiliate tracked: user ${req.user.id} from affiliate ${affiliate_code}`)
+        }
       }
     } catch (affErr) {
       console.error('Affiliate tracking error:', affErr.message)
