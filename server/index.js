@@ -647,6 +647,15 @@ const FAIL_WINDOW_MS = 15 * 60 * 1000
 const FAIL_LIMIT = 10
 const AUTO_BAN_HOURS = 24
 
+// True when clientId is empty (no client) or a client owned by userId. Used before saving any
+// client_id that arrives in a request body.
+async function ownsClient(userId, clientId) {
+  if (clientId === undefined || clientId === null || clientId === '') return true
+  const id = Number(clientId)
+  if (!Number.isInteger(id)) return false
+  return (await pool.query('SELECT 1 FROM clients WHERE id=$1 AND user_id=$2', [id, userId])).rowCount > 0
+}
+
 const newPaymentLinkToken = () => crypto.randomBytes(16).toString('hex')
 
 function getClientIp(req) {
@@ -1692,6 +1701,14 @@ async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read);
       `).catch(() => {})
+
+      // Repair: detach records pointing at another tenant's client (client_id was never ownership-checked).
+      for (const t of ['contracts', 'invoices', 'proposals']) {
+        await pool.query(
+          `UPDATE ${t} x SET client_id = NULL WHERE client_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.id = x.client_id AND c.user_id = x.user_id)`
+        ).catch(e => console.error(`${t} client cleanup:`, e.message))
+      }
 
       console.log('✅ Database ready')
       return
@@ -6272,6 +6289,7 @@ app.post('/api/contracts', requireAuth, async (req, res) => {
   if (!title) return res.status(400).json({ error: 'Contract title is required' })
   if (content && content.length > 50000) return res.status(400).json({ error: 'Contract too long' })
   try {
+    if (!(await ownsClient(req.userId, client_id))) return res.status(404).json({ error: 'Client not found' })
     const result = await pool.query(
       `INSERT INTO contracts (user_id, client_id, title, content) VALUES ($1,$2,$3,$4) RETURNING *`,
       [req.userId, client_id || null, sanitize(title), content || null]
@@ -6286,6 +6304,7 @@ app.post('/api/contracts', requireAuth, async (req, res) => {
 app.put('/api/contracts/:id', requireAuth, async (req, res) => {
   const { title, content, status, client_id } = req.body
   try {
+    if (!(await ownsClient(req.userId, client_id))) return res.status(404).json({ error: 'Client not found' })
     const result = await pool.query(
       `UPDATE contracts SET title=$1, content=$2, status=$3, client_id=$4, updated_at=NOW()
        WHERE id=$5 AND user_id=$6 RETURNING *`,
@@ -6340,6 +6359,7 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
   const { client_id, invoice_number, amount_cents, due_date, notes } = req.body
   if (!amount_cents) return res.status(400).json({ error: 'Invoice amount is required' })
   try {
+    if (!(await ownsClient(req.userId, client_id))) return res.status(404).json({ error: 'Client not found' })
     const result = await pool.query(
       `INSERT INTO invoices (user_id, client_id, invoice_number, amount_cents, due_date, notes)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -6423,7 +6443,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
       `SELECT c.*, cl.email as client_email, cl.name as client_name, cl.portal_token,
               u.business_name, u.full_name as photographer_name
        FROM contracts c
-       LEFT JOIN clients cl ON cl.id = c.client_id
+       LEFT JOIN clients cl ON cl.id = c.client_id AND cl.user_id = c.user_id
        JOIN users u ON u.id = c.user_id
        WHERE c.id=$1 AND c.user_id=$2`,
       [req.params.id, req.userId]
@@ -6507,7 +6527,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       `SELECT i.*, cl.email as client_email, cl.name as client_name, cl.portal_token,
               u.business_name, u.full_name as photographer_name
        FROM invoices i
-       LEFT JOIN clients cl ON cl.id = i.client_id
+       LEFT JOIN clients cl ON cl.id = i.client_id AND cl.user_id = i.user_id
        JOIN users u ON u.id = i.user_id
        WHERE i.id=$1 AND i.user_id=$2`,
       [req.params.id, req.userId]
@@ -7949,15 +7969,19 @@ app.post('/api/questionnaires', requireAuth, async (req, res) => {
   const { template_id, client_id, title } = req.body
   if (!client_id || !title?.trim()) return res.status(400).json({ error: 'client_id and title are required' })
   try {
+    if (!(await ownsClient(req.userId, client_id))) return res.status(404).json({ error: 'Client not found' })
     let questions = []
+    let ownedTemplateId = null
     if (template_id) {
-      const tpl = await pool.query('SELECT questions FROM questionnaire_templates WHERE id=$1 AND user_id=$2', [template_id, req.userId])
-      if (tpl.rows.length) questions = tpl.rows[0].questions
+      const tpl = await pool.query('SELECT id, questions FROM questionnaire_templates WHERE id=$1 AND user_id=$2', [template_id, req.userId])
+      if (!tpl.rows.length) return res.status(404).json({ error: 'Template not found' })
+      questions = tpl.rows[0].questions
+      ownedTemplateId = tpl.rows[0].id
     }
     const result = await pool.query(
       `INSERT INTO questionnaire_responses (template_id, client_id, user_id, title, questions, sent_at)
        VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING *`,
-      [template_id || null, client_id, req.userId, sanitize(title), JSON.stringify(questions)]
+      [ownedTemplateId, client_id, req.userId, sanitize(title), JSON.stringify(questions)]
     )
     const qr = result.rows[0]
 
@@ -8289,7 +8313,8 @@ app.post('/api/book/:username/book', async (req, res) => {
     let sessionTypeName = 'Photography Session'
     if (session_type_id) {
       const stRes = await pool.query('SELECT duration_minutes, name FROM session_types WHERE id=$1 AND user_id=$2', [session_type_id, photographer.id])
-      if (stRes.rows.length) { durationMins = stRes.rows[0].duration_minutes; sessionTypeName = stRes.rows[0].name }
+      if (!stRes.rows.length) return res.status(404).json({ error: 'Session type not found' })
+      durationMins = stRes.rows[0].duration_minutes; sessionTypeName = stRes.rows[0].name
     }
 
     const [startH, startM] = start_time.split(':').map(Number)
@@ -9339,6 +9364,7 @@ app.post('/api/proposals', requireAuth, async (req, res) => {
   const { client_id, title, message, packages, expires_at } = req.body
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
   try {
+    if (!(await ownsClient(req.userId, client_id))) return res.status(404).json({ error: 'Client not found' })
     const result = await pool.query(
       'INSERT INTO proposals (user_id, client_id, title, message, packages, expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
       [req.userId, client_id || null, sanitize(title), sanitize(message) || null, JSON.stringify(packages || []), expires_at || null]
@@ -9398,7 +9424,7 @@ app.post('/api/proposals/:id/send', requireAuth, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Proposal not found' })
     const proposal = result.rows[0]
     if (proposal.client_id) {
-      const clientRes = await pool.query('SELECT email, name FROM clients WHERE id=$1', [proposal.client_id])
+      const clientRes = await pool.query('SELECT email, name FROM clients WHERE id=$1 AND user_id=$2', [proposal.client_id, req.userId])
       const client = clientRes.rows[0]
       if (client?.email && resend) {
         const biz = req.user.business_name || req.user.full_name || 'Your photographer'
