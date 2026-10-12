@@ -436,7 +436,7 @@ app.post('/api/stripe/webhook',
                     footerNote: 'PortalKit by Kilpian LLC',
                   }),
                 })
-                console.log(`📧 Dunning email sent to ${u.email}`)
+                console.log('📧 Dunning email sent')
               }
             } catch (emailErr) {
               console.error('Payment failed email error:', emailErr)
@@ -649,7 +649,7 @@ async function recordLoginFailure(ip) {
         [ip, `Auto-banned: ${timestamps.length} failed auth attempts in 15 min`, expiresAt]
       )
       failedLogins.delete(ip)
-      console.log(`🚫 Auto-banned IP ${ip} for ${AUTO_BAN_HOURS}h after ${timestamps.length} failed attempts`)
+      console.log(`🚫 Auto-banned an IP for ${AUTO_BAN_HOURS}h after ${timestamps.length} failed attempts`)
     } catch (err) {
       console.error('Auto-ban insert error:', err.message)
     }
@@ -665,7 +665,7 @@ app.use(async (req, res, next) => {
       [ip]
     )
     if (rows.length > 0) {
-      console.log(`🚫 Blocked request from banned IP: ${ip} ${req.method} ${req.path}`)
+      console.log(`🚫 Blocked request from banned IP: ${req.method} ${req.path}`)
       return res.status(403).json({ error: 'Access denied.', code: 'IP_BANNED' })
     }
   } catch {
@@ -809,7 +809,7 @@ async function markInvoicePaidAndNotify(meta, amountCents) {
           footerNote: 'PortalKit by Kilpian LLC',
         }),
       })
-      console.log(`📧 Payment receipt sent to ${meta.client_email}`)
+      console.log('📧 Payment receipt sent')
     } catch (emailErr) {
       console.error('Receipt email failed:', emailErr)
     }
@@ -832,7 +832,7 @@ async function markInvoicePaidAndNotify(meta, amountCents) {
           footerNote: 'PortalKit · payments for photographers',
         }),
       })
-      console.log(`📧 Payment notification sent to photographer ${meta.photographer_email}`)
+      console.log('📧 Payment notification sent to photographer')
     } catch (emailErr) {
       console.error('Photographer payment notification failed:', emailErr)
     }
@@ -1701,7 +1701,7 @@ async function sendEventReminders() {
             'INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
             [client.id, reminder.type]
           )
-          console.log(`📅 Reminder sent: ${reminder.type} to ${client.email}`)
+          console.log(`📅 Reminder sent: ${reminder.type}`)
         } catch (emailErr) {
           console.error('📅 Reminder email failed:', emailErr.message)
         }
@@ -1759,7 +1759,7 @@ async function sendEventReminders() {
             'INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
             [ev.client_id, `ce_${ev.event_id}_${reminder.type}`]
           )
-          console.log(`📅 Event reminder sent: ${reminder.type} to ${ev.email} for ${ev.event_name}`)
+          console.log(`📅 Event reminder sent: ${reminder.type}`)
         } catch (emailErr) {
           console.error('📅 Event reminder email failed:', emailErr.message)
         }
@@ -1809,7 +1809,7 @@ async function sendEventReminders() {
           })
         }
         await pool.query('INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING', [row.client_id, `contract_3day_${row.id}`])
-        console.log(`📋 Contract reminder sent to ${row.email}`)
+        console.log('📋 Contract reminder sent')
       } catch (e) { console.error('Contract reminder email failed:', e.message) }
     }
   } catch (err) { console.error('Contract reminder error:', err.message) }
@@ -1855,7 +1855,7 @@ async function sendEventReminders() {
           })
         }
         await pool.query('INSERT INTO reminders_sent (client_id, reminder_type) VALUES ($1, $2) ON CONFLICT DO NOTHING', [row.client_id, `balance_7day_${row.id}`])
-        console.log(`💰 Balance reminder sent to ${row.email}`)
+        console.log('💰 Balance reminder sent')
       } catch (e) { console.error('Balance reminder email failed:', e.message) }
     }
   } catch (err) { console.error('Balance reminder error:', err.message) }
@@ -1925,7 +1925,7 @@ async function sendTrialExpiryReminders() {
          VALUES (NULL, $1) ON CONFLICT DO NOTHING`,
         ['trial_3day_' + user.id]
       )
-      console.log('📧 Trial 3-day warning sent to:', user.email)
+      console.log('📧 Trial 3-day warning sent')
     }
 
     // 1 day before trial ends
@@ -1988,7 +1988,7 @@ async function sendTrialExpiryReminders() {
          VALUES (NULL, $1) ON CONFLICT DO NOTHING`,
         ['trial_1day_' + user.id]
       )
-      console.log('📧 Trial 1-day warning sent to:', user.email)
+      console.log('📧 Trial 1-day warning sent')
     }
 
   } catch (err) {
@@ -2040,7 +2040,7 @@ async function sendOnboardingSequence() {
           `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day2') ON CONFLICT DO NOTHING`,
           [u.id]
         )
-        console.log(`📧 Onboarding Day 2 sent to ${u.email}`)
+        console.log('📧 Onboarding Day 2 sent')
       } catch (e) { console.error('Onboarding Day 2 email failed:', e.message) }
     }
 
@@ -2080,7 +2080,7 @@ async function sendOnboardingSequence() {
           `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day5') ON CONFLICT DO NOTHING`,
           [u.id]
         )
-        console.log(`📧 Onboarding Day 5 sent to ${u.email}`)
+        console.log('📧 Onboarding Day 5 sent')
       } catch (e) { console.error('Onboarding Day 5 email failed:', e.message) }
     }
 
@@ -2129,7 +2129,7 @@ async function sendOnboardingSequence() {
           `INSERT INTO onboarding_emails_sent (user_id, email_type) VALUES ($1, 'onboarding_day10') ON CONFLICT DO NOTHING`,
           [u.id]
         )
-        console.log(`📧 Onboarding Day 10 sent to ${u.email}`)
+        console.log('📧 Onboarding Day 10 sent')
       } catch (e) { console.error('Onboarding Day 10 email failed:', e.message) }
     }
   } catch (err) {
@@ -3577,7 +3577,7 @@ async function sendFreeToolNurtureEmails() {
         `INSERT INTO tool_lead_nurture (email, email_type) VALUES ($1, 'day3_feature') ON CONFLICT DO NOTHING`,
         [lead.email]
       )
-      console.log('📧 Day 3 nurture sent to:', lead.email)
+      console.log('📧 Day 3 nurture sent')
     }
 
     // Day 7: Final nudge
@@ -3620,7 +3620,7 @@ async function sendFreeToolNurtureEmails() {
         `INSERT INTO tool_lead_nurture (email, email_type) VALUES ($1, 'day7_trial') ON CONFLICT DO NOTHING`,
         [lead.email]
       )
-      console.log('📧 Day 7 nurture sent to:', lead.email)
+      console.log('📧 Day 7 nurture sent')
     }
   } catch (err) {
     console.error('Tool nurture error:', err.message)
@@ -3758,7 +3758,7 @@ async function sendColdOutreach() {
         )
 
         sent++
-        console.log(`Cold email sent to ${contact.email}`)
+        console.log('Cold email sent')
 
         await new Promise(r => setTimeout(r, 2000))
 
@@ -4044,7 +4044,7 @@ async function findPhotographerEmails(city, state) {
             first_name: firstName,
             note: `${city}, ${state}`
           })
-          console.log(`✓ Found: ${email} (${businessName})`)
+          console.log(`✓ Found: ${businessName}`)
         }
 
       } catch (err) {
@@ -4136,7 +4136,7 @@ async function processReferralRewards() {
             `UPDATE referrals SET status='flagged', flag_reason=$2, flagged_at=NOW() WHERE id=$1`,
             [ref.id, 'duplicate_card_fingerprint']
           )
-          console.warn(`🚩 Referral ${ref.id} flagged for manual review: card fingerprint reused across multiple accounts referred by ${ref.referrer_email}`)
+          console.warn(`🚩 Referral ${ref.id} flagged for manual review: card fingerprint reused across multiple accounts referred by the same referrer`)
           continue
         }
       }
@@ -4151,7 +4151,7 @@ async function processReferralRewards() {
           `UPDATE referrals SET status='flagged', flag_reason=$2, flagged_at=NOW() WHERE id=$1`,
           [ref.id, 'velocity_cap_exceeded']
         )
-        console.warn(`🚩 Referral ${ref.id} flagged for manual review: referrer ${ref.referrer_email} already hit the 5-per-30-day velocity cap`)
+        console.warn(`🚩 Referral ${ref.id} flagged for manual review: referrer already hit the 5-per-30-day velocity cap`)
         continue
       }
 
@@ -4199,7 +4199,7 @@ async function processReferralRewards() {
         }).catch(err => console.error('Referral reward email failed:', err))
       }
 
-      console.log(`🎁 Referral reward granted: referrer ${ref.referrer_email} earned a free month (referral ${ref.id})`)
+      console.log(`🎁 Referral reward granted: referrer earned a free month (referral ${ref.id})`)
     }
   } catch (err) {
     console.error('processReferralRewards error:', err.message)
@@ -4238,7 +4238,7 @@ async function runDailyJobs() {
       `)
       console.log(`🗑️ Auto-purge (dry run): ${candidates.rowCount} inactive free account(s) match purge criteria — NO data deleted.`)
       for (const u of candidates.rows) {
-        console.log(`🗑️ Auto-purge (dry run): would purge ${u.email} (id ${u.id}, plan ${u.plan || 'null'}, created ${new Date(u.created_at).toISOString().slice(0, 10)})`)
+        console.log(`🗑️ Auto-purge (dry run): would purge user ${u.id} (plan ${u.plan || 'null'}, created ${new Date(u.created_at).toISOString().slice(0, 10)})`)
       }
     } catch (e) {
       console.error('Auto-purge dry run error:', e.message)
@@ -4298,7 +4298,7 @@ async function requireAuth(req, res, next) {
     const email = clerkUser.emailAddresses[0]?.emailAddress
     const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'User'
 
-    console.log('Auth/me called:', { clerkId, email, hasClerkRecord: false, hasEmailRecord: false })
+    console.log('Auth/me called')
 
     const byClerk = await pool.query('SELECT * FROM users WHERE clerk_id=$1', [clerkId])
     console.log('By clerk:', byClerk.rows.length, 'records')
@@ -4614,7 +4614,7 @@ async function deleteAccountHandler(req, res) {
     await pool.query('DELETE FROM affiliate_conversions WHERE user_id=$1', [req.user.id]).catch(() => {})
 
     await pool.query('DELETE FROM users WHERE id=$1', [req.userId])
-    console.log('🗑️ Account deleted:', req.user.email)
+    console.log('🗑️ Account deleted:', req.user.id)
     res.json({ success: true, message: 'Account deleted' })
   } catch (err) {
     console.error('Delete account error:', err)
@@ -4798,7 +4798,7 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
         const sameIp = !!req.clientIp && req.clientIp !== 'unknown' && !!referrerRow.last_login_ip && req.clientIp === referrerRow.last_login_ip
 
         if (sameUser || sameEmail || sameIp) {
-          console.warn(`🚫 Self-referral blocked: ${req.user.email} tried to use ${referrerRow.email}'s code (reason: ${sameUser ? 'same_account' : sameEmail ? 'same_email' : 'same_ip'})`)
+          console.warn(`🚫 Self-referral blocked: user ${req.user.id} tried to use referrer ${referrerRow.id}'s code (reason: ${sameUser ? 'same_account' : sameEmail ? 'same_email' : 'same_ip'})`)
         } else {
           await pool.query(
             `INSERT INTO referrals (referrer_user_id, referred_email, referred_user_id, status)
@@ -4806,7 +4806,7 @@ app.post('/api/auth/me', requireAuth, async (req, res) => {
              ON CONFLICT DO NOTHING`,
             [referrerRow.id, req.user.email, req.user.id]
           )
-          console.log(`🔗 Referral tracked: ${req.user.email} referred by ${referrerRow.email}`)
+          console.log(`🔗 Referral tracked: user ${req.user.id} referred by ${referrerRow.id}`)
         }
       }
     } catch (refErr) {
@@ -5666,7 +5666,7 @@ app.post('/api/clients/:id/send-portal-email', requireAuth, async (req, res) => 
           footerNote: `Sent by ${biz}`,
         }),
       })
-      console.log(`Portal email sent to ${client.email} for client ${client.id}`)
+      console.log(`Portal email sent for client ${client.id}`)
       res.json({ success: true, email: client.email })
     } catch (sendErr) {
       console.error('Send portal email failed:', sendErr)
@@ -6331,7 +6331,7 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
           const amount = `$${(invoice.amount_cents / 100).toFixed(2)}`
           const invNum = invoice.invoice_number ? `#${invoice.invoice_number}` : ''
           const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${info.portal_token}`
-          console.log('📧 Sending invoice update email to:', info.email)
+          console.log('📧 Sending invoice update email')
           const emailResult = await resend.emails.send({
             from: 'PortalKit <hello@mail.getportalkit.com>',
             reply_to: "hello@getportalkit.com",
@@ -6346,7 +6346,7 @@ app.put('/api/invoices/:id', requireAuth, async (req, res) => {
               footerNote: `Sent on behalf of ${senderName} via PortalKit`,
             }),
           })
-          console.log('📧 Invoice update email sent:', emailResult)
+          console.log('📧 Invoice update email sent')
         }
       } catch (emailErr) {
         console.error('📧 Invoice update email failed:', emailErr)
@@ -6381,7 +6381,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
       [req.params.id]
     )
 
-    console.log('📤 Contract client_email:', contract.client_email)
+    console.log('📤 Sending contract')
     console.log('📤 Resend configured:', !!resend)
     if (!contract.client_email) {
       return res.status(400).json({ error: 'This contract has no client assigned. Please assign a client first.' })
@@ -6392,7 +6392,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
     {
       const senderName = contract.business_name || contract.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${contract.portal_token}`
-      console.log('📧 Sending contract email to:', contract.client_email)
+      console.log('📧 Sending contract email')
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
@@ -6408,7 +6408,7 @@ app.post('/api/contracts/:id/send', requireAuth, async (req, res) => {
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
           }),
         })
-        console.log('📧 Contract email sent:', emailResult)
+        console.log('📧 Contract email sent')
       } catch (emailErr) {
         console.error('📧 Contract email failed:', emailErr)
       }
@@ -6469,7 +6469,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
       const senderName = invoice.business_name || invoice.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${invoice.portal_token}`
       const amount = `$${((invoice.amount_cents || 0) / 100).toFixed(2)}`
-      console.log('📧 Sending invoice email to:', invoice.client_email)
+      console.log('📧 Sending invoice email')
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
@@ -6485,7 +6485,7 @@ app.post('/api/invoices/:id/send', requireAuth, async (req, res) => {
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
           }),
         })
-        console.log('📧 Invoice email sent:', emailResult)
+        console.log('📧 Invoice email sent')
       } catch (emailErr) {
         console.error('📧 Invoice email failed:', emailErr)
       }
@@ -6770,7 +6770,7 @@ app.post('/api/galleries', requireAuth, async (req, res) => {
 
 app.put('/api/galleries/:id', requireAuth, async (req, res) => {
   try {
-    console.log(`PUT /api/galleries/${req.params.id} body:`, JSON.stringify(req.body))
+    console.log(`PUT /api/galleries/${req.params.id}`)
     const current = await pool.query(
       `SELECT g.*, c.name as client_name, c.email as client_email, c.portal_token
        FROM galleries g JOIN clients c ON g.client_id = c.id
@@ -6906,7 +6906,7 @@ app.patch('/api/files/:id/gallery-order', requireAuth, async (req, res) => {
 
 app.get('/api/portals/:token/gallery', async (req, res) => {
   try {
-    console.log(`GET /api/portals/${req.params.token}/gallery password-header:`, req.headers['x-gallery-password'] ? 'provided' : 'none')
+    console.log('GET /api/portals/:token/gallery password-header:', req.headers['x-gallery-password'] ? 'provided' : 'none')
     const clientResult = await pool.query(
       `SELECT c.id FROM clients c WHERE c.portal_token=$1`,
       [req.params.token]
@@ -7276,7 +7276,7 @@ app.post('/api/messages', requireAuth, async (req, res) => {
     } else {
       const senderName = client.business_name || client.photographer_name || 'Your photographer'
       const portalUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/portal/${client.portal_token}`
-      console.log('💬 Message created, sending email to client:', client.email)
+      console.log('💬 Message created, sending email to client')
       console.log('💬 Photographer business:', client.business_name || client.photographer_name)
       try {
         const emailResult = await resend.emails.send({
@@ -7293,7 +7293,7 @@ app.post('/api/messages', requireAuth, async (req, res) => {
             footerNote: `Sent on behalf of ${senderName} via PortalKit`,
           }),
         })
-        console.log('📧 Message notification sent:', emailResult)
+        console.log('📧 Message notification sent')
       } catch (emailErr) {
         console.error('📧 Message notification failed:', emailErr)
       }
@@ -7338,7 +7338,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
     if (client.photographer_email && resend) {
       const displaySender = client.name
       const dashUrl = `${process.env.FRONTEND_URL || 'https://getportalkit.com'}/dashboard/messages`
-      console.log('📧 Sending client message notification to photographer:', client.photographer_email)
+      console.log('📧 Sending client message notification to photographer')
       try {
         const emailResult = await resend.emails.send({
           from: 'PortalKit <hello@mail.getportalkit.com>',
@@ -7354,7 +7354,7 @@ app.post('/api/portals/:token/messages', async (req, res) => {
             footerNote: 'PortalKit · your client communication hub',
           }),
         })
-        console.log('📧 Client message notification sent:', emailResult)
+        console.log('📧 Client message notification sent')
       } catch (emailErr) {
         console.error('📧 Client message notification failed:', emailErr)
       }
@@ -7730,7 +7730,7 @@ app.get('/api/test-email', requireAdmin, async (req, res) => {
       subject: 'PortalKit test email',
       html: '<p>Test email from PortalKit — email is working!</p>',
     })
-    console.log('📧 Test email result:', result)
+    console.log('📧 Test email sent')
     res.json({ success: true, result })
   } catch (err) {
     console.error('📧 Test email failed:', err)
@@ -8423,7 +8423,7 @@ async function generateAndSendAllTemplates(email, fromTool) {
         </div>
       `
     })
-    console.log('📧 All 4 templates sent to:', email)
+    console.log('📧 All 4 templates sent')
   } catch (err) {
     console.error('Template email error:', err.message)
   }
@@ -8730,8 +8730,7 @@ app.get('/api/lead/:username', publicCors, async (req, res) => {
 
 app.options('/api/lead/:username/submit', publicCors)
 app.post('/api/lead/:username/submit', publicCors, async (req, res) => {
-  console.log('Lead form submission:', req.body)
-  console.log('event_date received:', req.body.event_date)
+  console.log('Lead form submission received')
   const { name, email, phone, event_type, event_date, message } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
   try {
@@ -10189,7 +10188,7 @@ app.post('/api/admin/ip-bans', async (req, res) => {
        RETURNING *`,
       [ip, reason || 'Manual ban', expires_at || null]
     )
-    console.log(`🚫 Admin banned IP: ${ip}`)
+    console.log('🚫 Admin banned an IP')
     res.json(rows[0])
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -10200,7 +10199,7 @@ app.delete('/api/admin/ip-bans/:ip', async (req, res) => {
     const ip = decodeURIComponent(req.params.ip)
     await pool.query('UPDATE ip_bans SET is_active=false WHERE ip=$1', [ip])
     failedLogins.delete(ip) // clear residual in-memory count so it can't silently re-trigger a new ban
-    console.log(`✅ Admin unbanned IP: ${ip}`)
+    console.log('✅ Admin unbanned an IP')
     res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
