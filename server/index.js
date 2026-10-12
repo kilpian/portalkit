@@ -1414,6 +1414,13 @@ async function initDb() {
         );
       `).catch(() => {})
 
+      // Repair: a cover must be a file owned by the gallery's owner (cross-tenant covers leaked file URLs).
+      await pool.query(`
+        UPDATE galleries g SET cover_file_id = NULL
+        WHERE cover_file_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM files f WHERE f.id = g.cover_file_id AND f.user_id = g.user_id)
+      `).catch(e => console.error('galleries cover cleanup:', e.message))
+
       // ── Feature: Onboarding Email Sequence ───────────────────
       await pool.query(`
         CREATE TABLE IF NOT EXISTS onboarding_emails_sent (
@@ -6830,6 +6837,16 @@ app.put('/api/galleries/:id', requireAuth, async (req, res) => {
 
     const { name, description, status, allow_downloads, allow_favorites, password_protected, password, cover_file_id } = req.body
     const delivering = (status === 'delivered' && prev.status !== 'delivered') || req.body.force_email === true
+
+    // The cover must be a file owned by the caller AND attached to this gallery (null clears it).
+    if (cover_file_id !== undefined && cover_file_id !== null) {
+      const coverId = Number(cover_file_id)
+      const coverOk = Number.isInteger(coverId) && (await pool.query(
+        'SELECT 1 FROM files WHERE id=$1 AND user_id=$2 AND gallery_id=$3',
+        [coverId, req.userId, prev.id]
+      )).rowCount > 0
+      if (!coverOk) return res.status(404).json({ error: 'Cover file not found' })
+    }
 
     const updates = []
     const vals = []
