@@ -6989,6 +6989,32 @@ app.patch('/api/files/:id/gallery-order', requireAuth, async (req, res) => {
 
 // ── PUBLIC GALLERY ROUTES ─────────────────────────────────────
 
+// The one gallery password check. Every public route that returns images or download URLs must
+// call this with the x-gallery-password header value. Returns true when the gallery is unprotected
+// or the password matches. Legacy plaintext passwords are compared in constant time and rehashed
+// with bcrypt on the first successful unlock.
+async function checkGalleryPassword(gallery, provided) {
+  if (!gallery.password_protected) return true
+  const stored = gallery.password || ''
+  const pw = String(provided || '').trim()
+  if (!pw || !stored) return false
+  if (/^\$2[aby]\$\d{2}\$/.test(stored)) return bcrypt.compare(pw, stored)
+  const digest = v => crypto.createHash('sha256').update(v).digest()
+  if (!crypto.timingSafeEqual(digest(pw), digest(stored))) return false
+  await pool.query('UPDATE galleries SET password=$1 WHERE id=$2', [await bcrypt.hash(pw, 10), gallery.id])
+    .catch(e => console.error('Gallery password rehash failed:', e.message))
+  return true
+}
+
+// download-request emails the photographer and mints URLs, and is the other password-guessing
+// surface, so limit it per IP per portal.
+const downloadRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 10,
+  message: { error: 'Too many download requests. Please try again later.' },
+  standardHeaders: true, legacyHeaders: false, validate: false,
+  keyGenerator: req => `${getClientIp(req)}:${req.params.token}`,
+})
+
 app.get('/api/portals/:token/gallery', async (req, res) => {
   try {
     console.log('GET /api/portals/:token/gallery password-header:', req.headers['x-gallery-password'] ? 'provided' : 'none')
@@ -7009,24 +7035,8 @@ app.get('/api/portals/:token/gallery', async (req, res) => {
     if (!galleryResult.rows.length) return res.status(404).json({ error: 'No gallery available' })
     const gallery = galleryResult.rows[0]
 
-    if (gallery.password_protected) {
-      const provided = (req.headers['x-gallery-password'] || '').trim()
-      const stored = gallery.password || ''
-      const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(stored)
-      // Galleries created before password hashing was added still have a
-      // plaintext value in this column. Accept a direct match for those (so
-      // existing clients aren't locked out) and transparently upgrade the
-      // stored value to a bcrypt hash on successful entry.
-      const match = !!provided && !!stored && (
-        isBcryptHash ? await bcrypt.compare(provided, stored) : provided === stored
-      )
-      if (!match) {
-        return res.status(401).json({ error: 'incorrect_password' })
-      }
-      if (!isBcryptHash) {
-        const upgraded = await bcrypt.hash(provided, 10)
-        pool.query('UPDATE galleries SET password=$1 WHERE id=$2', [upgraded, gallery.id]).catch(() => {})
-      }
+    if (!(await checkGalleryPassword(gallery, req.headers['x-gallery-password']))) {
+      return res.status(401).json({ error: 'incorrect_password' })
     }
 
     const filesResult = await pool.query(
@@ -7085,7 +7095,7 @@ app.post('/api/portals/:token/gallery/favorite/:fileId', async (req, res) => {
   }
 })
 
-app.post('/api/portals/:token/gallery/download-request', async (req, res) => {
+app.post('/api/portals/:token/gallery/download-request', downloadRequestLimiter, async (req, res) => {
   try {
     const clientResult = await pool.query(
       `SELECT c.id, c.name, c.portal_token, u.email as photographer_email, u.business_name, u.full_name
@@ -7095,8 +7105,14 @@ app.post('/api/portals/:token/gallery/download-request', async (req, res) => {
     )
     if (!clientResult.rows.length) return res.status(404).json({ error: 'Portal not found' })
     const c = clientResult.rows[0]
-    const galleryResult = await pool.query(`SELECT id FROM galleries g WHERE g.client_id=$1 AND g.status='delivered' LIMIT 1`, [c.id])
+    const galleryResult = await pool.query(
+      `SELECT id, password_protected, password FROM galleries g WHERE g.client_id=$1 AND g.status='delivered' ORDER BY g.created_at DESC LIMIT 1`,
+      [c.id]
+    )
     if (!galleryResult.rows.length) return res.status(404).json({ error: 'Gallery not found' })
+    if (!(await checkGalleryPassword(galleryResult.rows[0], req.headers['x-gallery-password']))) {
+      return res.status(401).json({ error: 'incorrect_password' })
+    }
 
     const filesResult = await pool.query(
       `SELECT storage_url, storage_key FROM files WHERE gallery_id=$1 AND mime_type LIKE 'image/%' ORDER BY display_order ASC, created_at ASC`,

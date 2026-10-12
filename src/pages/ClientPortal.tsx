@@ -768,6 +768,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
+  const [galleryPassword, setGalleryPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [favorites, setFavorites] = useState<Set<number>>(new Set())
@@ -811,6 +812,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
         { headers: { 'x-gallery-password': passwordInput.trim() } }
       )
       setGallery(res.data)
+      setGalleryPassword(passwordInput.trim())
       setFavorites(new Set(
         (res.data.files || [])
           .filter((f: PortalGalleryFile) => f.is_favorite)
@@ -853,7 +855,7 @@ function PortalGallerySection({ token, hasUnpaidInvoice }: { token: string; hasU
   const handleDownloadAll = async () => {
     setDownloading(true)
     try {
-      const res = await axios.post<{ download_urls: string[] }>(`${API_URL}/api/portals/${token}/gallery/download-request`)
+      const res = await axios.post<{ download_urls: string[] }>(`${API_URL}/api/portals/${token}/gallery/download-request`, undefined, { headers: { 'x-gallery-password': galleryPassword } })
       for (const url of (res.data.download_urls || [])) {
         const a = document.createElement('a')
         a.href = url
