@@ -329,17 +329,6 @@
     .feat-social-summary { margin-top: 12px; font-family: var(--fb); font-size: 13px; font-weight: 700; color: #1B7A4A; }
     @media (min-width: 768px) { .feat-panel { grid-template-columns: 1fr 1fr; gap: 48px; } }
 
-    /* ── Testimonials ────────────────────────────── */
-    .testi__grid { max-width: 1000px; margin: 44px auto 0; display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
-    .tcard { background: #FFFFFF; border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.06); overflow: hidden; }
-    .tcard--bordered { border: 1.5px solid var(--green); }
-    .tcard__img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; }
-    .tcard__body { padding: 20px; }
-    .tcard--bordered .tcard__body { padding: 28px; }
-    .stars { color: var(--gold); font-size: 14px; letter-spacing: 2px; }
-    .tcard__quote { font-family: var(--fb); font-size: 15px; color: var(--ink); line-height: 1.6; margin-top: 12px; }
-    .tcard__author { font-family: var(--fb); font-size: 13px; color: var(--ink-soft); margin-top: 14px; }
-
     /* ── Free tools ──────────────────────────────── */
     .tools__grid { margin-top: 44px; display: grid; grid-template-columns: 1fr; gap: 16px; }
     .tool-card-new { display: flex; align-items: stretch; background: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid rgba(27,67,50,0.10); transition: transform 0.2s ease, box-shadow 0.2s ease; text-decoration: none; color: inherit; }
@@ -499,7 +488,6 @@
       .problem__h { font-size: 40px; }
       .solution__h { font-size: 40px; }
       .features__h { font-size: 40px; }
-      .testi__grid { grid-template-columns: repeat(3, 1fr); }
       .pricing__h { font-size: 40px; }
       .finale__h { font-size: 48px; }
       .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; }
@@ -589,9 +577,9 @@
   <!-- ── Proof bar ─────────────────────────────────── -->
   <section class="proofbar">
     <div class="wrap">
-      <p class="proofbar__lead">Join 200+ wedding photographers who replaced DocuSign, Dropbox, and Pixieset with one link.</p>
+      <p class="proofbar__lead">Replace DocuSign, Dropbox, and Pixieset with one link.</p>
       <div class="proofbar__stats">
-        <div class="pstat"><div class="pstat__num">$133/mo</div><div class="pstat__label">saved on tools</div></div>
+        <div class="pstat"><div class="pstat__num">$133/mo</div><div class="pstat__label">in tools replaced</div></div>
         <div class="pstat"><div class="pstat__num">6 apps</div><div class="pstat__label">replaced</div></div>
         <div class="pstat"><div class="pstat__num">5 min</div><div class="pstat__label">onboarding</div></div>
         <div class="pstat"><div class="pstat__num">1 link</div><div class="pstat__label">for everything</div></div>
@@ -804,43 +792,6 @@
     </div>
   </section>
 
-  <!-- ── Testimonials ──────────────────────────────── -->
-  <section class="sec sec--cream">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow reveal">What photographers say</span>
-        <h2 class="sec-title features__h reveal d1">Real studios. Real results.</h2>
-      </div>
-      <div class="testi__grid">
-        <figure class="tcard reveal">
-          <img class="tcard__img" src="https://images.pexels.com/photos/26654423/pexels-photo-26654423.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Wedding photographer capturing a couple in a forest">
-          <div class="tcard__body">
-            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"I used to spend like 45 minutes just getting a new client set up across DocuSign and email and Dropbox. Now I literally send one link and they have everything. It changed how I run my whole business."</blockquote>
-            <figcaption class="tcard__author">Sarah M. · Nashville, TN</figcaption>
-          </div>
-        </figure>
-
-        <figure class="tcard tcard--bordered reveal d1">
-          <div class="tcard__body">
-            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"Switched from HoneyBook the week I found this. Got back $52 a month immediately. The shot list builder alone is worth it, HoneyBook dosnt even have that. My second shooters stopped texting me asking for the schedule."</blockquote>
-            <figcaption class="tcard__author">Marcus T. · Austin, TX</figcaption>
-          </div>
-        </figure>
-
-        <figure class="tcard reveal d2">
-          <img class="tcard__img" src="https://images.pexels.com/photos/30930989/pexels-photo-30930989.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=800&amp;q=80" width="800" height="180" loading="lazy" alt="Winter wedding couple embracing outdoors">
-          <div class="tcard__body">
-            <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
-            <blockquote class="tcard__quote">"The automated review request after gallery delivery is genius. My Google review count literally doubled in about 2 months without me doing anything. Clients just get the message and they leave the review."</blockquote>
-            <figcaption class="tcard__author">Jennifer K. · Chicago, IL</figcaption>
-          </div>
-        </figure>
-      </div>
-    </div>
-  </section>
-
   <!-- ── Free tools ────────────────────────────────── -->
   <section class="sec sec--cream2" id="free-tools">
     <div class="wrap">
@@ -896,7 +847,7 @@
       <div class="sec-head">
         <span class="eyebrow reveal">What you're replacing</span>
         <h2 class="sec-title features__h reveal d1">Six tools. One bill. One link.</h2>
-        <p class="sec-sub reveal d2">Most photographers pay $133/mo for tools that don't talk to each other. PortalKit replaces all of them for $29/mo.</p>
+        <p class="sec-sub reveal d2">Six separate tools can add up to $133/mo, and they don't talk to each other. PortalKit replaces all of them for $29/mo.</p>
       </div>
       <div class="compare__scroll reveal">
         <table class="cmp">
@@ -928,7 +879,7 @@
       <div class="sec-head reveal">
         <span class="eyebrow">Pricing</span>
         <h2 class="sec-title pricing__h">One price.<br>Everything included.</h2>
-        <p class="pricing__sub">Most photographers pay $133/month across 6 tools that don't talk to each other. PortalKit replaces all of them. You'll save money on day one.</p>
+        <p class="pricing__sub">Six separate tools can add up to $133/month, and they don't talk to each other. PortalKit replaces all of them. You'll save money on day one.</p>
       </div>
 
       <p class="pricing__counter reveal d1">
@@ -1004,7 +955,7 @@
           <button class="faq__q" aria-expanded="false">Does this replace DocuSign, Calendly, and Dropbox?
             <svg class="faq__plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <div class="faq__a"><p>Yes. Contracts with e-signatures replace DocuSign. The booking page with your availability replaces Calendly. File delivery inside each portal replaces Dropbox. Most photographers cancel all three within their first month on PortalKit.</p></div>
+          <div class="faq__a"><p>Yes. Contracts with e-signatures replace DocuSign. The booking page with your availability replaces Calendly. File delivery inside each portal replaces Dropbox.</p></div>
         </div>
         <div class="faq reveal">
           <button class="faq__q" aria-expanded="false">Can I deliver photos and videos through PortalKit?

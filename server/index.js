@@ -2106,7 +2106,7 @@ async function sendOnboardingSequence() {
             title: '3 features worth trying before your trial ends',
             preheader: 'Shot lists, timelines, and review requests — your clients will notice.',
             body: `<h2 style="font-size:20px;color:#1B4332;margin:0 0 12px;">Hey ${escapeHtml(firstName)}, 4 days left on your trial</h2>
-<p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Before your trial ends, here are 3 features that save photographers the most time:</p>
+<p style="color:#6B5E4A;line-height:1.6;margin:0 0 20px;">Before your trial ends, here are 3 features worth trying:</p>
 <div style="background:#F9F6F0;border-radius:10px;padding:16px 20px;margin:0 0 12px;">
   <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#1B4332;">📷 Shot List Builder</p>
   <p style="margin:0;font-size:13px;color:#6B5E4A;line-height:1.6;">Build a shot list and send it to your client. They confirm what they want, you review it, and both sides know exactly what's planned. Find it under each client's portal.</p>
@@ -2452,7 +2452,7 @@ async function prepareVideoScript(rawScript) {
     const rewriteRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
-      messages: [{ role: 'user', content: `Rewrite for natural spoken audio. Short punchy sentences. Conversational. Remove hashtags, URLs, special characters. Keep key facts. Similar word count. Return ONLY the rewritten script, no explanation.\n\nScript: ${rawScript}` }]
+      messages: [{ role: 'user', content: `Rewrite for natural spoken audio. Short punchy sentences. Conversational. Remove hashtags, URLs, special characters. Keep key facts. Similar word count. Return ONLY the rewritten script, no explanation. Do not add testimonials, customer counts, or statistics that are not in the script.\n\nScript: ${rawScript}` }]
     })
 
     let displayScript = (rewriteRes.content[0]?.text || rawScript).trim()
@@ -3426,10 +3426,10 @@ async function generateAndScheduleWeeklyContent() {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
-      system: `You are the social media voice for PortalKit (getportalkit.com). Wedding photographer client portal. $29/month replaces DocuSign, Dropbox, Calendly, Pixieset. Write like a photographer helping peers. Direct. Zero corporate speak. Return ONLY valid JSON. No markdown. No code fences.`,
+      system: `You are the social media voice for PortalKit (getportalkit.com). Wedding photographer client portal. $29/month replaces DocuSign, Dropbox, Calendly, Pixieset. Write like a photographer helping peers. Direct. Zero corporate speak. NEVER invent testimonials, customer quotes, customer counts, review counts, or statistics. Do not claim results, savings, or usage numbers for PortalKit or its users. Only state facts about features and pricing given here. Return ONLY valid JSON. No markdown. No code fences.`,
       messages: [{
         role: 'user',
-        content: `Generate 7 social media posts. Vary the angle: pain_point, tip, feature, savings, social_proof, question, story. Return this JSON: {"posts":[{"day":1,"angle":"pain_point","content":"Full post for Instagram/Facebook. Use \\n for line breaks. Include 8-12 hashtags at end.","twitter_content":"Under 270 chars. 3-4 hashtags.","hook":"First line under 10 words"}]}`
+        content: `Generate 7 social media posts. Vary the angle: pain_point, tip, feature, savings, comparison, question, story. Return this JSON: {"posts":[{"day":1,"angle":"pain_point","content":"Full post for Instagram/Facebook. Use \\n for line breaks. Include 8-12 hashtags at end.","twitter_content":"Under 270 chars. 3-4 hashtags.","hook":"First line under 10 words"}]}`
       }]
     })
     const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
@@ -3509,7 +3509,7 @@ async function monitorRedditAndGenerateContent() {
       max_tokens: 500,
       messages: [{
         role: 'user',
-        content: `Photographers on Reddit are asking:\n\n${painPoints}\n\nWrite 1 social post addressing the most common pain point. Position PortalKit naturally as the solution. NOT salesy. End with soft CTA and 5-8 hashtags. Return only the post text.`
+        content: `Photographers on Reddit are asking:\n\n${painPoints}\n\nWrite 1 social post addressing the most common pain point. Position PortalKit naturally as the solution. NOT salesy. End with soft CTA and 5-8 hashtags. NEVER invent testimonials, customer quotes, customer counts, review counts, or statistics. Do not claim results, savings, or usage numbers for PortalKit or its users. Only state facts about features and pricing given here. Return only the post text.`
       }]
     })
     const content = msg.content[0]?.type === 'text' ? msg.content[0].text : null
@@ -3559,12 +3559,12 @@ async function sendFreeToolNurtureEmails() {
         subject: 'Quick question about your workflow',
         html: emailTemplate({
           title: 'How are you managing clients right now?',
-          preheader: 'Most photographers use 6 tools. There is a better way.',
+          preheader: 'One private link instead of a pile of tools.',
           body: `
             <h2>Hey there!</h2>
             <p>You used one of our free tools a few days ago. Hope it was useful.</p>
             <p>Quick honest question: how are you currently managing contracts, invoices, and file delivery for your clients?</p>
-            <p>Most photographers I talk to are bouncing between DocuSign, PayPal, Dropbox, and their inbox for every single booking. It works but it is exhausting.</p>
+            <p>A lot of booking workflows mean bouncing between DocuSign, PayPal, Dropbox, and your inbox for every single client. It works but it is exhausting.</p>
             <p>PortalKit puts all of that in one private link you send each client. They sign, pay, fill out questionnaires, and download their gallery without you sending a single follow up email.</p>
             <p>14-day free trial if you want to see it in action.</p>
           `,
@@ -3606,8 +3606,8 @@ async function sendFreeToolNurtureEmails() {
           body: `
             <h2>Last email from me, I promise.</h2>
             <p>You downloaded our free templates a week ago. If you tried PortalKit already, ignore this.</p>
-            <p>If not, here is the one thing photographers tell me after they sign up: they wish they had done it sooner.</p>
-            <p>Not because it is complicated. Because it is not. Most photographers send their first client portal within 10 minutes of signing up.</p>
+            <p>If not, here is the short version: one private link per client for contracts, invoices, questionnaires, and gallery delivery.</p>
+            <p>It is not complicated to set up, and you can send your first client portal the same day.</p>
             <p>14-day free trial. Your card is saved but not charged for 14 days. If you cancel before day 15 you pay nothing.</p>
             <p>That is genuinely the whole pitch.</p>
           `,
@@ -9698,6 +9698,7 @@ app.post('/api/admin/blog/generate', requireAdmin, async (req, res) => {
 - Price PortalKit at $29/month (annual plan)
 - Correctly state PortalKit includes gallery delivery (photographers upload photos and videos to the client portal; clients download from their private link)
 - Never say PortalKit lacks any feature it has
+- NEVER invent testimonials, customer quotes, customer counts, review counts, or statistics. Do not claim results, savings, or usage numbers for PortalKit or its users. Only state facts about features and pricing given here.
 - End with a CTA to try PortalKit free
 Return ONLY valid JSON (no markdown fences) with these exact fields:
 { "title": string, "slug": string, "description": string, "html_body": string, "date": string }
@@ -10100,6 +10101,8 @@ app.post('/api/admin/generate-captions', requireAdmin, async (req, res) => {
 
 Script: ${script.slice(0, 400)}
 
+NEVER invent testimonials, customer quotes, customer counts, review counts, or statistics. Do not claim results, savings, or usage numbers for PortalKit or its users. Only state facts about features and pricing given here.
+
 Return ONLY a JSON object, no markdown, no explanation:
 {"instagram":"2-3 sentences + 3-5 hashtags, max 300 chars","tiktok":"hook + 1 sentence, max 100 chars, 2 hashtags","twitter":"punchy, max 240 chars, 1-2 hashtags","linkedin":"professional, value-first, max 400 chars, no hashtags","youtube_shorts":"descriptive, max 80 chars"}`
       }]
@@ -10373,7 +10376,7 @@ async function autoDailyVideo() {
 PART 1 - HOOK (1 sentence): State the photographer's pain in plain present tense. Start with 'You' or a situation. Do NOT start with 'I used to' or first-person founder story.
 PART 2 - SOLUTION (2-3 sentences): Explain what PortalKit does that fixes it. Be specific. Name actual features. Make the listener feel the relief.
 PART 3 - CTA (1 sentence): 'Try it free at getportalkit.com'
-Never mention the founder. Never say what you 'used to do'. The viewer is a wedding photographer. Speak directly to them.`,
+Never mention the founder. Never say what you 'used to do'. NEVER invent testimonials, customer quotes, customer counts, review counts, or statistics. Do not claim results, savings, or usage numbers for PortalKit or its users. Only state facts about features and pricing given here. The viewer is a wedding photographer. Speak directly to them.`,
       messages: [{
         role: 'user',
         content: `Write a 30-second video script using the ${angle.type} angle. ${angle.instruction}${trendingContext}\n\nReturn only the script sentences separated by newlines. No labels, no intro, no explanation.`
